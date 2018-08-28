@@ -193,29 +193,12 @@ b <-
   geom_vline(xintercept = 11,
              size = 5,
              color = "grey95") +
-  # geom_jitter(
-  #   data = phlog.monol,
-  #   aes(x = genotype, y = hue),
-  #   width = 0.2,
-  #   size = 1,
-  #   stroke = 0.1,
-  #   alpha = 0.3,
-  #   shape = 21
-  # ) +
-  # geom_boxplot(
-  #   outlier.size = 0,
-  #   position = position_dodge(width = 0.8),
-  #   size = 0.2,
-  #   width = 0.5
-  # ) +
   geom_jitter(width = 0.1, alpha = 0.75, shape = 21, size = 3, stroke = 0.25) +
   stat_summary(fun.y = mean, fun.ymin = mean, fun.ymax = mean,
                geom = "crossbar", width = 1, size = 0.5, fatten = 0) +
   theme_minimal() +
   theme(
     text = element_text(size = 14, family = "Helvetica"),
-    # axis.line.x = element_line(size = 0.75, lineend = "square"),
-    # axis.line.y = element_line(size = 0.75, lineend = "square"),
     axis.ticks.y = element_line(size = 0.25, lineend = "square", color = "black"),
     axis.title.y = element_text(size = 14),
     axis.text.y = element_text(size = 12, colour = "black"),
@@ -310,7 +293,6 @@ a <- ggplot(phlog.monol.avg, aes(x = genotype, y = mean.OD2)) +
   theme(
     text = element_text(size = 14, family = "Helvetica"),
     legend.position = "none",
-    # axis.line.y = element_line(size = 0.75, lineend = "square"),
     axis.ticks.y = element_line(size = 0.25, lineend = "square", color = "black"),
     axis.title.y = element_text(size = 14),
     axis.text.y = element_text(size = 12, colour = "black"),
@@ -334,19 +316,6 @@ a <- ggplot(phlog.monol.avg, aes(x = genotype, y = mean.OD2)) +
   facet_wrap( ~ cell.type, ncol = 6) +
   aes(fill = cell) +
   scale_fill_manual(values = barcols) + 
-  # geom_violin(
-  #   data = phlog.monol,
-  #   aes(x = genotype, y = diff.adj)
-  # ) +
-  # geom_boxplot(
-  #   data = phlog.monol.pre,
-  #   aes(x = genotype, y = mean.OD1),
-  #   outlier.size = 0.5,
-  #   width = 0.4,
-  #   position = position_dodge(width = 0.3),
-  #   size = 0.2,
-  #   fill = "white"
-  # ) +
   geom_jitter(data = phlog.monol.pre,
               aes(x = genotype, y = mean.OD1), width = 0.1, alpha = 0.5) +
   geom_text(
@@ -380,87 +349,4 @@ dev.off()
 #           label_fontfamily = "Helvetica",
 #           rel_heights = c(1.2, 1.2, 1, 1.21))
 # dev.off()
-# system("gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r150 -sOutputFile=geno_grid.pdf genotypes_grid.pdf")
-
-
-# plot background hue
-# p <-
-#   ggplot(data = phlog.monol.pre, aes(x = genotype, y = mean.hue.bg)) +
-#   geom_vline(xintercept = 1,
-#              size = 5,
-#              color = "grey95") +
-#   geom_vline(xintercept = 3,
-#              size = 5,
-#              color = "grey95") +
-#   geom_vline(xintercept = 5,
-#              size = 5,
-#              color = "grey95") +
-#   geom_vline(xintercept = 7,
-#              size = 5,
-#              color = "grey95") +
-#   geom_vline(xintercept = 9,
-#              size = 5,
-#              color = "grey95") +
-#   geom_vline(xintercept = 11,
-#              size = 5,
-#              color = "grey95") +
-#   geom_boxplot(
-#     outlier.size = 0,
-#     position = position_dodge(width = 0.8),
-#     size = 0.2
-#   ) +
-#   theme_minimal() +
-#   theme(
-#     text = element_text(size = 14, family = "Helvetica"),
-#     axis.text.x = element_text(
-#       angle = 45,
-#       vjust = 1,
-#       hjust = 0.9
-#     ),
-#     panel.grid.major.x = element_blank(),
-#     panel.grid.minor.x = element_blank(),
-#     panel.grid.minor.y = element_blank(),
-#     legend.position = "none",
-#     strip.text = element_blank()
-#   ) +
-#   labs(y = "Background hue", x = " ") +
-#   scale_x_discrete(
-#     labels = c(
-#       "col-0",
-#       expression(italic("4cl1")),
-#       expression(italic("4cl2")),
-#       expression(italic("4cl1x4cl2")),
-#       expression(italic("ccoaomt1")),
-#       expression(italic("fah1")),
-#       expression(italic("omt1")),
-#       expression(italic("ccr1")),
-#       expression(italic("cad4")),
-#       expression(italic("cad5")),
-#       expression(italic("cad4xcad5"))
-#     )
-#   ) +
-#   # scale_y_continuous(
-#   #   breaks = c(310, 320, 330, 340, 350, 360, 370),
-#   #   labels =
-#   #     c('310', '320', '330', '340', '350', '360', '10'),
-#   #   limits = c(305, 370)
-#   # ) +
-#   facet_wrap( ~ cell.type, ncol = 6) +
-#   aes(fill = cell) +
-#   scale_fill_manual(values = barcols)
-#   # geom_text(
-#   #   data = letters.hue.monol,
-#   #   aes(label = group),
-#   #   family = "Helvetica",
-#   #   angle = 90,
-#   #   colour = "black",
-#   #   hjust = 1,
-#   #   size = 3,
-#   #   position = position_dodge(width = 0.8)
-#   # )
-# pdf("hue_monol_bg.pdf", height = 4, width = 10)
-# p
-# dev.off()
-
-# write.csv(phlog.monol, file = "raw_data_wiesner.csv")
-# write.csv(phlog.monol.pre, file = "averaged_data_wiesner.csv")
+# system("gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r600 -sOutputFile=geno_grid.pdf genotypes_grid.pdf")
