@@ -10,7 +10,8 @@ font_add("Helvetica", regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedi
          bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf")
 showtext_auto()
 
-pca.wiesner <- phlog.monol.pre[, c(1:4,6)]
+# pca.wiesner <- phlog.monol.pre[, c(1:4,6)] # OD AND HUE
+pca.wiesner <- phlog.monol.pre[, c(1:4,6)] # ONLY OD
 pca.wiesner[1 + rep(seq(0, (nrow(pca.wiesner) - 1), by = 5), each = 1), 3] <- 
   1
 pca.wiesner[2 + rep(seq(0, (nrow(pca.wiesner) - 1), by = 5), each = 1), 3] <- 
@@ -24,7 +25,7 @@ pca.wiesner[5 + rep(seq(0, (nrow(pca.wiesner) - 1), by = 5), each = 1), 3] <-
 pca.wiesner <- melt(pca.wiesner, id = c("cell.type", "replicate", "genotype"))
 pca.wiesner[pca.wiesner < 0] <- 0.001
 pca.wiesner <- dcast(pca.wiesner, cell.type + replicate ~ variable + genotype)
-log.wiesner <- log(pca.wiesner[, c(3:26)])
+log.wiesner <- log(pca.wiesner[, -(1:2)])
 celltypes.wiesner <- as.character(pca.wiesner[, 1])
 pca.wiesner.post <- prcomp(log.wiesner, center = TRUE, scale. = TRUE)
 
@@ -78,7 +79,9 @@ p <- ggplot(gg.pca, aes(x = PC1, y = PC2, fill = cell.type)) +
   ) 
 p
 
-p2 <- ggplot(gg.rota, aes(x = PC1)) + geom_histogram()
-p2
+fviz_contrib(pca.wiesner.post, choice = "var", axes = 1, top = 10)
+
+fviz_contrib(pca.wiesner.post, choice = "var", axes = 2, top = 10)
+
 dev.off()
 print(pca.wiesner.post$rotation)
