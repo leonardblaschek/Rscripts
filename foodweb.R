@@ -1,19 +1,11 @@
-library(sysfonts)
 library(showtext)
 library(ggplot2)
 library(ggthemes)
 library(RColorBrewer)
 library(reshape2)
-library(colorspace)
-library(agricolae)
 library(plyr)
-library(dplyr)
-library(rowr)
-library(cowplot)
 library(Hmisc)
 library(corrplot)
-library(PerformanceAnalytics)
-library(colorspace)
 
 font_add("Helvetica", regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
          italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
@@ -21,9 +13,12 @@ font_add("Helvetica", regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedi
          bolditalic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf")
 showtext_auto()
 
-
 fw.data <-
   read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/foodweb.csv")
+
+###############################
+# Pixel values of the measured image were multiplied by 255 for better visualisation
+###############################
 fw.data$od <- fw.data$ODx255 / 255
 
 fw.avg <-
@@ -34,6 +29,15 @@ fw.avg <-
 
 fw.cast <-
   dcast(fw.avg, genotype + replicate ~ cell.type + adj.cell.type, mean, value.var = "od")
+
+###############################
+# These are the values for fig. SX, showing the impact of individal muations on cell cooperativity.
+# 
+# Expressing how the neighbouring cell wall of cell type B influences the cell wall of cell type A,
+# compared to cell walls of cell type A next to cell type A.
+# 
+# Averaged for each REPLICATE AND GENOTYPE.
+###############################
 cast.avg <- ddply(
   fw.cast,
   c("genotype", "replicate"),
@@ -52,6 +56,7 @@ cast.avg <- ddply(
   "XF -> MX" = V_XF / V_V,
   "PX -> MX" = V_PX / V_V
 )
+
 cast.avg <- melt(cast.avg[, -2], id = c("genotype"))
 
 ratio.avg <- ddply(cast.avg, c("genotype", "variable"), summarise,
@@ -66,6 +71,15 @@ fw.avg <-
 
 fw.cast <-
   dcast(fw.avg, genotype ~ cell.type + adj.cell.type, mean, value.var = "od")
+
+###############################
+# These are the values for fig. SX, showing the impact of individal muations on cell cooperativity.
+# 
+# Expressing how the neighbouring cell wall of cell type B influences the cell wall of cell type A,
+# compared to cell walls of cell type A next to cell type A.
+# 
+# Averaged for each GENOTYPE
+###############################
 cast.avg <- ddply(
   fw.cast,
   c("genotype"),
@@ -84,6 +98,7 @@ cast.avg <- ddply(
   "XF -> MX" = V_XF / V_V,
   "PX -> MX" = V_PX / V_V
 )
+
 cast.avg <- melt(cast.avg, id = c("genotype"))
 fw.cast <- data.matrix(fw.cast[, -1])
 fw.corr <- rcorr(fw.cast)
@@ -124,6 +139,9 @@ ratio.avg$genotype <-
     ))
   )
 
+###############################
+# creating the geom_text dataframe for the annotation of the ccr1 in XF -> IF
+###############################
 label_ccr <- data.frame(mean = 4.5, sd =  0, genotype = factor("ccr1", levels = c(
   "col-0",
   "4cl1",
@@ -138,6 +156,12 @@ label_ccr <- data.frame(mean = 4.5, sd =  0, genotype = factor("ccr1", levels = 
   "cad4xcad5"
 )), variable = "XF -> IF")
 
+###############################
+# Summarising the correlation parameters in a useable table.
+# 
+# The correlations express how the absorbance of a cell wall of cell type A next to cell wall of cell type B
+# correlates with the absorbance in cell walls of cell type B next to cell type B
+###############################
 slopes <- data.frame(coef(summary(lm(fw.cast[, 12] ~ fw.cast[, 8])))["fw.cast[, 8]", "Estimate"], row.names = "slope")
 colnames(slopes)[1] <- "PX -> MX"
 slopes[, "MX -> PX"] <- coef(summary(lm(fw.cast[, 9] ~ fw.cast[, 13])))["fw.cast[, 13]", "Estimate"]
@@ -183,24 +207,73 @@ r.squared[, "CB -> IF"] <- NA
 r.squared[, "CB -> MX"] <- NA
 r.squared[, "PA -> MX"] <- NA
 
-linregs <- rbind(slopes, intercepts, r.squared)
+r <- data.frame(fw.corr$r["PX_PX", "V_PX"], row.names = "r")
+colnames(r)[1] <- "PX -> MX"
+r[, "MX -> PX"] <- fw.corr$r["V_V", "PX_V"]
+r[, "MX -> XF"] <- fw.corr$r["V_V", "XF_V"]
+r[, "XF -> MX"] <- fw.corr$r["XF_XF", "V_XF"]
+r[, "XF -> IF"] <- fw.corr$r["XF_XF", "IF_XF"]
+r[, "IF -> XF"] <- fw.corr$r["IF_IF", "XF_IF"]
+r[, "IF -> LP"] <- fw.corr$r["IF_IF", "LP_IF"]
+r[, "LP -> IF"] <- fw.corr$r["LP_LP", "IF_LP"]
+r[, "CB -> XF"] <- NA
+r[, "PA -> PX"] <- NA
+r[, "CB -> IF"] <- NA
+r[, "CB -> MX"] <- NA
+r[, "PA -> MX"] <- NA
+
+P <- data.frame(fw.corr$P["PX_PX", "V_PX"], row.names = "P")
+colnames(P)[1] <- "PX -> MX"
+P[, "MX -> PX"] <- fw.corr$P["V_V", "PX_V"]
+P[, "MX -> XF"] <- fw.corr$P["V_V", "XF_V"]
+P[, "XF -> MX"] <- fw.corr$P["XF_XF", "V_XF"]
+P[, "XF -> IF"] <- fw.corr$P["XF_XF", "IF_XF"]
+P[, "IF -> XF"] <- fw.corr$P["IF_IF", "XF_IF"]
+P[, "IF -> LP"] <- fw.corr$P["IF_IF", "LP_IF"]
+P[, "LP -> IF"] <- fw.corr$P["LP_LP", "IF_LP"]
+P[, "CB -> XF"] <- NA
+P[, "PA -> PX"] <- NA
+P[, "CB -> IF"] <- NA
+P[, "CB -> MX"] <- NA
+P[, "PA -> MX"] <- NA
+
+linregs <- rbind(slopes, intercepts, r.squared, r, P)
 linregs$coef <- rownames(linregs)
 linregs <- melt(linregs, id = "coef")
 linregs <- dcast(linregs, variable ~ coef)
 linregs$genotype <- "col-0"
 linregs$variable <- as.character(linregs$variable)
-linregs$variable <- as.factor(as.character(linregs$variable, levels = levels(ratio.avg$varaible)))
-
+linregs$variable <- as.factor(as.character(linregs$variable, levels = levels(ratio.avg$variable)))
 ratio.avg <- merge(ratio.avg, linregs, by = c("variable", "genotype"), all = TRUE)
 
+###############################
+# table of regression (r.squared, slope, intercept) and correlation (r, P) parameters
+###############################)
+write.csv(linregs[-c(9:13), -7], file = "regressions.csv", row.names = FALSE)
+
+###############################
+# plot fig. SX
+###############################
 interaction.avg <-
-  ggplot(data = ratio.avg, aes(x = genotype, y = mean, fill = mean, ymin = mean - sd, ymax = mean + sd)) + 
-  geom_hline(yintercept = 1, linetype = 1, size = 0.5) +
-  # geom_line(group = 1) +
+  ggplot(data = ratio.avg, aes(
+    x = genotype, 
+    y = mean, 
+    fill = mean, 
+    ymin = mean - sd, 
+    ymax = mean + sd
+  )) + 
+  geom_hline(
+    yintercept = 1, 
+    linetype = 1, 
+    size = 0.5
+  ) +
   geom_errorbar(width = 0.2) +
   geom_point(size = 3, shape = 21) + 
-  # scale_fill_distiller(palette = "RdBu", limits = c(0.4, 1.6), direction = -1, na.value = "#b2182b") +
-  scale_fill_gradientn(colours = c("#2166ac", "#67a9cf", "#d1e5f0", "white", "#fddbc7", "#ef8a62", "#b2182b"), limits = c(0.4,1.6),na.value = "#b2182b") +
+  scale_fill_gradientn(
+    colours = c("#2166ac", "#67a9cf", "#d1e5f0", "white", "#fddbc7", "#ef8a62", "#b2182b"), 
+    limits = c(0.4,1.6),
+    na.value = "#b2182b"
+    ) +
   scale_x_discrete(
     labels = rev(c(
       "col-0",
@@ -218,57 +291,59 @@ interaction.avg <-
   ) +
   scale_y_continuous(limits = c(-0.5, 4.5)) +
   theme_minimal() + 
-  theme(text = element_text(size = 14, family = "Helvetica"),
-        axis.ticks = element_line(
-          size = 0.25,
-          lineend = "square",
-          color = "black"
-        ),
-        axis.title = element_blank(),
-        axis.text.y = element_text(size = 12, colour = "black"),
-        axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5, colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(fill = NA, color = "black", size = 0.25),
-        panel.spacing.x = unit(1.5, "mm"),
-        plot.margin = unit(c(0, 0, 0, 0), "cm"),
-        # legend.background = element_rect(fill = "grey95", color = NA),
-        legend.title = element_blank(),
-        legend.text = element_text(size = 9),
-        strip.text = element_text(
-          vjust = 0.1,
-          hjust = 0,
-          face = "italic"
-        )
+  labs(y = "Absorbance ratio") +
+  theme(
+    text = element_text(size = 14, family = "Helvetica"),
+    axis.ticks = element_line(
+      size = 0.25,
+      lineend = "square",
+      color = "black"
+    ),
+    axis.title.y = element_blank(),
+    axis.text.y = element_text(size = 12, colour = "black"),
+    axis.text.x = element_text(
+      angle = 0,
+      hjust = 0.5,
+      vjust = 0.5,
+      colour = "black"
+    ),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(
+      fill = NA, 
+      color = "black", 
+      size = 0.25
+    ),
+    panel.spacing.x = unit(1.5, "mm"),
+    plot.margin = unit(c(0, 0, 0, 0), "cm"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 9),
+    strip.text = element_text(
+      vjust = 0.1,
+      hjust = 0,
+      face = "italic"
+    )
   ) +
-  geom_text(data = label_ccr, label = paste("17", sprintf('\u2192'), sep = ""), size = 3, hjust = 1, colour = "#b2182b") +
-  # geom_text(aes(x = genotype, y = - 7), label = 
-  #   ifelse(is.na(ratio.avg$slope), 
-  #          "", 
-  #          ifelse(ratio.avg$intercept > 0, paste("y=", round(ratio.avg$slope, 1), "\n+", round(ratio.avg$intercept, 2), "\nR²=", round(ratio.avg$r.squared, 2), sep = ""),
-  #                 paste("y=", round(ratio.avg$slope, 1), "\n", round(ratio.avg$intercept, 2), "\nR²=", round(ratio.avg$r.squared, 2), sep = ""))
-  #          ), 
-  # family = "Helvetica", size = 3, hjust = 0, vjust = 1) +
+  geom_text(data = label_ccr, 
+            label = paste("17", sprintf('\u2192'), sep = ""), 
+            size = 3, 
+            hjust = 1, 
+            colour = "#b2182b") +
   facet_wrap( ~ variable, nrow = 1) +
   coord_flip()
 
-linregs.col <- ggplot(data = linregs, aes(x = variable, y = slope, fill = slope)) +
-  geom_point(size = 5, shape = 21) +
-  scale_fill_viridis_c()
-
+###############################
+# plot overall correlation matrix
+###############################
 pdf("corrplots.pdf", width = 10, height = 10)
 corrplot.mixed(fw.corr$r,
                tl.col = "black")
-plot(fw.cast[, 17] ~ fw.cast[, 13], xlim = c(0,0.5), ylim = c(0, 0.5), ylab = "XF_MX", xlab = "MX_MX", main = "MX -> XF")
-abline(lm(fw.cast[, 17] ~ fw.cast[, 13]))
-plot(fw.cast[, 16] ~ fw.cast[, 2], xlim = c(0,0.5), ylim = c(0, 0.5), ylab = "XF_IF", xlab = "IF_IF", main = "IF -> XF")
-abline(lm(fw.cast[, 16] ~ fw.cast[, 2]))
 dev.off()
 
 pdf("foodweb.pdf", width = 13, height = 2)
 interaction.avg
-linregs.col
 
 dev.off()
 
-write.csv(linregs[-c(9:13), -5], file = "regressions.csv", row.names = FALSE)
+
+
