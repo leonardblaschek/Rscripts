@@ -10,17 +10,23 @@ library(dplyr)
 library(rowr)
 library(cowplot)
 
+###############################
 # import Helvetica Neue
+###############################
 font_add("Helvetica", regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
          italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
          bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf")
 showtext_auto()
 
+###############################
 # remove previous statistic files
+###############################
 file.remove("stats_OD.csv")
 file.remove("stats_hue.csv")
 
+###############################
 # establish tukey-test functions
+###############################
 print.HSD.OD <- function(x) {
   aov1 <- aov(mean.OD1 ~ genotype, data = x)
   groups <- HSD.test(aov1, "genotype", alpha = 0.05)
@@ -48,14 +54,17 @@ print.HSD.hue <- function(x) {
   )
 }
 
+###############################
 # import measurements
+###############################
 phlog.monol <-
   read.csv(
     "/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
     skip = 2
   )
-
+###############################
 # calculate pixel values from OD
+###############################
 # phlog.monol$OD.stained <- 255/(10^phlog.monol$OD.stained)
 # phlog.monol$OD.unstained <- 255/(10^phlog.monol$OD.unstained)
 
@@ -78,7 +87,9 @@ phlog.monol$genotype <-
     )
   )
 
+###############################
 # set cell types according to measurement order
+###############################
 phlog.monol[1:50 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <- 
   "IF"
 phlog.monol[51:100 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
@@ -92,13 +103,17 @@ phlog.monol[201:250 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50)
 phlog.monol[251:300 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
   "PH"
 
+###############################
 # calculate the correct hue on the 360 point circular scale
+###############################
 phlog.monol$hue <- ((phlog.monol$h.stained + 128) / 256 * 360)
 
 phlog.monol$replicate <-
   as.factor(as.character(phlog.monol$replicate))
 
+###############################
 # calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. for the unlignified phloem
+###############################
 phlog.monol$diff <-
   phlog.monol$OD.stained - phlog.monol$OD.unstained
 phlog.monol.bg <-
@@ -119,7 +134,9 @@ phlog.monol <-
 phlog.monol$diff.adj <- phlog.monol$diff - phlog.monol$OD.bg
 phlog.monol <- subset(phlog.monol, cell.type != "PH")
 
+###############################
 # average per replicate (for boxplots)
+###############################
 phlog.monol.pre <-
   ddply(
     phlog.monol,
@@ -131,7 +148,9 @@ phlog.monol.pre <-
     SD.OD1 = sd(diff.adj, na.rm = TRUE)
   )
 
+###############################
 # average per genotype (for barplots)
+###############################
 phlog.monol.avg <-
   ddply(
     phlog.monol.pre,
@@ -143,7 +162,9 @@ phlog.monol.avg <-
     SD.OD2 = sd(mean.OD1, na.rm = TRUE)
   )
 
+###############################
 # set graph colours according to averaged measurements per genotype/cell type
+###############################
 barcols <- phlog.monol.avg[, c(1, 2, 3, 5)]
 colnames(barcols)[3] <- 'H'
 colnames(barcols)[4] <- 'S'
@@ -160,7 +181,9 @@ phlog.monol.pre$cell <-
   as.factor(paste(phlog.monol.pre$genotype, phlog.monol.pre$cell.type))
 names(barcols) <- phlog.monol.avg$cell
 
+###############################
 # set statistical letters for hue
+###############################
 phlog.monol.pre %>%
   group_by(cell.type) %>%
   do(data.frame(print.HSD.hue(.)))
@@ -172,7 +195,9 @@ colnames(letters.hue.monol) <-
 letters.hue.monol$cell <-
   as.factor(paste(letters.hue.monol$genotype, letters.hue.monol$cell.type))
 
+###############################
 # plot hue
+###############################
 b <-
   ggplot(data = phlog.monol.pre, aes(x = genotype, y = mean.hue1)) +
   geom_vline(xintercept = 1,
@@ -238,7 +263,7 @@ b <-
     breaks = c(310, 330, 350, 370),
     labels =
       c('310', '330', '350', '10'),
-    limits = c(303, 370)
+    limits = c(300, 370)
   ) +
   facet_wrap( ~ cell.type, ncol = 6) +
   aes(fill = cell) +
@@ -257,7 +282,9 @@ pdf("hue_monol_rev.pdf", height = 4, width = 10)
 b
 dev.off()
 
-# set statistical letters for OD
+###############################
+# set statistical letters for absorbance
+###############################
 phlog.monol.pre %>%
   group_by(cell.type) %>%
   do(data.frame(print.HSD.OD(.)))
@@ -269,7 +296,9 @@ colnames(letters.OD.monol) <-
 letters.OD.monol$cell <-
   as.factor(paste(letters.OD.monol$genotype, letters.OD.monol$cell.type))
 
-# plot OD
+###############################
+# plot absorbance
+###############################
 a <- ggplot(phlog.monol.avg, aes(x = genotype, y = mean.OD2)) +
   geom_vline(xintercept = 1,
              size = 5,
@@ -309,7 +338,7 @@ a <- ggplot(phlog.monol.avg, aes(x = genotype, y = mean.OD2)) +
   ) +
   labs(y = "Absorbance", x = " ") +
   scale_x_discrete(breaks = c()) +
-  scale_y_continuous(limits = c(-0.07, 0.55), breaks = c(0, 0.2, 0.4), labels = c(' 0.0', ' 0.2', ' 0.4')) +
+  scale_y_continuous(limits = c(-0.09, 0.55), breaks = c(0, 0.2, 0.4), labels = c(' 0.0', ' 0.2', ' 0.4')) +
   geom_bar(stat = "identity",
            position = position_dodge(width = 0.85),
            width = 0.75) +
@@ -332,21 +361,23 @@ pdf("OD_monol_rev.pdf", height = 3.7, width = 10)
 a
 dev.off()
 
-# # plot grid
-# pdf("genotypes_grid.pdf", height = 11.75, width = 10)
-# plot_grid(unstained,
-#           stained,
-#           a,
-#           b,
-#           labels = c('A', 'B', 'C','D'),
-#           ncol=1,
-#           nrow = 4,
-#           hjust = 0,
-#           vjust = 1,
-#           label_x = 0.003,
-#           label_y = 0.99,
-#           label_size = 18,
-#           label_fontfamily = "Helvetica",
-#           rel_heights = c(1.2, 1.2, 1, 1.21))
-# dev.off()
-# system("gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r600 -sOutputFile=geno_grid.pdf genotypes_grid.pdf")
+###############################
+# plot grid
+###############################
+pdf("genotypes_grid.pdf", height = 11.75, width = 10)
+plot_grid(unstained,
+          stained,
+          a,
+          b,
+          labels = c('(a)', '(b)', '(c)', '(d)'),
+          ncol=1,
+          nrow = 4,
+          hjust = 0,
+          vjust = 1,
+          label_x = 0.001,
+          label_y = 0.99,
+          label_size = 18,
+          label_fontfamily = "Helvetica",
+          rel_heights = c(1.2, 1.2, 1, 1.21))
+dev.off()
+system("gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r600 -sOutputFile=geno_grid.pdf genotypes_grid.pdf")

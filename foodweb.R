@@ -273,7 +273,7 @@ interaction.avg <-
     colours = c("#2166ac", "#67a9cf", "#d1e5f0", "white", "#fddbc7", "#ef8a62", "#b2182b"), 
     limits = c(0.4,1.6),
     na.value = "#b2182b"
-    ) +
+  ) +
   scale_x_discrete(
     labels = rev(c(
       "col-0",

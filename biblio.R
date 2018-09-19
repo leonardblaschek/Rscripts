@@ -6,14 +6,9 @@ library(RColorBrewer)
 library(dplyr)
 library(rowr)
 library(plyr)
-# library(sunburstR)
-library(rPython)
-library(ggsunburst)
 library(cowplot)
 library(png)
 library(grid)
-
-# testcomment
 
 # import Helvetica Neue
 font_add("Helvetica",
@@ -24,7 +19,7 @@ showtext_auto()
 
 bib <-
   read.csv(
-    "file:///home/leonard/Documents/Uni/Phloroglucinol paper/18-06_draft/bibliography/scopus_export_mod.csv"
+    "file:///home/leonard/Documents/Uni/Phloroglucinol/18-06_draft/bibliography/scopus_export_mod.csv"
   )
 
 bib$snbrst <-
@@ -41,11 +36,10 @@ burst <- bib[, 24]
 
 
 p <-
-  ggplot(data = bib, aes(x = used, fill = relative.quantity)) + geom_bar() + theme_minimal() +
+  ggplot(data = bib, aes(x = used, fill = relative.quantity)) + geom_bar() + theme_base() +
   theme(
     text = element_text(size = 14, family = "Helvetica"),
-    # axis.line.x = element_line(size = 0.75, lineend = "square"),
-    # axis.line.y = element_line(size = 0.75, lineend = "square"),
+    plot.background = element_blank(),
     axis.ticks.y = element_line(
       size = 0.25,
       lineend = "square",
@@ -53,36 +47,33 @@ p <-
     ),
     axis.title = element_blank(),
     axis.text.y = element_text(size = 10),
-    axis.text.x = element_text(
-      angle = 90,
-      vjust = 0.5,
-      hjust = 1
-    ),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
     legend.title = element_blank(),
-    legend.position = "none",
+    legend.position = "bottom",
     strip.text = element_text(
       vjust = 0.1,
       hjust = 0,
       face = "italic",
-      angle = 90
+      angle = 0
     )
   ) +
-  scale_fill_brewer(palette = "Set1", na.value = "grey") +
-  facet_wrap(~ Source.title, strip.position = "left")
+  scale_fill_brewer(palette = "Set1", na.value = "grey", labels = c("not used", "presence", "quantity")) +
+  facet_wrap(~ Source.title, strip.position = "top")
 pdf("bib.pdf")
 p
 dev.off()
 
-q <-
-  sunburstR::sunburst(
-    snbrst,
-    percent = TRUE,
-    count = TRUE,
-    colors = c("#2c7bb6", "#d7191c"),
-    withD3 = TRUE
-  )
+# q <-
+#   sunburstR::sunburst(
+#     snbrst,
+#     percent = TRUE,
+#     count = TRUE,
+#     colors = c("#2c7bb6", "#d7191c"),
+#     withD3 = TRUE
+#   )
 
 ac <-
   ggplot(data = subset(bib, used == "yes"), aes(x = Source, y = acidity)) +
@@ -91,7 +82,6 @@ ac <-
               shape = 16,
               alpha = 0.25,
               size = 3) +
-  # scale_fill_brewer(palette = "YlGnBu") +
   scale_fill_manual(values = c("#253494", "#ffffcc")) +
   labs(y = "Acidity [M HCl]") + 
   scale_y_continuous(limits = c(0,6), breaks = c(0, 2, 4, 6), labels = c("  0", "  2", "  4", "  6")) +
@@ -99,7 +89,6 @@ ac <-
   theme(
     text = element_text(size = 14, family = "Helvetica"),
     legend.position = "none",
-    # axis.line.y = element_line(size = 0.75, lineend = "square"),
     axis.ticks.y = element_line(size = 0.25, lineend = "square", color = "black"),
     axis.title.y = element_text(size =10),
     axis.title.x = element_blank(),
@@ -117,15 +106,12 @@ th <-
               shape = 16,
               alpha = 0.25,
               size = 3) +
-  # scale_fill_brewer(palette = "YlGnBu") +
-  # scale_fill_manual(values = c("#253494", "#ffffcc")) +
   scale_y_continuous(position = "right") +
-  labs(y = "Thickness [µm]") +
+  labs(y = "Section thickness [µm]") +
   theme_minimal() +
   theme(
     text = element_text(size = 14, family = "Helvetica"),
     legend.position = "none",
-    # axis.line.y = element_line(size = 0.75, lineend = "square"),
     axis.ticks.y = element_line(size = 0.25, lineend = "square", color = "black"),
     axis.title.y = element_text(size =10),
     axis.title.x = element_blank(),
@@ -143,10 +129,12 @@ plot_grid(
   p,
   ac,
   th,
-  labels = c('A', 'B', 'C'),
+  labels = c('(a)', '(b)', '(c)'),
   ncol = 3,
   nrow = 1,
   label_fontfamily = "Helvetica",
-  rel_widths = c(4, 1, 1)
+  rel_widths = c(4, 1, 1),
+  label_x = 0,
+  hjust = -0.2
 )
 dev.off()

@@ -17,11 +17,15 @@ font_add("Minion", regular = "/prop_fonts/45. Didot     [1799 - Firmin Didot]/Di
 
 showtext_auto()
 
+###############################
 # remove previous statistic files
+###############################
 file.remove("stats_OD_poplarFW.csv")
 file.remove("stats_hue_poplarFW.csv")
 
+###############################
 # establish tukey-test functions
+###############################
 print.HSD.OD <- function(x) {
   aov1 <- aov(diff.adj ~ bin + genotype, data = x)
   groups <- HSD.test(aov1, c("bin", "genotype"), alpha = 0.05)
@@ -72,6 +76,10 @@ poplar$adj.cell.type <- plyr::revalue(
   )
 )
 
+###############################
+# 5.9 is the number of pixels per µm
+# X and Y are already measured according to scale, the ref values are given in pixels (see Fiji macro)
+###############################
 poplar$Distance <-
   apply(poplar[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
         1 ,
@@ -108,7 +116,9 @@ poplar$diff.adj <- poplar$diff - poplar$OD.bg
 poplar$genotype <-
   ordered(poplar$genotype, levels = c("WT", "c4h", "ccr"))
 
+###############################
 # calculate the correct hue on the 360 point circular scale
+###############################
 poplar$hue <- ((poplar$H.stained + 128) / 256 * 360)
 
 poplar <- poplar %>%
@@ -118,12 +128,6 @@ poplar <- poplar %>%
 poplar <- poplar %>%
   group_by(genotype, replicate, technical, cell.type, adj.cell.type) %>%
   mutate(rel.od = diff.adj / max(diff.adj, na.rm = TRUE))
-
-# poplar %>%
-#   split(paste(.$genotype, .$cell.type, .$adj.cell.type)) %>% # from base R
-#   map( ~ lm(diff.adj ~ Distance, data = .)) %>%
-#   map(summary) %>%
-#   map_dbl("r.squared")
 
 poplar <-
   subset(
@@ -179,7 +183,9 @@ poplar.avg <-
     sd.hue = sd(mean.hue, na.rm = TRUE)
   )
 
+###############################
 # set graph colours according to averaged measurements per genotype/cell type
+###############################
 barcols <- poplar.avg[, c(1, 2, 3, 4, 7)]
 colnames(barcols)[4] <- 'S'
 colnames(barcols)[5] <- 'H'
@@ -196,7 +202,9 @@ poplar.pre$cell <-
   as.factor(paste(poplar.pre$genotype, poplar.pre$cell.type, poplar.pre$bin))
 names(barcols) <- poplar.avg$cell
 
-# set statistical letters for OD
+###############################
+# set statistical letters for absorbance
+###############################
 poplar.bin %>%
   group_by(cell.type) %>%
   do(data.frame(print.HSD.OD(.)))
@@ -218,7 +226,9 @@ letters.OD.monol$cell <-
     )
   )
 
-# PLOT OD
+###############################
+# plot absorbance
+###############################
 poplar.OD_dist <-
   ggplot(data = poplar.bin, aes(
     y = mean.od,
@@ -285,17 +295,12 @@ poplar.OD_dist <-
     hjust = 1,
     size = 4
   ) +
-  # geom_text(position = position_dodge(0.9),
-  #           aes(label = bin, y = 0.35),
-  #           family = "Minion",
-  #           angle = 0,
-  #           hjust = 0.5,
-  #           size = 4) +
-  # guides(fill = "white") +
   facet_grid( ~ cell.type) +
   scale_fill_manual(values = barcols, guide = FALSE)
 
-# set statistical letters for HUE
+###############################
+# set statistical letters for hue
+###############################
 poplar.bin %>%
   group_by(cell.type) %>%
   do(data.frame(print.HSD.hue(.)))
@@ -317,7 +322,9 @@ letters.hue.monol$cell <-
     )
   )
 
-# PLOT HUE
+###############################
+# plot hue
+###############################
 poplar.hue_dist <-
   ggplot(data = poplar.bin, aes(
     y = mean.hue,
@@ -393,7 +400,9 @@ poplar.OD_dist
 poplar.hue_dist
 dev.off()
 
+###############################
 # plot grid
+###############################
 pdf("poplar_basic_grid.pdf", height = 4, width = 10)
 plot_grid(
   poplar.OD_dist,

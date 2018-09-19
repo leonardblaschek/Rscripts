@@ -36,19 +36,19 @@ cad4unstained <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/
 cad5unstained <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/cad5_unstained.png"))
 cad4x5unstained <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/cad4x5_unstained.png"))
 
-WTfire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/WT_fire.png"))
-cl1fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/4cl1_fire.png"))
-cl2fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/4cl2_fire.png"))
-cl1x2fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/4cl1x2_fire.png"))
-ccoaomtfire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/ccoaomt_fire.png"))
-fah1fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/fah1_fire.png"))
-omt1fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/omt1_fire.png"))
-ccr1fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/ccr1_fire.png"))
-cad4fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/cad4_fire.png"))
-cad5fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/cad5_fire.png"))
-cad4x5fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/cad4x5_fire.png"))
-ccr1xfah1fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/ccr1xfah1_fire.png"))
-scale <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/scale_aldehyde.png"))
+# WTfire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/WT_fire.png"))
+# cl1fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/4cl1_fire.png"))
+# cl2fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/4cl2_fire.png"))
+# cl1x2fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/4cl1x2_fire.png"))
+# ccoaomtfire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/ccoaomt_fire.png"))
+# fah1fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/fah1_fire.png"))
+# omt1fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/omt1_fire.png"))
+# ccr1fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/ccr1_fire.png"))
+# cad4fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/cad4_fire.png"))
+# cad5fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/cad5_fire.png"))
+# cad4x5fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/cad4x5_fire.png"))
+# ccr1xfah1fire <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/ccr1xfah1_fire.png"))
+# scale <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/scale_aldehyde.png"))
 
 # STAINED
 pdf("stained_montage.pdf", height = 3.065, width = 10)
@@ -154,34 +154,34 @@ system("gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/default -dN
 
 
 # FIRE
-pdf("fire_montage.pdf", height = 6, width = 8)
-fire <- plot_grid(
-  WTfire,
-  cl1fire,
-  cl2fire,
-  cl1x2fire,
-  ccoaomtfire,
-  fah1fire,
-  omt1fire,
-  ccr1fire,
-  ccr1xfah1fire,
-  cad4fire,
-  cad5fire,
-  cad4x5fire,
-  labels = c("Col-0", "4cl1", "4cl2", "4cl1x4cl2", "ccoaomt1", "fah1", "omt1", "ccr1", "ccr1xfah1", "cad4", "cad5", "cad4xcad5"),
-  label_fontfamily = "Helvetica",
-  label_fontface = 3,
-  label_colour = "white",
-  scale = 0.98,
-  ncol = 4,
-  nrow = 3,
-  hjust = 0.5,
-  vjust = 1,
-  label_x = 0.5,
-  label_y = 0.98)
-fire
-dev.off()
-system("gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r150 -sOutputFile=fire_mont.pdf fire_montage.pdf")
+# pdf("fire_montage.pdf", height = 6, width = 8)
+# fire <- plot_grid(
+#   WTfire,
+#   cl1fire,
+#   cl2fire,
+#   cl1x2fire,
+#   ccoaomtfire,
+#   fah1fire,
+#   omt1fire,
+#   ccr1fire,
+#   ccr1xfah1fire,
+#   cad4fire,
+#   cad5fire,
+#   cad4x5fire,
+#   labels = c("Col-0", "4cl1", "4cl2", "4cl1x4cl2", "ccoaomt1", "fah1", "omt1", "ccr1", "ccr1xfah1", "cad4", "cad5", "cad4xcad5"),
+#   label_fontfamily = "Helvetica",
+#   label_fontface = 3,
+#   label_colour = "white",
+#   scale = 0.98,
+#   ncol = 4,
+#   nrow = 3,
+#   hjust = 0.5,
+#   vjust = 1,
+#   label_x = 0.5,
+#   label_y = 0.98)
+# fire
+# dev.off()
+# system("gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r150 -sOutputFile=fire_mont.pdf fire_montage.pdf")
 
 
 
