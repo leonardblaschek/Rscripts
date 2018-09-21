@@ -72,7 +72,7 @@ timeline <-
         by = c("replicate", "thickness", "cell.type", "point"))
 
 timeline$od <- timeline$od - timeline$od.bg
-timeline$hue <- ((timeline$hue + 128) / 256) * 360
+timeline$hue <- ((timeline$hue + 128) / 255) * 360
 
 timeline.ph <- subset(timeline, cell.type == "PH")
 timeline.ph$od.ph <- timeline.ph$od

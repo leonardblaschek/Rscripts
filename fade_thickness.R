@@ -39,7 +39,7 @@ fading[301:350 + rep(seq(0, (nrow(fading) - 50), by = 350), each = 50), 2] <-
 
 # subtract unstained background
 fading$cell.type <- ordered(fading$cell.type)
-fading$hue <- ((fading$H + 128) / 256) * 360
+fading$hue <- ((fading$H + 128) / 255) * 360
 fading$point <- NA
 pointcount <- data.frame(1:50)
 colnames(pointcount) <- 'point'

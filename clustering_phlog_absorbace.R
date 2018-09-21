@@ -64,7 +64,7 @@ phlog.monol[201:250 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50)
 phlog.monol[251:300 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
   "PH"
 # phlog.monol$cell.type <- ordered(phlog.monol$cell.type, levels=c("PH","IF", "LP", "MX", "PX", "XF"))
-phlog.monol$hue <- ((phlog.monol$h.stained + 128) / 256 * 360)
+phlog.monol$hue <- ((phlog.monol$h.stained + 128) / 255 * 360)
 phlog.monol$replicate <-
   as.factor(as.character(phlog.monol$replicate))
 phlog.monol$diff <-

@@ -119,7 +119,7 @@ poplar$genotype <-
 ###############################
 # calculate the correct hue on the 360 point circular scale
 ###############################
-poplar$hue <- ((poplar$H.stained + 128) / 256 * 360)
+poplar$hue <- ((poplar$H.stained + 128) / 255 * 360)
 
 poplar <- poplar %>%
   group_by(genotype, replicate, technical) %>%
@@ -418,6 +418,3 @@ plot_grid(
   rel_heights = c(1, 1)
 )
 dev.off()
-system(
-  "gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r150 -sOutputFile=geno_grid.pdf genotypes_grid.pdf"
-)

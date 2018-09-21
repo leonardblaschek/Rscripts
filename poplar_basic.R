@@ -50,7 +50,7 @@ print.HSD.hue <- function(x) {
 }
 
 # calculate the correct hue on the 360 point circular scale
-poplar$hue <- ((poplar$H.stained + 128) / 256 * 360)
+poplar$hue <- ((poplar$H.stained + 128) / 255 * 360)
 
 poplar$replicate <-
   as.factor(as.character(poplar$replicate))

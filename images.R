@@ -51,7 +51,6 @@ cad4x5unstained <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draf
 # scale <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/fire/scale_aldehyde.png"))
 
 # STAINED
-pdf("stained_montage.pdf", height = 3.065, width = 10)
 stained_pre <- plot_grid(
   cl1stained,
   cl2stained,
@@ -90,13 +89,8 @@ stained <- plot_grid(
   label_size = 12,
   rel_widths = c(2.86, 7.14)
 )
-stained
-dev.off()
-system("gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/default -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r150 -sOutputFile=stained_mont.pdf stained_montage.pdf")
-
 
 # UNSTAINED
-pdf("unstained_montage.pdf", height = 3.065, width = 10)
 unstained_pre <- plot_grid(
   cl1unstained,
   cl2unstained,
@@ -136,22 +130,6 @@ unstained <- plot_grid(
   label_size = 12,
   rel_widths = c(2.86, 7.14)
 )
-unstained
-dev.off()
-system("gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/default -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r150 -sOutputFile=unstained_mont.pdf unstained_montage.pdf")
-
-pdf("montage.pdf", height = 2, width = 10.3)
-genotypes_mont <- plot_grid(
-  stained,
-  unstained,
-  labels = c("",""),
-  nrow = 2,
-  ncol = 1
-)
-genotypes_mont
-dev.off()
-system("gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/default -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r150 -sOutputFile=mont.pdf montage.pdf")
-
 
 # FIRE
 # pdf("fire_montage.pdf", height = 6, width = 8)

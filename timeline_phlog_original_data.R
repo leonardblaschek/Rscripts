@@ -66,7 +66,7 @@ staining$cell.type <-
 ###############################
 # calculate correct hue value
 ###############################
-staining$hue <- ((staining$H + 128) / 256) * 360
+staining$hue <- ((staining$H + 128) / 255) * 360
 
 ###############################
 # add unique identifier for each measured point for background subtraction
@@ -183,7 +183,7 @@ fading[301:350 + rep(seq(0, (nrow(fading) - 50), by = 350), each = 50), 2] <-
 ###############################
 # calculate correct hue value
 ###############################
-fading$hue <- ((fading$H + 128) / 256) * 360
+fading$hue <- ((fading$H + 128) / 255) * 360
 
 fading$cell.type <- ordered(fading$cell.type)
 
@@ -316,7 +316,7 @@ tl.od <-
     panel.grid.minor = element_blank(),
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
     panel.spacing.x = unit(1.5, "mm"),
-    plot.margin = unit(c(0.4, 0, 0, 0), "cm"),
+    plot.margin = unit(c(0.4, 0, 0, 0.1), "cm"),
     legend.position = c(0.1685, 1.2),
     legend.margin = margin(0, 10, 0, 0),
     legend.direction = "horizontal",
@@ -376,7 +376,7 @@ tl.hue <-
     panel.grid.minor = element_blank(),
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
     panel.spacing.x = unit(1.5, "mm"),
-    plot.margin = unit(c(0, 0, 0, 0), "cm"),
+    plot.margin = unit(c(0, 0, 0, 0.1), "cm"),
     legend.position = "none",
     legend.margin = margin(0, 10, 0, 0),
     legend.direction = "horizontal",
@@ -465,7 +465,7 @@ thick.ellipse <-
     legend.spacing = unit(0.25, "mm"),
     legend.key.height = unit(4, "mm"),
     legend.key.width = unit(4, "mm"),
-    plot.margin = unit(c(0, 0, 0, 0), "cm")
+    plot.margin = unit(c(0, 0, 0, 0.1), "cm")
   ) +
   xlim(-0.15, 0.8) +
   ylim(230, 370) +
@@ -481,7 +481,7 @@ dev.off()
 ###############################
 # import images
 ###############################
-timeline_imgs <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/timeline/cropped/montage.png"))
+# timeline_imgs <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/timeline/cropped/montage.png"))
 
 ###############################
 # plot the whole figure

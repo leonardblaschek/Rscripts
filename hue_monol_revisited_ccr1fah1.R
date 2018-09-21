@@ -106,7 +106,7 @@ phlog.monol[251:300 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50)
 ###############################
 # calculate the correct hue on the 360 point circular scale
 ###############################
-phlog.monol$hue <- ((phlog.monol$h.stained + 128) / 256 * 360)
+phlog.monol$hue <- ((phlog.monol$h.stained + 128) / 255 * 360)
 
 phlog.monol$replicate <-
   as.factor(as.character(phlog.monol$replicate))

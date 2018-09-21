@@ -64,7 +64,7 @@ staining[251:300 + rep(seq(0, (nrow(staining) - 50), by = 300), each = 50), 2] <
   "PH"
 staining$cell.type <-
   ordered(staining$cell.type, levels = c("PH", "IF", "LP", "MX", "PX", "XF"))
-staining$hue <- ((staining$H + 128) / 256) * 360
+staining$hue <- ((staining$H + 128) / 255) * 360
 staining$point <- NA
 pointcount <- data.frame(1:50)
 colnames(pointcount) <- 'point'
