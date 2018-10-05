@@ -137,7 +137,9 @@ pca.wiesner <- melt(pca.wiesner, id = c("cell.type", "replicate", "genotype"))
 pca.wiesner$value[pca.wiesner$value < 0] <- 0.001
 pca.wiesner <- dcast(pca.wiesner, cell.type + replicate ~ variable + genotype)
 
+###############################
 # shorten variable titles when only using OD
+###############################
 colnames(pca.wiesner) <- c("cell.type",
                            "replicate",
                            "Col-0",

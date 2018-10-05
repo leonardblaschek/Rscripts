@@ -6,6 +6,7 @@ library(reshape2)
 library(plyr)
 library(Hmisc)
 library(corrplot)
+library("PerformanceAnalytics")
 
 font_add("Helvetica", regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
          italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
@@ -336,8 +337,9 @@ interaction.avg <-
 # plot overall correlation matrix
 ###############################
 pdf("corrplots.pdf", width = 10, height = 10)
-corrplot.mixed(fw.corr$r,
-               tl.col = "black")
+# corrplot.mixed(fw.corr$r,
+#                tl.col = "black")
+chart.Correlation(fw.cast, histogram=TRUE, pch=21)
 dev.off()
 
 pdf("foodweb.pdf", width = 13, height = 2)
