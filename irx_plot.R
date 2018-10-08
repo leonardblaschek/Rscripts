@@ -14,7 +14,7 @@ showtext_auto()
 irx.plot <- function(x) {
 irx.polygon <- ggplot(data = subset(irx.roi, genotype == x), aes(x = ROIx, y = ROIy, group = interaction(object, number))) +
   geom_polygon(colour = "black", aes(fill = Perim., linetype = object), alpha = 0.5, size = 0.5) +
-  scale_fill_viridis_c(name = "Perimeter [µm]", limits = c(0, 100)) +
+  scale_fill_viridis_c(name = "Perimeter [µm]", limits = c(0, 125)) +
   guides(linetype = guide_legend(title="")) +
   xlim(0, 1.05) +
   ylim(0, 1.05) +
