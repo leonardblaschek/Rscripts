@@ -1,5 +1,7 @@
 library(reshape2)
 library(tidyr)
+library(plyr)
+library(dplyr)
 library(factoextra)
 library(ggfortify)
 library(showtext)
@@ -160,15 +162,42 @@ log.wiesner <- log(pca.wiesner[, -(1:2)])
 celltypes.wiesner <- as.character(pca.wiesner[, 1])
 pca.wiesner.post <- prcomp(log.wiesner, center = TRUE, scale. = TRUE)
 
+pca.wiesner.loading <- data.frame(pca.wiesner.post$rotation)
+pca.wiesner.loading$genotype <- rownames(pca.wiesner.loading)
+pca.wiesner.loading.melt <- melt(pca.wiesner.loading[, c(1,2,13)], id = "genotype")
+
+pca.wiesner.loading.melt$genotype <-
+  ordered(
+    pca.wiesner.loading.melt$genotype,
+    levels = c(
+      "Col-0",
+      "4cl1",
+      "4cl2",
+      "4cl1x4cl2",
+      "ccoaomt1",
+      "fah1",
+      "omt1",
+      "ccr1",
+      "ccr1xfah1",
+      "cad4",
+      "cad5",
+      "cad4xcad5"
+    )
+  )
+
+pca.wiesner.ind <- data.frame(get_pca_ind(pca.wiesner.post)$cos2)
+pca.wiesner.ind$cell.type <- celltypes.wiesner
+pca.wiesner.ind <- tibble::rowid_to_column(pca.wiesner.ind, "number")
+pca.wiesner.ind.melt <- melt(pca.wiesner.ind[, c(1,2,3,14)], id = c("number", "cell.type"))
+
 gg.pca <- data.frame(pca.wiesner.post$x, cell.type = pca.wiesner$cell.type)
 gg.rota <- data.frame(pca.wiesner.post$rotation)
 
-pdf("PCA_wiesner.pdf")
 p <- ggplot(gg.pca, aes(x = PC1, y = PC2, fill = cell.type)) + 
   geom_hline(yintercept = 0, linetype = 1) +
   geom_vline(xintercept = 0, linetype = 1) +
   stat_ellipse(geom = "polygon", alpha = 0.5) +
-  stat_ellipse(aes(fill = NA), colour = "black", linetype = 2) +
+  stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2) +
   geom_point(shape = 21,
              size = 4,
              stroke = 0.5,
@@ -198,10 +227,11 @@ p <- ggplot(gg.pca, aes(x = PC1, y = PC2, fill = cell.type)) +
     legend.text = element_text(size = 30, colour = "black"),
     plot.margin = unit(c(2,2,2,2), "mm")
   ) 
+
+pdf("PCA_wiesner.pdf")
 p
 dev.off()
 
-pdf("PCA_supplemental.pdf", height = 10, width = 10)
 top <- plot_grid(
   fviz_pca_var(pca.wiesner.post,
                repel = TRUE,
@@ -225,7 +255,7 @@ top <- plot_grid(
   nrow = 1
 )
 
-bottom <- plot_grid(
+mid <- plot_grid(
   fviz_contrib(pca.wiesner.post, 
                choice = "var", 
                axes = 1, 
@@ -249,11 +279,45 @@ bottom <- plot_grid(
   labels = c("(c)", "(d)"),
   label_fontfamily = "Helvetica"
 )
+
+bottom <- ggplot(data = pca.wiesner.loading.melt, aes(x = genotype, y = value)) + 
+  geom_point(shape = 21, size = 2) +
+  geom_line(aes(group = variable, linetype = variable)) +
+  scale_x_discrete(
+    labels = c(
+      "col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(paste(italic("ccr1"), "x", italic("fah1"))),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  labs(x = "Variable [genotype]",
+       y = "Loadings") +
+  theme_few() +
+  theme(text = element_text(family = "Helvetica"),
+        legend.title = element_blank(),
+        legend.position = c(0.05,0.85))
+
+pdf("PCA_supplemental.pdf", height = 13, width = 10)
 plot_grid(
   top,
+  mid,
   bottom,
-  nrow = 2,
-  labels = "",
-  rel_heights = c(2,1)
+  nrow = 3,
+  labels = c("","","(e)"),
+  label_fontfamily = "Helvetica",
+  rel_heights = c(2,1,1)
 )
+
+# ggplot(data = pca.wiesner.ind.melt, aes(x = number, y = value)) + 
+#   geom_point(aes(fill = cell.type, group = variable), shape = 21, size = 5) +
+#   geom_line(aes(group = variable, linetype = variable))
 dev.off()

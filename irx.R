@@ -4,6 +4,7 @@ library(ggthemes)
 library(showtext)
 library(dplyr)
 library(cowplot)
+library(agricolae)
 
 font_add(
   "Helvetica",
@@ -14,8 +15,19 @@ font_add(
 )
 showtext_auto()
 
+###############################
+# functions for scaling and statistics
+###############################
 scale_this <- function(x){
   (x - mean(x, na.rm=TRUE)) / sd(x, na.rm=TRUE)
+}
+
+tukey <- function(x) {
+  aov1 <- aov(data = x, value ~ genotype)
+  groups <- HSD.test(aov1, "genotype", alpha = 0.05)
+  groups$groups[["genotype"]] <- rownames(groups$groups)
+  groups$groups[["value"]] <- 0
+  return(groups[["groups"]])
 }
 
 ###############################
@@ -68,9 +80,12 @@ irx.data$Distance <-
 irx.data <- tibble::rowid_to_column(irx.data, "number")
 
 ###############################
-# replicate as factor for plotting
+# factorise and order for facetting
 ###############################
 irx.data$replicate <- as.factor(irx.data$replicate)
+irx.data$technical <- as.factor(as.character(irx.data$technical))
+irx.data$object <-
+  ordered(irx.data$object, levels = c("PX", "PMX", "SMX"))
 
 ###############################
 # create coordinate data frame
@@ -143,9 +158,6 @@ irx.data <-
     "Circ.",
     "Distance"
   )]
-irx.data$technical <- as.factor(as.character(irx.data$technical))
-irx.data$object <-
-  ordered(irx.data$object, levels = c("PX", "PMX", "SMX"))
 
 ###############################
 # melt data frame for facetting
@@ -153,13 +165,32 @@ irx.data$object <-
 irx.melt <-
   melt(irx.data, id = c("genotype", "replicate", "technical", "object"))
 
+irx.melt$genotype <-
+  ordered(
+    irx.melt$genotype,
+    levels = rev(c(
+      "col-0",
+      # "4cl1",
+      # "4cl2",
+      # "4cl1x2",
+      "ccoaomt1",
+      "fah1",
+      "omt1",
+      "ccr1-3",
+      # "ccr1xfah1",
+      # "cad4",
+      # "cad5",
+      "cad4xcad5"
+    ))
+  )
+
 ###############################
 # calculate relative distance, where the innermost PX coordinate
 # denotes the end (1) of the vascular bundle
 ###############################
 irx.data <- irx.data %>%
   group_by(genotype, replicate, technical) %>%
-  mutate(Distance = Distance / max(Distance, na.rm = TRUE))
+  mutate(rel.distance = Distance / max(Distance, na.rm = TRUE))
 
 ###############################
 # join descriptive data and coordinate data and order the data frame
@@ -185,7 +216,7 @@ irx.roi <- irx.roi %>%
   mutate(ROIx = (Circ. + ((
     ROIx - mean(ROIx, na.rm = TRUE)
   )) / 2500),
-  ROIy = (Distance + ((
+  ROIy = (rel.distance + ((
     ROIy - mean(ROIy, na.rm = TRUE)
   )) / 2500))
 
@@ -193,9 +224,8 @@ irx.roi <- irx.roi %>%
 # calculate z-scores
 ###############################
 irx.melt <- irx.melt %>%
-  group_by(object, variable) %>%
+  group_by(variable) %>%
   mutate(value.scaled = scale_this(value))
-
 
 ###############################
 # order from innermost to outermost cell type
@@ -203,9 +233,20 @@ irx.melt <- irx.melt %>%
 irx.roi$object <-
   ordered(irx.roi$object, levels = c("PX", "PMX", "SMX"))
 
+###############################
+# remove number variable for overview plot
+###############################
+irx.melt <- subset(irx.melt, variable != "number")
+
+###############################
+# Tukey-HSD test 
+###############################
+irx.letters <- irx.melt %>%
+  group_by(object, variable) %>%
+  do(data.frame(tukey(.)))
 
 irx.overview <-
-  ggplot(data = subset(irx.melt, variable != "number"), aes(x = genotype, y = value)) +
+  ggplot(data = irx.melt, aes(x = genotype, y = value)) +
   geom_violin(draw_quantiles = 0.5, adjust = 1.5) +
   geom_jitter(
     aes(fill = value.scaled),
@@ -215,7 +256,24 @@ irx.overview <-
     size = 2,
     stroke = 0.25
   ) +
-  scale_fill_distiller(palette = "RdBu") +
+  geom_label(data = irx.letters, aes(label = groups), fill = rgb(1, 1, 1, 0.75), hjust = 0.25, label.size = 0, family = "Helvetica") +
+  scale_fill_distiller(palette = "RdBu", name = "Z-score by\ncolumn") +
+  scale_x_discrete(
+    labels = rev(c(
+      "Col-0",
+      # expression(italic("4cl1")),
+      # expression(italic("4cl2")),
+      # expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      # expression(paste(italic("ccr1"), "x", italic("fah1"))),
+      # expression(italic("cad4")),
+      # expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    ))
+  ) +
   facet_grid(object ~ variable, scales = "free_x") +
   theme_minimal() +
   theme(
@@ -227,7 +285,7 @@ irx.overview <-
       lineend = "square",
       color = "black"
     ),
-    axis.title = element_text(size = 12),
+    axis.title = element_blank(),
     axis.text.y = element_text(size = 12, colour = "black"),
     axis.text.x = element_text(
       colour = "black",
@@ -242,9 +300,10 @@ irx.overview <-
     panel.spacing = unit(1.5, "mm"),
     # plot.margin = unit(c(0, 0, 0, 0), "cm"),
     legend.position = "bottom",
-    legend.title = element_blank(),
+    # legend.title = element_blank(),
     legend.text = element_text(size = 9),
     legend.key.height = unit(4, "mm"),
+    legend.key.width = unit(30, "mm"),
     plot.margin = unit(c(0, 0, 0, 0), "cm")
   ) +
   coord_flip()

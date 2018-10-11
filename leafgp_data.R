@@ -20,18 +20,20 @@ leafgp.data$EXP_Date <- as.character(leafgp.data$EXP_Date)
 leafgp.data$EXP_Date <- ifelse(leafgp.data$EXP_Date == "2018-09-07", NA, leafgp.data$EXP_Date)
 leafgp.data$EXP_Date <- ifelse(leafgp.data$EXP_Date == "2018-09-05", "2018-09-07", leafgp.data$EXP_Date)
 leafgp.data$EXP_Date <- ifelse(is.na(leafgp.data$EXP_Date), "2018-09-05", leafgp.data$EXP_Date)
-leafgp.data$EXP_Date <- as.Date(leafgp.data$EXP_Date)
-leafgp.data$EXP_Date <- difftime(leafgp.data$EXP_Date, "2018-08-29", units ="days")
+leafgp.data$dag <- difftime(as.Date(leafgp.data$EXP_Date, format = "%Y-%m-%d"), 
+                            as.Date("2018-08-29", format = "%Y-%m-%d"), 
+                            units ="days")
 leafgp.data$genotype <- ordered(leafgp.data$genotype, 
                                 levels = c("Col-0", "lac4/10/12/17", "lac5/10/12/17", "lac4/5/10/12/17"))
 
 height.data$genotype <- ordered(height.data$genotype, 
                                 levels = c("Col-0", "lac4/10/12/17", "lac5/10/12/17", "lac4/5/10/12/17"))
-height.data$date <- as.Date(height.data$date)
-height.data$date <- difftime(height.data$date, "2018-08-29", units ="days")
-height.data$height <- ifelse(height.data$height > 0, height.data$height / 92, height.data$height)
+height.data$dag <- difftime(as.Date(height.data$date, format = "%Y-%m-%d"), 
+                            as.Date("2018-08-29", format = "%Y-%m-%d"), 
+                            units ="days")
+height.data$height <- ifelse(!is.na(height.data$pot.width), (height.data$height * (height.data$pot.width / 725)) / 112, height.data$height)
 
-leafgp.area <- ggplot(data = leafgp.data, aes(x = EXP_Date, y = Projected_LeafArea.mm.2., colour = genotype)) +
+leafgp.area <- ggplot(data = leafgp.data, aes(x = dag, y = Projected_LeafArea.mm.2., colour = genotype)) +
   geom_smooth(aes(fill = genotype), span = 0.5, se = TRUE, size = 0.5, linetype = 2) +
   geom_boxplot(aes(group = interaction(EXP_Date, genotype))) + 
   geom_vline(xintercept = difftime("2018-09-22", "2018-08-29", units ="days"), linetype = 3) +
@@ -50,8 +52,9 @@ pdf("leafgp_plot.pdf", height = 4, width = 10)
 leafgp.area
 dev.off()
 
-manual.height <- ggplot(data = height.data, aes(x = date, y = height, colour = genotype)) +
-  geom_smooth(aes(fill = genotype), span = 0.5, se = TRUE, size = 0.5, linetype = 2) +
+manual.height <- ggplot(data = height.data, aes(x = dag, y = height, colour = genotype)) +
+  geom_smooth(aes(fill = genotype), span = 0.75, se = TRUE, size = 0.5, linetype = 2) +
+  geom_point(aes(group = interaction(date, genotype))) +
   geom_boxplot(aes(group = interaction(date, genotype))) + 
   theme_base() +
   scale_colour_few() +
