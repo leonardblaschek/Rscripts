@@ -245,6 +245,9 @@ irx.letters <- irx.melt %>%
   group_by(object, variable) %>%
   do(data.frame(tukey(.)))
 
+###############################
+# shape and position overview plot
+###############################
 irx.overview <-
   ggplot(data = irx.melt, aes(x = genotype, y = value)) +
   geom_violin(draw_quantiles = 0.5, adjust = 1.5) +
@@ -256,7 +259,12 @@ irx.overview <-
     size = 2,
     stroke = 0.25
   ) +
-  geom_label(data = irx.letters, aes(label = groups), fill = rgb(1, 1, 1, 0.75), hjust = 0.25, label.size = 0, family = "Helvetica") +
+  geom_label(data = irx.letters, 
+             aes(label = groups), 
+             fill = rgb(1, 1, 1, 0.75), 
+             hjust = 0.25, 
+             label.size = 0, 
+             family = "Helvetica") +
   scale_fill_distiller(palette = "RdBu", name = "Z-score by\ncolumn") +
   scale_x_discrete(
     labels = rev(c(
