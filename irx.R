@@ -170,14 +170,14 @@ irx.melt$genotype <-
     irx.melt$genotype,
     levels = rev(c(
       "col-0",
-      # "4cl1",
-      # "4cl2",
+      "4cl1",
+      "4cl2",
       # "4cl1x2",
       "ccoaomt1",
       "fah1",
       "omt1",
       "ccr1-3",
-      # "ccr1xfah1",
+      "ccr1xfah1",
       # "cad4",
       # "cad5",
       "cad4xcad5"
@@ -262,21 +262,22 @@ irx.overview <-
   geom_label(data = irx.letters, 
              aes(label = groups), 
              fill = rgb(1, 1, 1, 0.75), 
-             hjust = 0.25, 
+             hjust = 1, 
              label.size = 0, 
              family = "Helvetica") +
   scale_fill_distiller(palette = "RdBu", name = "Z-score by\ncolumn") +
+  scale_y_continuous(expand = expand_scale(mult = c(0.3,0.05))) +
   scale_x_discrete(
     labels = rev(c(
       "Col-0",
-      # expression(italic("4cl1")),
-      # expression(italic("4cl2")),
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
       # expression(paste(italic("4cl1"), "x", italic("4cl2"))),
       expression(italic("ccoaomt1")),
       expression(italic("fah1")),
       expression(italic("omt1")),
       expression(italic("ccr1")),
-      # expression(paste(italic("ccr1"), "x", italic("fah1"))),
+      expression(paste(italic("ccr1"), "x", italic("fah1"))),
       # expression(italic("cad4")),
       # expression(italic("cad5")),
       expression(paste(italic("cad4"), "x", italic("cad5")))

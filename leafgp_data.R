@@ -19,6 +19,11 @@ height.data <-
     skip = 1
   )
 
+height.data <- subset(height.data,
+                      date != "2018-10-04" &
+                        date != "2018-10-01" &
+                        date != "2018-10-11")
+
 leafgp.data <- subset(leafgp.data, Projected_LeafArea.mm.2. > 0)
 leafgp.data$genotype <-
   ifelse(
@@ -74,26 +79,31 @@ height.data$height <-
 
 leafgp.area <-
   ggplot(data = leafgp.data,
-         aes(x = dag, y = Projected_LeafArea.mm.2.)) +
+         aes(x = dag, y = Projected_LeafArea.mm.2./ 100)) +
   geom_smooth(
     aes(fill = genotype, colour = genotype),
+    method = "loess",
+    formula =  y ~ x,
     span = 0.75,
     se = TRUE,
     size = 0.5,
     linetype = 2
   ) +
-  geom_point(
+  geom_jitter(
     aes(group = interaction(dag, genotype), fill = genotype),
     shape = 21,
+    width = 0.25,
     size = 2,
     stroke = 0.25,
-    position = position_dodge(width = 0.9)
+    # position = position_dodge(width = 0.9)
   ) +
-  geom_boxplot(aes(group = interaction(dag, genotype)),
-               size = 0.25,
-               colour = "black", 
-               outlier.alpha = 0,
-               position = position_dodge(width = 0.9)) +
+  # geom_boxplot(
+  #   aes(group = interaction(dag, genotype)),
+  #              size = 0.25,
+  #              colour = "black", 
+  #              outlier.alpha = 0,
+  #              position = position_dodge(width = 0.9)
+  #              ) +
   geom_vline(
     xintercept = difftime("2018-09-22", "2018-08-29", units = "days"),
     linetype = 3
@@ -101,7 +111,7 @@ leafgp.area <-
   annotate(
     "text",
     x = difftime("2018-09-21", "2018-08-29", units = "days"),
-    y = 3000,
+    y = 30,
     label = "Bolting",
     family = "Helvetica"
   ) +
@@ -109,7 +119,7 @@ leafgp.area <-
   scale_colour_few() +
   scale_fill_few() +
   scale_x_continuous(limits = c(0, 31)) +
-  labs(x = "Days after germination", y = "Projected leaf area [mm²]") +
+  labs(x = "Days after germination", y = "Projected leaf area [cm²]") +
   theme(
     text = element_text(family = "Helvetica"),
     legend.position = c(0.1, 0.8),
@@ -125,27 +135,44 @@ manual.height <-
   ggplot(data = height.data, aes(x = dag, y = height)) +
   geom_smooth(
     aes(fill = genotype, colour = genotype),
+    method = "loess",
+    formula =  y ~ x,
     span = 0.75,
     se = TRUE,
     size = 0.5,
     linetype = 2
   ) +
-  geom_point(
+  geom_jitter(
     aes(group = interaction(dag, genotype), fill = genotype),
     shape = 21,
+    width = 0.25,
+    # alpha = 0.9,
     size = 2,
     stroke = 0.25,
-    position = position_dodge(width = 0.9)
+    # position = position_dodge(width = 0.9)
   ) +
-  geom_boxplot(aes(group = interaction(dag, genotype)),
-               size = 0.25,
-               colour = "black", 
-               outlier.alpha = 0,
-               position = position_dodge(width = 0.9)) +
+  # geom_boxplot(
+  #   aes(group = interaction(dag, genotype)),
+  #              size = 0.25,
+  #              colour = "black", 
+  #              outlier.alpha = 0,
+  #              position = position_dodge(width = 0.9)
+  #   ) +
+  geom_vline(
+    xintercept = difftime("2018-09-22", "2018-08-29", units = "days"),
+    linetype = 3
+  ) +
+  annotate(
+    "text",
+    x = difftime("2018-09-23", "2018-08-29", units = "days"),
+    y = 20,
+    label = " Bolting",
+    family = "Helvetica"
+  ) +
   theme_base() +
   scale_colour_few() +
   scale_fill_few() +
-  scale_x_continuous(limits = c(20, 60)) +
+  scale_x_continuous(limits = c(24, 60)) +
   scale_y_continuous(limits = c(0, 60)) +
   labs(x = "Days after germination", y = "Height [cm]") +
   theme(
