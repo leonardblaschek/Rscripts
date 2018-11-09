@@ -43,7 +43,7 @@ irx.plot <- function(x) {
       ylim(0, 1.05) +
       labs(x = "Circularity",
            y = "Relative Distance") +
-      annotate("text", x = 0.025, y = 1, label = x, family = "Helvetica", size = 5) +
+      annotate("text", x = 0, y = 1, label = x, family = "Helvetica", size = 7, hjust = 0) +
       theme(
         text = element_text(family = "Helvetica"),
         legend.position = c(0.025, 0.75),
@@ -138,7 +138,7 @@ irx.plot <- function(x) {
 }
 
 pdf("irx.pdf", width = 10, height = 10)
-irx.plot("col-0")
+irx.plot("Col-0")
 irx.plot("ccr1-3")
 irx.plot("ccoaomt1")
 irx.plot("cad4xcad5")
@@ -146,5 +146,7 @@ irx.plot("fah1")
 irx.plot("omt1")
 irx.plot("ccr1xfah1")
 irx.plot("4cl1")
+irx.plot("4cl2")
+irx.plot("4cl1x4cl2")
 irx.plot(NULL)
 dev.off()

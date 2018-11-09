@@ -37,6 +37,8 @@ irx.data <-
   read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/irx_measurements.csv",
            sep = "\t")
 
+irx.data$genotype <- recode(irx.data$genotype, "col-0" = "Col-0")
+
 ###############################
 # create reference at the heigth of the cambium for distance calculation
 ###############################
@@ -168,20 +170,20 @@ irx.melt <-
 irx.melt$genotype <-
   ordered(
     irx.melt$genotype,
-    levels = rev(c(
-      "col-0",
+    levels = c(
+      "Col-0",
       "4cl1",
       "4cl2",
-      # "4cl1x2",
+      "4cl1x4cl2",
       "ccoaomt1",
       "fah1",
       "omt1",
       "ccr1-3",
       "ccr1xfah1",
-      # "cad4",
-      # "cad5",
+      "cad4",
+      "cad5",
       "cad4xcad5"
-    ))
+    )
   )
 
 ###############################
@@ -250,7 +252,6 @@ irx.letters <- irx.melt %>%
 ###############################
 irx.overview <-
   ggplot(data = irx.melt, aes(x = genotype, y = value)) +
-  geom_violin(draw_quantiles = 0.5, adjust = 1.5) +
   geom_jitter(
     aes(fill = value.scaled),
     shape = 21,
@@ -259,31 +260,37 @@ irx.overview <-
     size = 2,
     stroke = 0.25
   ) +
-  geom_label(data = irx.letters, 
+  geom_violin(draw_quantiles = 0.5, adjust = 1.5, fill = rgb(1,1,1,0.5)) +
+  # geom_label(data = irx.letters, 
+  #            aes(label = groups), 
+  #            angle = 90,
+  #            fill = rgb(1, 1, 1, 0.75), 
+  #            hjust = 1, 
+  #            label.size = 0, 
+  #            family = "Helvetica") +
+  geom_text(data = irx.letters, 
              aes(label = groups), 
-             fill = rgb(1, 1, 1, 0.75), 
+             angle = 90,
              hjust = 1, 
-             label.size = 0, 
              family = "Helvetica") +
   scale_fill_distiller(palette = "RdBu", name = "Z-score by\ncolumn") +
-  scale_y_continuous(expand = expand_scale(mult = c(0.3,0.05))) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.28,0.05))) +
   scale_x_discrete(
-    labels = rev(c(
+    labels = c(
       "Col-0",
       expression(italic("4cl1")),
       expression(italic("4cl2")),
-      # expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
       expression(italic("ccoaomt1")),
       expression(italic("fah1")),
       expression(italic("omt1")),
       expression(italic("ccr1")),
       expression(paste(italic("ccr1"), "x", italic("fah1"))),
-      # expression(italic("cad4")),
-      # expression(italic("cad5")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
       expression(paste(italic("cad4"), "x", italic("cad5")))
-    ))
+    )
   ) +
-  facet_grid(object ~ variable, scales = "free_x") +
   theme_minimal() +
   theme(
     text = element_text(size = 14, family = "Helvetica"),
@@ -315,8 +322,9 @@ irx.overview <-
     legend.key.width = unit(30, "mm"),
     plot.margin = unit(c(0, 0, 0, 0), "cm")
   ) +
-  coord_flip()
+  facet_grid(variable ~ object, scales = "free_y") 
+  # coord_flip()
 
-pdf("irx_overview.pdf", width = 10, height = 10)
+pdf("irx_overview.pdf", width = 10, height = 12)
 irx.overview
 dev.off()
