@@ -158,6 +158,7 @@ corr["r"] <-
 
 
 # plot log regressions of pyrolysis and wiesner data by cell type and residue
+# logarithmic error bars according to https://faculty.washington.edu/stuve/log_error.pdf
 p <-
   ggplot(py.corr,
          aes(

@@ -1,6 +1,7 @@
 library(dplyr)
 library(broom)
-
+library(reshape2)
+library(ggplot2)
 py <-
   read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/pyrolysis_2018.csv")
 
@@ -68,8 +69,7 @@ plot_df <- irx.pyr.avg %>%
        geom_smooth(method = "lm") + 
        labs(y = "Lignin content",
             x = "Circularity") +
-       ggtitle(.$object) +
-       geom_text(aes(label = round(p.value, 3)))) 
+       ggtitle(.$object)) 
 
 pdf("irx_corr.pdf")
 plot_df$plots

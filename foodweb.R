@@ -3,10 +3,11 @@ library(ggplot2)
 library(ggthemes)
 library(RColorBrewer)
 library(reshape2)
-library(plyr)
+library(dplyr)
 library(Hmisc)
 library(corrplot)
-library("PerformanceAnalytics")
+library(PerformanceAnalytics)
+library(forcats)
 
 font_add("Helvetica", regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
          italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
@@ -16,6 +17,9 @@ showtext_auto()
 
 fw.data <-
   read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/foodweb.csv")
+fw.data <- mutate(fw.data, cell.type = recode(cell.type, "V" = "MX"),
+                  adj.cell.type = recode(adj.cell.type, "V" = "MX"))
+
 
 ###############################
 # Pixel values of the measured image were multiplied by 255 for better visualisation
@@ -44,18 +48,18 @@ cast.avg <- ddply(
   c("genotype", "replicate"),
   summarise,
   "CB -> XF" = XF_CB / XF_XF,
-  "MX -> XF" = XF_V / XF_XF,
+  "MX -> XF" = XF_MX / XF_XF,
   "IF -> XF" = XF_IF / XF_XF,
   "PA -> PX" = PX_PA / PX_PX,
-  "MX -> PX" = PX_V / PX_PX,
+  "MX -> PX" = PX_MX / PX_PX,
   "LP -> IF" = IF_LP / IF_IF,
   "CB -> IF" = IF_CB / IF_IF,
   "XF -> IF" = IF_XF / IF_IF,
   "IF -> LP" = LP_IF/ LP_LP,
-  "CB -> MX" = V_CB / V_V,
-  "PA -> MX" = V_PA / V_V,
-  "XF -> MX" = V_XF / V_V,
-  "PX -> MX" = V_PX / V_V
+  "CB -> MX" = MX_CB / MX_MX,
+  "PA -> MX" = MX_PA / MX_MX,
+  "XF -> MX" = MX_XF / MX_MX,
+  "PX -> MX" = MX_PX / MX_MX
 )
 
 cast.avg <- melt(cast.avg[, -2], id = c("genotype"))
@@ -86,18 +90,18 @@ cast.avg <- ddply(
   c("genotype"),
   summarise,
   "CB -> XF" = XF_CB / XF_XF,
-  "MX -> XF" = XF_V / XF_XF,
+  "MX -> XF" = XF_MX / XF_XF,
   "IF -> XF" = XF_IF / XF_XF,
   "PA -> PX" = PX_PA / PX_PX,
-  "MX -> PX" = PX_V / PX_PX,
+  "MX -> PX" = PX_MX / PX_PX,
   "LP -> IF" = IF_LP / IF_IF,
   "CB -> IF" = IF_CB / IF_IF,
   "XF -> IF" = IF_XF / IF_IF,
   "IF -> LP" = LP_IF/ LP_LP,
-  "CB -> MX" = V_CB / V_V,
-  "PA -> MX" = V_PA / V_V,
-  "XF -> MX" = V_XF / V_V,
-  "PX -> MX" = V_PX / V_V
+  "CB -> MX" = MX_CB / MX_MX,
+  "PA -> MX" = MX_PA / MX_MX,
+  "XF -> MX" = MX_XF / MX_MX,
+  "PX -> MX" = MX_PX / MX_MX
 )
 
 cast.avg <- melt(cast.avg, id = c("genotype"))
@@ -208,11 +212,11 @@ r.squared[, "CB -> IF"] <- NA
 r.squared[, "CB -> MX"] <- NA
 r.squared[, "PA -> MX"] <- NA
 
-r <- data.frame(fw.corr$r["PX_PX", "V_PX"], row.names = "r")
+r <- data.frame(fw.corr$r["PX_PX", "MX_PX"], row.names = "r")
 colnames(r)[1] <- "PX -> MX"
-r[, "MX -> PX"] <- fw.corr$r["V_V", "PX_V"]
-r[, "MX -> XF"] <- fw.corr$r["V_V", "XF_V"]
-r[, "XF -> MX"] <- fw.corr$r["XF_XF", "V_XF"]
+r[, "MX -> PX"] <- fw.corr$r["MX_MX", "PX_MX"]
+r[, "MX -> XF"] <- fw.corr$r["MX_MX", "XF_MX"]
+r[, "XF -> MX"] <- fw.corr$r["XF_XF", "MX_XF"]
 r[, "XF -> IF"] <- fw.corr$r["XF_XF", "IF_XF"]
 r[, "IF -> XF"] <- fw.corr$r["IF_IF", "XF_IF"]
 r[, "IF -> LP"] <- fw.corr$r["IF_IF", "LP_IF"]
@@ -223,11 +227,11 @@ r[, "CB -> IF"] <- NA
 r[, "CB -> MX"] <- NA
 r[, "PA -> MX"] <- NA
 
-P <- data.frame(fw.corr$P["PX_PX", "V_PX"], row.names = "P")
+P <- data.frame(fw.corr$P["PX_PX", "MX_PX"], row.names = "P")
 colnames(P)[1] <- "PX -> MX"
-P[, "MX -> PX"] <- fw.corr$P["V_V", "PX_V"]
-P[, "MX -> XF"] <- fw.corr$P["V_V", "XF_V"]
-P[, "XF -> MX"] <- fw.corr$P["XF_XF", "V_XF"]
+P[, "MX -> PX"] <- fw.corr$P["MX_MX", "PX_MX"]
+P[, "MX -> XF"] <- fw.corr$P["MX_MX", "XF_MX"]
+P[, "XF -> MX"] <- fw.corr$P["XF_XF", "MX_XF"]
 P[, "XF -> IF"] <- fw.corr$P["XF_XF", "IF_XF"]
 P[, "IF -> XF"] <- fw.corr$P["IF_IF", "XF_IF"]
 P[, "IF -> LP"] <- fw.corr$P["IF_IF", "LP_IF"]
