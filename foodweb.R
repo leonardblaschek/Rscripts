@@ -1,3 +1,8 @@
+###############################
+# If anyone is ever trying to understend this hot mess: I am sorry.
+# I hope I have time to clean this up soon.
+###############################
+
 library(showtext)
 library(ggplot2)
 library(ggthemes)

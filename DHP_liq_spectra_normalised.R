@@ -268,16 +268,16 @@ DSLS <-
 geom_vline(xintercept = 558,
            color = "grey35",
            linetype = 1) +
-annotate(
-  "text",
-  x = 567,
-  y = 2.6,
-  label = '558',
-  size = 3,
-  hjust = 0,
-  color = "grey35",
-  family = 'Helvetica'
-) +
+# annotate(
+#   "text",
+#   x = 567,
+#   y = 2.6,
+#   label = '558',
+#   size = 3,
+#   hjust = 0,
+#   color = "grey35",
+#   family = 'Helvetica'
+# ) +
 geom_rect(
   data = labels,
   aes(fill = fll),
@@ -304,7 +304,7 @@ scale_fill_manual(values = c(
       color = "black"
     ),
     axis.title = element_text(size = 12),
-    axis.text.y = element_blank(),
+    # axis.text.y = element_blank(),
     # axis.text.y = element_text(size = 10, colour = "black"),
     axis.text.x = element_text(
       size = 10,
@@ -324,7 +324,7 @@ scale_fill_manual(values = c(
     legend.key.height = unit(4, "mm")
   ) +
   xlim(270, 650) +
-  # scale_y_continuous(breaks = c(0, 1, 2, 3), limits = c(-0.1, 2.1)) +
+  scale_y_continuous(breaks = c(0, 1, 2), limits = c(-0.1, 2.5)) +
   labs(x = "Wavelength [nm]", y = "Absorbance") +
   # geom_text(
   #   data = labels,
@@ -334,7 +334,9 @@ scale_fill_manual(values = c(
   #   size = 4,
   #   hjust = 0
   # ) +
-  facet_grid(state ~ gamma, scales = "free_y")
+  facet_grid(state ~ gamma,
+             # scales = "free_y"
+  )
 pdf("spectra_DHPs.pdf",
     height = 2,
     width = 5)

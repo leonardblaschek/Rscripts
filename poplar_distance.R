@@ -7,6 +7,7 @@ library(purrr)
 library(cowplot)
 library(tidyr)
 library(colorspace)
+library(agricolae)
 
 font_add("Helvetica",
          regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
@@ -160,7 +161,7 @@ poplar.bin$bin <-
   ordered(poplar.bin$bin, levels = c("I", "II", "III"))
 
 poplar.pre <-
-  ddply(
+ plyr::ddply(
     poplar.bin,
     c("genotype", "bin", "cell.type", "replicate"),
     summarise,
@@ -172,7 +173,7 @@ poplar.pre <-
   )
 
 poplar.avg <-
-  ddply(
+  plyr::ddply(
     poplar.pre,
     c("genotype", "bin", "cell.type"),
     summarise,
