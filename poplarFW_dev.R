@@ -6,6 +6,7 @@ library(ggplot2)
 
 poplar <-
   read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/poplar_foodweb.csv")
+poplar <- poplar[, -16]
 
 poplar$cell.type <- recode(poplar$cell.type,
   "F" = "Fibre",
@@ -79,7 +80,7 @@ poplar.bin.spread <- poplar.bin.avg %>%
   spread(cell.wall, od)
 
 poplar.lm <- ungroup(poplar.bin.spread) %>%
-  select(-genotype, -replicate) %>%
+  select(-genotype, replicate) %>%
   group_by(bin) %>%
   do("V -> R" = lm(Ray_Vessel ~ Vessel_Vessel, data = .),
      "V -> F" = lm(Fibre_Vessel ~ Vessel_Vessel, data = .),
@@ -95,6 +96,7 @@ poplar.lm <- poplar.lm %>%
 poplar.lm.tidy <- map_dfr(poplar.lm$regression, glance, .id = "relation_bin")
 poplar.lm.tidy$relation_bin <- poplar.lm$relation_bin
 
+pdf("r_squared_genotypes.pdf", width = 15)
 ggplot(data = poplar.lm.tidy, aes(x = relation_bin, y = adj.r.squared)) +
   geom_bar(stat = "identity")
-
+dev.off()

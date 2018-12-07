@@ -193,7 +193,7 @@ pca.wiesner.ind.melt <- melt(pca.wiesner.ind[, c(1,2,3,14)], id = c("number", "c
 gg.pca <- data.frame(pca.wiesner.post$x, cell.type = pca.wiesner$cell.type)
 gg.rota <- data.frame(pca.wiesner.post$rotation)
 
-p <- ggplot(gg.pca, aes(x = PC1, y = PC2, fill = cell.type)) + 
+pca <- ggplot(gg.pca, aes(x = PC1, y = PC2, fill = cell.type)) + 
   geom_hline(yintercept = 0, linetype = 1) +
   geom_vline(xintercept = 0, linetype = 1) +
   stat_ellipse(geom = "polygon", alpha = 0.5) +
@@ -229,7 +229,7 @@ p <- ggplot(gg.pca, aes(x = PC1, y = PC2, fill = cell.type)) +
   ) 
 
 pdf("PCA_wiesner.pdf")
-p
+pca
 dev.off()
 
 top <- plot_grid(

@@ -353,7 +353,6 @@ dev.off()
 
 pdf("foodweb.pdf", width = 13, height = 2)
 interaction.avg
-
 dev.off()
 
 

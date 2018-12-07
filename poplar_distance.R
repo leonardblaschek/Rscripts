@@ -56,6 +56,7 @@ print.HSD.hue <- function(x) {
 
 poplar <-
   read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/poplar_foodweb.csv")
+poplar <- poplar[, -16]
 poplar$replicate <- factor(poplar$replicate)
 poplar$technical <- factor(poplar$technical)
 poplar$number <- row(poplar)
@@ -138,7 +139,7 @@ poplar <-
   )
 poplar$cell.type <- as.character(poplar$cell.type)
 poplar$adj.cell.type <- as.character(poplar$adj.cell.type)
-poplar <- subset(poplar, cell.type == adj.cell.type)
+# poplar <- subset(poplar, cell.type == adj.cell.type) # uncommetn to select only self anjacent cell walls
 poplar$cell.type <- as.factor(as.character(poplar$cell.type))
 
 poplar.bin <- poplar %>%
@@ -418,4 +419,16 @@ plot_grid(
   label_fontfamily = "Helvetica",
   rel_heights = c(1, 1)
 )
+dev.off()
+
+pdf("distance_dist.pdf", width = 7, height = 4)
+ggplot(data = poplar, aes(x = Distance, fill = genotype)) +
+  geom_density(adjust = 2, color = NA, alpha = 0.75) +
+  geom_vline(xintercept = 50, linetype = 2, color = "grey") +
+  geom_vline(xintercept = 100, linetype = 2, color = "grey") +
+  facet_grid(genotype ~ replicate) +
+  scale_fill_few() +
+  theme_few() +
+  theme(text = element_text(family = "Helvetica"),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
 dev.off()

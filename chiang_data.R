@@ -96,13 +96,15 @@ pdf("aldehydes_glu.pdf")
 chiang.scatter
 dev.off()
 
+
 chiang.scatter <-
   ggplot(data = chiang.data, aes(x = (mean.aldehydes / mean.lignin) * 100, y = MOE)) +
   xlim(0.01, 2.5) +
   annotate(
     "text",
     family = "Helvetica",
-    label = expression(R ^ 2 == 0.67),
+    label = deparse(bquote(italic(R) ^ 2 == .(r2.moe))),
+    parse = TRUE,
     x = 2.2,
     y = 4400,
     size = 8,
