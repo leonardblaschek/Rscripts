@@ -13,9 +13,6 @@ font_add("Helvetica",
          regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
          italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
          bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Md.otf")
-
-font_add("Minion", regular = "/prop_fonts/45. Didot     [1799 - Firmin Didot]/DidotLTStd-Roman.otf")
-
 showtext_auto()
 
 ###############################
@@ -28,10 +25,10 @@ file.remove("stats_hue_poplarFW.csv")
 # establish tukey-test functions
 ###############################
 print.HSD.OD <- function(x) {
-  aov1 <- aov(diff.adj ~ bin + genotype, data = x)
+  aov1 <- aov(mean.od ~ bin + genotype, data = x)
   groups <- HSD.test(aov1, c("bin", "genotype"), alpha = 0.05)
   groups[["groups"]][["cell.type"]] <-  unique(x$cell.type)
-  groups[["groups"]][["diff.adj"]] <- -0.03
+  groups[["groups"]][["mean.od"]] <- -0.03
   write.table(
     groups[["groups"]],
     file = "stats_OD_poplarFW.csv",
@@ -41,10 +38,10 @@ print.HSD.OD <- function(x) {
   )
 }
 print.HSD.hue <- function(x) {
-  aov1 <- aov(hue ~ bin + genotype, data = x)
+  aov1 <- aov(mean.hue ~ bin + genotype, data = x)
   groups <- HSD.test(aov1, c("bin", "genotype"), alpha = 0.05)
   groups[["groups"]][["cell.type"]] <-  unique(x$cell.type)
-  groups[["groups"]][["hue"]] <- 290
+  groups[["groups"]][["mean.hue"]] <- 290
   write.table(
     groups[["groups"]],
     file = "stats_hue_poplarFW.csv",
@@ -139,7 +136,7 @@ poplar <-
   )
 poplar$cell.type <- as.character(poplar$cell.type)
 poplar$adj.cell.type <- as.character(poplar$adj.cell.type)
-# poplar <- subset(poplar, cell.type == adj.cell.type) # uncommetn to select only self anjacent cell walls
+# poplar <- subset(poplar, cell.type == adj.cell.type) # uncomment to select only self anjacent cell walls
 poplar$cell.type <- as.factor(as.character(poplar$cell.type))
 
 poplar.bin <- poplar %>%
@@ -149,46 +146,31 @@ poplar.bin <- poplar %>%
     labels = c("I", "II", "III")
   ))
 
-poplar.bin <- poplar.bin %>%
-  group_by(genotype, bin, cell.type) %>%
-  mutate(
+poplar.bin.pre <- poplar.bin %>%
+  group_by(genotype, bin, cell.type, replicate) %>%
+  summarise(
     mean.od = mean(diff.adj, na.rm = TRUE),
     sd.od = sd(diff.adj, na.rm = TRUE),
     mean.hue = mean(hue, na.rm = TRUE),
     sd.hue = sd(hue, na.rm = TRUE)
+  )
+
+poplar.bin.avg <- poplar.bin.pre %>%
+  group_by(genotype, bin, cell.type) %>%
+  summarise(
+    mean.od = mean(mean.od, na.rm = TRUE),
+    sd.od = sd(sd.od, na.rm = TRUE),
+    mean.hue = mean(mean.hue, na.rm = TRUE),
+    sd.hue = sd(sd.hue, na.rm = TRUE)
   )
 
 poplar.bin$bin <-
   ordered(poplar.bin$bin, levels = c("I", "II", "III"))
 
-poplar.pre <-
- plyr::ddply(
-    poplar.bin,
-    c("genotype", "bin", "cell.type", "replicate"),
-    summarise,
-    mean.od = mean(diff.adj, na.rm = TRUE),
-    sd.od = sd(diff.adj, na.rm = TRUE),
-    n.od = length(number),
-    mean.hue = mean(hue, na.rm = TRUE),
-    sd.hue = sd(hue, na.rm = TRUE)
-  )
-
-poplar.avg <-
-  plyr::ddply(
-    poplar.pre,
-    c("genotype", "bin", "cell.type"),
-    summarise,
-    mean.od = mean(mean.od, na.rm = TRUE),
-    sd.od = sd(mean.od, na.rm = TRUE),
-    n.od = length(replicate),
-    mean.hue = mean(mean.hue, na.rm = TRUE),
-    sd.hue = sd(mean.hue, na.rm = TRUE)
-  )
-
 ###############################
 # set graph colours according to averaged measurements per genotype/cell type
 ###############################
-barcols <- poplar.avg[, c(1, 2, 3, 4, 7)]
+barcols <- poplar.bin.avg[, c(1, 2, 3, 4, 6)]
 colnames(barcols)[4] <- 'S'
 colnames(barcols)[5] <- 'H'
 barcols[, 4] <- barcols[, 4] * 2.5
@@ -198,20 +180,20 @@ barcols$V <- 0.95
 barcols <- hex(HSV(data.matrix(barcols[, c(5, 4, 6)])))
 poplar.bin$cell <-
   as.factor(paste(poplar.bin$genotype, poplar.bin$cell.type, poplar.bin$bin))
-poplar.avg$cell <-
-  as.factor(paste(poplar.avg$genotype, poplar.avg$cell.type, poplar.avg$bin))
-poplar.pre$cell <-
-  as.factor(paste(poplar.pre$genotype, poplar.pre$cell.type, poplar.pre$bin))
-names(barcols) <- poplar.avg$cell
+poplar.bin.avg$cell <-
+  as.factor(paste(poplar.bin.avg$genotype, poplar.bin.avg$cell.type, poplar.bin.avg$bin))
+poplar.bin.pre$cell <-
+  as.factor(paste(poplar.bin.pre$genotype, poplar.bin.pre$cell.type, poplar.bin.pre$bin))
+names(barcols) <- poplar.bin.avg$cell
 
 ###############################
 # set statistical letters for absorbance
 ###############################
-poplar.bin %>%
+poplar.bin.pre %>%
   group_by(cell.type) %>%
   do(data.frame(print.HSD.OD(.)))
 letters.OD.monol <-
-  read.csv("file:///home/leonard/R/Output/wiesner/stats_OD_poplarFW.csv",
+  read.csv("file:///home/leonard/R/Output/PhD/stats_OD_poplarFW.csv",
            header = FALSE)
 colnames(letters.OD.monol) <-
   c("genobin", "mean.od", "group", "cell.type")
@@ -232,7 +214,7 @@ letters.OD.monol$cell <-
 # plot absorbance
 ###############################
 poplar.OD_dist <-
-  ggplot(data = poplar.bin, aes(
+  ggplot(data = poplar.bin.pre, aes(
     y = mean.od,
     x = genotype,
     group = bin,
@@ -247,14 +229,14 @@ poplar.OD_dist <-
   geom_bar(
     stat = "identity",
     colour = NA,
-    data = poplar.bin,
+    data = poplar.bin.avg,
     position = position_dodge(.9),
     alpha = 1,
     size = 0.1,
     width = 0.75
   ) +
   geom_jitter(
-    data = poplar.pre,
+    data = poplar.bin.pre,
     fill = NA,
     position = position_dodge(.9),
     alpha = 0.5
@@ -303,11 +285,11 @@ poplar.OD_dist <-
 ###############################
 # set statistical letters for hue
 ###############################
-poplar.bin %>%
+poplar.bin.pre %>%
   group_by(cell.type) %>%
   do(data.frame(print.HSD.hue(.)))
 letters.hue.monol <-
-  read.csv("file:///home/leonard/R/Output/wiesner/stats_hue_poplarFW.csv",
+  read.csv("file:///home/leonard/R/Output/PhD/stats_hue_poplarFW.csv",
            header = FALSE)
 colnames(letters.hue.monol) <-
   c("genobin", "mean.hue", "group", "cell.type")
@@ -328,7 +310,7 @@ letters.hue.monol$cell <-
 # plot hue
 ###############################
 poplar.hue_dist <-
-  ggplot(data = poplar.bin, aes(
+  ggplot(data = poplar.bin.pre, aes(
     y = mean.hue,
     x = genotype,
     colour = bin,
@@ -341,7 +323,7 @@ poplar.hue_dist <-
              xintercept = 3,
              size = 33) +
   geom_jitter(
-    data = poplar.pre,
+    data = poplar.bin.pre,
     position = position_dodge(0.9),
     alpha = 0.75,
     shape = 21,
@@ -427,6 +409,18 @@ ggplot(data = poplar, aes(x = Distance, fill = genotype)) +
   geom_vline(xintercept = 50, linetype = 2, color = "grey") +
   geom_vline(xintercept = 100, linetype = 2, color = "grey") +
   facet_grid(genotype ~ replicate) +
+  scale_fill_few() +
+  theme_few() +
+  theme(text = element_text(family = "Helvetica"),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+dev.off()
+
+pdf("distance_od.pdf", width = 7, height = 7)
+ggplot(data = subset(poplar, cell.type == "Vessel"), aes(x = Distance, y = rel.od, fill = genotype)) +
+  geom_point(alpha = 0.75, shape = 21) +
+  geom_smooth(method = "lm") +
+  scale_x_continuous(limits = c(0, 300)) +
+  facet_wrap(~ genotype, ncol = 1) +
   scale_fill_few() +
   theme_few() +
   theme(text = element_text(family = "Helvetica"),

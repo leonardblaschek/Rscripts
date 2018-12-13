@@ -66,16 +66,16 @@ poplar.bin.count <- poplar.bin %>%
   group_by(genotype, replicate, cell.type, adj.cell.type, bin) %>%
   summarise(count = n())
 
-poplar.bin.avg <- poplar.bin %>%
+poplar.bin.pre <- poplar.bin %>%
   filter(cell.type %in% c("Vessel", "Fibre", "Ray"), adj.cell.type %in% c("Vessel", "Fibre", "Ray")) %>%
   group_by(genotype, bin, cell.type, adj.cell.type, replicate) %>%
   summarise(od = mean(diff.adj))
 
-# poplar.bin.avg <- poplar.bin.avg %>%
+# poplar.bin.avg <- poplar.bin.pre %>%
 #   group_by(genotype, bin, cell.type, adj.cell.type) %>%
 #   summarise(od = mean(od))
 
-poplar.bin.spread <- poplar.bin.avg %>%
+poplar.bin.spread <- poplar.bin.pre %>%
   unite(cell.wall, cell.type, adj.cell.type) %>%
   spread(cell.wall, od)
 
@@ -94,9 +94,16 @@ poplar.lm <- poplar.lm %>%
   unite(relation_bin, relation, bin)
 
 poplar.lm.tidy <- map_dfr(poplar.lm$regression, glance, .id = "relation_bin")
+poplar.lm.tidy <- full_join(
+  map_dfr(poplar.lm$regression, glance, .id = "relation_bin"),
+  subset(map_dfr(poplar.lm$regression, tidy, .id = "relation_bin"), term != "(Intercept)"),
+  by = "relation_bin")
 poplar.lm.tidy$relation_bin <- poplar.lm$relation_bin
+write.csv(poplar.lm.tidy, file = "poplar_foodwebs.csv")
 
 pdf("r_squared_genotypes.pdf", width = 15)
 ggplot(data = poplar.lm.tidy, aes(x = relation_bin, y = adj.r.squared)) +
   geom_bar(stat = "identity")
 dev.off()
+
+

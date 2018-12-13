@@ -1,11 +1,9 @@
-# library(vegan)
+library(vegan)
 library(agricolae)
 library(sysfonts)
 library(showtext)
 library(ggplot2)
-#library(ggbiplot)
 library(ggthemes)
-library(plyr)
 library(gplots)
 library(RColorBrewer)
 library(reshape2)
@@ -19,8 +17,8 @@ showtext_auto()
 
 color.fun <- colorRampPalette(brewer.pal(11, "RdBu"))
 
-poplar.cluster <- poplar.avg
-poplar.cluster.WT <- subset(poplar.cluster, genotype == "WT" & bin == "III")
+poplar.cluster <- poplar.bin.avg
+poplar.cluster.WT <- subset(poplar.cluster, genotype == "WT" & bin == "I")
 colnames(poplar.cluster.WT)[7] <- "hue.WT"
 colnames(poplar.cluster.WT)[4] <- "OD.WT"
 poplar.cluster <- merge(poplar.cluster, poplar.cluster.WT[, c(3, 4, 7)], all = TRUE)
@@ -61,7 +59,7 @@ h <- reorder(h, d, agglo.fun = "max")
 
 d2 <- vegdist(phlog.matrix, method = "euclidean")
 h2 <- hclust(d2, method = "average")
-h2 <- reorder(h2, d2, "min")
+h2 <- reorder(h2, d2, "max")
 
 plot(h)
 dev.off()
