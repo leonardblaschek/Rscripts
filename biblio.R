@@ -77,7 +77,7 @@ dev.off()
 
 ac <-
   ggplot(data = subset(bib, used == "yes"), aes(x = Source, y = acidity)) +
-  geom_boxplot(width = 0.5) +
+  geom_boxplot(width = 0.5, outlier.alpha = 0) +
   geom_jitter(width = 0.2,
               shape = 16,
               alpha = 0.25,

@@ -9,7 +9,8 @@ library(cowplot)
 
 # import Helvetica Neue
 font_add("Helvetica", regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
-         italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf")
+         italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+         bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf")
 showtext_auto()
 
 lac.data <- read.csv("file:///home/leonard/Dropbox/Review/lac_data.csv")
@@ -27,10 +28,11 @@ lac.short$Temperature.optimum <- as.numeric(as.character(lac.short$Temperature.o
 
 
 lac.fig.km <- ggplot(data = subset(lac.short, var == "Km"), aes(x = Kingdom, y = value, fill = Kingdom)) +
-  geom_jitter(shape = 21, width = 0.1, stroke = 0.1, size = 2, alpha = 0.75) +
-  geom_boxplot(fill = NA, outlier.alpha = 0, width = 0.25, colour = "black") +
+  geom_violin(draw_quantiles = 0.5, alpha = 0.25) +
+  geom_jitter(shape = 21, width = 0.05, stroke = 0.1, size = 2, alpha = 0.75) +
+  # geom_boxplot(fill = NA, outlier.alpha = 0, width = 0.25, colour = "black") +
   scale_y_log10(limits = c(0.5, 10000)) +
-  labs(y = expression(log[10](Km))) +
+  labs(y = "Km [µM]") +
   scale_fill_brewer(palette = "Set1") +
   theme_base() +
   theme(text = element_text( family = "Helvetica"),
@@ -44,8 +46,9 @@ lac.fig.km <- ggplot(data = subset(lac.short, var == "Km"), aes(x = Kingdom, y =
   facet_wrap(~ substrate)
 
 lac.fig.ph <- ggplot(data = subset(lac.short, var == "pH"), aes(x = Kingdom, y = value, fill = Kingdom)) +
-  geom_jitter(shape = 21, width = 0.1, stroke = 0.1, size = 2, alpha = 0.75) +
-  geom_boxplot(fill = NA, outlier.alpha = 0, width = 0.25, colour = "black") +
+  geom_violin(draw_quantiles = 0.5, alpha = 0.25) +
+  geom_jitter(shape = 21, width = 0.05, stroke = 0.1, size = 2, alpha = 0.75) +
+  # geom_boxplot(fill = NA, outlier.alpha = 0, width = 0.25, colour = "black") +
   labs(y = "pH optimum") +
   scale_fill_brewer(palette = "Set1") +
   scale_y_continuous(limits = c(0, 10), breaks = c(0, 3, 6, 9)) +
@@ -63,8 +66,9 @@ lac.fig.ph <- ggplot(data = subset(lac.short, var == "pH"), aes(x = Kingdom, y =
   facet_wrap(~ substrate, strip.position="bottom")
 
 lac.fig.temp <- ggplot(data = lac.short, aes(x = Kingdom, y = Temperature.optimum, fill = Kingdom)) +
-  geom_jitter(shape = 21, width = 0.1, stroke = 0.1, size = 2, alpha = 0.5) +
-  geom_boxplot(fill = NA, outlier.alpha = 0, width = 0.25, colour = "black") +
+  geom_violin(draw_quantiles = 0.5, alpha = 0.25) +
+  geom_jitter(shape = 21, width = 0.05, stroke = 0.1, size = 2, alpha = 0.5) +
+  # geom_boxplot(fill = NA, outlier.alpha = 0, width = 0.25, colour = "black") +
   labs(y = "Temperature optimum [°C]") +
   scale_fill_brewer(palette = "Set1") +
   scale_y_continuous(limits = c(0, 95)) +
@@ -81,8 +85,9 @@ lac.fig.temp <- ggplot(data = lac.short, aes(x = Kingdom, y = Temperature.optimu
   ) 
 
 lac.fig.pi <- ggplot(data = lac.short, aes(x = Kingdom, y = PI, fill = Kingdom)) +
-  geom_jitter(shape = 21, width = 0.1, stroke = 0.1, size = 2, alpha = 0.5) +
-  geom_boxplot(fill = NA, outlier.alpha = 0, width = 0.25, colour = "black") +
+  geom_violin(draw_quantiles = 0.5, alpha = 0.25) +
+  geom_jitter(shape = 21, width = 0.05, stroke = 0.1, size = 2, alpha = 0.5) +
+  # geom_boxplot(fill = NA, outlier.alpha = 0, width = 0.25, colour = "black") +
   labs(y = "Isoelectric point") +
   scale_fill_brewer(palette = "Set1") +
   scale_y_continuous(limits = c(0, 10.5), breaks = c(0, 3, 6, 9)) +
@@ -110,6 +115,10 @@ plot_grid(kinetics,
           lac.fig.pi,
           ncol = 3,
           align = "h",
+          labels = c("(A)", "(B)", "(C)"),
+          label_fontfamily = "Helvetica",
+          label_x = 0,
+          hjust = 0,
           # axis = "b",
           rel_widths = c(1, 0.5, 0.5)
 )

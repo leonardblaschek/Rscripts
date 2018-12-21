@@ -196,7 +196,7 @@ gg.rota <- data.frame(pca.wiesner.post$rotation)
 pca <- ggplot(gg.pca, aes(x = PC1, y = PC2, fill = cell.type)) + 
   geom_hline(yintercept = 0, linetype = 1) +
   geom_vline(xintercept = 0, linetype = 1) +
-  stat_ellipse(geom = "polygon", alpha = 0.5) +
+  stat_ellipse(geom = "polygon", alpha = 0.5, type = "t", level = 0.95) +
   stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2) +
   geom_point(shape = 21,
              size = 4,
@@ -230,6 +230,10 @@ pca <- ggplot(gg.pca, aes(x = PC1, y = PC2, fill = cell.type)) +
 
 pdf("PCA_wiesner.pdf")
 pca
+fviz_pca_ind(pca.wiesner.post, geom.ind = "point", col.ind = pca.wiesner$cell.type, 
+             addEllipses = TRUE, ellipse.type = "confidence",
+             legend.title = "Groups"
+)
 dev.off()
 
 top <- plot_grid(

@@ -317,8 +317,9 @@ tl.od <-
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
     panel.spacing.x = unit(1.5, "mm"),
     plot.margin = unit(c(0.4, 0, 0, 0.1), "cm"),
-    legend.position = c(0.1685, 1.2),
-    legend.margin = margin(0, 10, 0, 0),
+    legend.position = c(0.194, 1.2),
+    legend.margin = margin(0, 0, 0, 0),
+    legend.spacing.x = unit(2, "mm"),
     legend.direction = "horizontal",
     legend.title = element_blank(),
     legend.text = element_text(size = 9),
@@ -378,10 +379,6 @@ tl.hue <-
     panel.spacing.x = unit(1.5, "mm"),
     plot.margin = unit(c(0, 0, 0, 0.1), "cm"),
     legend.position = "none",
-    legend.margin = margin(0, 10, 0, 0),
-    legend.direction = "horizontal",
-    legend.title = element_blank(),
-    legend.text = element_text(size = 8),
     strip.text = element_blank()
   ) +
   labs(y = "Hue") +
