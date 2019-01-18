@@ -1,11 +1,8 @@
----
-title: "R scripts used in Blaschek et al., 2019" 
-author: "Leonard Blaschek"
-output: html_document 
----
+## R scripts used in Blaschek et al., 2019
+### _Leonard Blaschek_
 
 Listed are all scripts that were used to create Figureres in [TITLE]. All scripts are independent of each other. For the used data files, see [LINK TO JOURNAL PAGE]. SubFigureres that are not listed were done outside of R. Do not hesitate to contact me if something is unclear or missing.  
-\ 
+
 
 #### Figure 1
 **(b,c)** biblio.R
