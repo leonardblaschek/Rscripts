@@ -3,7 +3,10 @@ library(tidyr)
 library(broom)
 library(purrr)
 library(ggplot2)
+library(cowplot)
+library(PerformanceAnalytics)
 
+#### import data ####
 poplar <-
   read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/poplar_foodweb.csv")
 poplar <- poplar[, -16]
@@ -22,6 +25,9 @@ poplar$adj.cell.type <- recode(poplar$adj.cell.type,
   "PA" = "Parenchyma"
 )
 
+#### calculate distance to the cambium reference line 
+# 5.9 is the number of pixels per µm
+# X and Y are already measured according to scale, the ref values are given in pixels (see Fiji macro) ####
 poplar$Distance <-
   apply(poplar[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
         1 ,
@@ -55,6 +61,7 @@ poplar <-
             by = c("genotype", "replicate", "technical"))
 poplar$diff.adj <- poplar$diff - poplar$OD.bg
 
+#### bin the measurements by distance from the cambium ####
 poplar.bin <- poplar %>%
   mutate(bin = cut(
     Distance,
@@ -71,14 +78,26 @@ poplar.bin.pre <- poplar.bin %>%
   group_by(genotype, bin, cell.type, adj.cell.type, replicate) %>%
   summarise(od = mean(diff.adj))
 
-# poplar.bin.avg <- poplar.bin.pre %>%
-#   group_by(genotype, bin, cell.type, adj.cell.type) %>%
-#   summarise(od = mean(od))
-
 poplar.bin.spread <- poplar.bin.pre %>%
   unite(cell.wall, cell.type, adj.cell.type) %>%
   spread(cell.wall, od)
 
+#### create matrices for pearson correlation ####
+poplar.matrix <- split(poplar.bin.spread, f = poplar.bin.spread$bin)
+
+poplar.matrix.I <- ungroup(poplar.matrix[[1]]) %>%
+  select(-genotype, -replicate, -bin) %>%
+  as.matrix(.)
+
+poplar.matrix.II <- ungroup(poplar.matrix[[2]]) %>%
+  select(-genotype, -replicate, -bin) %>%
+  as.matrix(.)
+
+poplar.matrix.III <- ungroup(poplar.matrix[[3]]) %>%
+  select(-genotype, -replicate, -bin) %>%
+  as.matrix(.)
+
+#### calculate linear regressions ####
 poplar.lm <- ungroup(poplar.bin.spread) %>%
   select(-genotype, replicate) %>%
   group_by(bin) %>%
@@ -99,11 +118,13 @@ poplar.lm.tidy <- full_join(
   subset(map_dfr(poplar.lm$regression, tidy, .id = "relation_bin"), term != "(Intercept)"),
   by = "relation_bin")
 poplar.lm.tidy$relation_bin <- poplar.lm$relation_bin
+
+#### export regression values ####
 write.csv(poplar.lm.tidy, file = "poplar_foodwebs.csv")
 
-pdf("r_squared_genotypes.pdf", width = 15)
-ggplot(data = poplar.lm.tidy, aes(x = relation_bin, y = adj.r.squared)) +
-  geom_bar(stat = "identity")
+#### plot pearson correlations ####
+pdf("corrplots_poplar.pdf", width = 6, height = 6)
+chart.Correlation(poplar.matrix.I, histogram=TRUE, pch=21)
+chart.Correlation(poplar.matrix.II, histogram=TRUE, pch=21)
+chart.Correlation(poplar.matrix.III, histogram=TRUE, pch=21)
 dev.off()
-
-

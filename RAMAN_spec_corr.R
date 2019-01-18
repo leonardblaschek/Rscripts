@@ -12,6 +12,7 @@ library(Hmisc)
 library(corrplot)
 library(cowplot)
 
+#### import Helvetica Neue ####
 font_add(
   "Helvetica",
   regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
@@ -21,26 +22,104 @@ font_add(
 )
 showtext_auto()
 
+#### import measurements for Wiesner absorbance in sections ####
+phlog.monol <-
+  read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
+           skip = 2)
+
+#### calculate pixel values from OD ####
+phlog.monol$genotype <-
+  ordered(
+    phlog.monol$genotype,
+    levels = c(
+      "col-0",
+      "4cl1",
+      "4cl2",
+      "4cl1x2",
+      "ccoaomt1",
+      "fah1",
+      "omt1",
+      "ccr1-3",
+      "ccr1xfah1",
+      "cad4",
+      "cad5",
+      "cad4x5"
+    )
+  )
+
+#### set cell types according to measurement order ####
+phlog.monol[1:50 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
+  "IF"
+phlog.monol[51:100 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
+  "MX"
+phlog.monol[101:150 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
+  "XF"
+phlog.monol[151:200 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
+  "PX"
+phlog.monol[201:250 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
+  "LP"
+phlog.monol[251:300 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
+  "PH"
+
+
+#### calculate the correct hue on the 360 point circular scale ####
+phlog.monol$hue <- ((phlog.monol$h.stained + 128) / 255 * 360)
+
+phlog.monol$replicate <-
+  as.factor(as.character(phlog.monol$replicate))
+
+
+#### calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. for the unlignified phloem ####
+phlog.monol$diff <-
+  phlog.monol$OD.stained - phlog.monol$OD.unstained
+phlog.monol.bg <-
+  ddply(
+    subset(phlog.monol, cell.type == "PH", select = c(1, 2, 3, 4, 10)),
+    c("genotype", "replicate", "technical"),
+    summarise,
+    OD.bg = mean(diff, na.rm = TRUE)
+  )
+phlog.monol.bg$cell.type <- NULL
+phlog.monol <-
+  merge(
+    phlog.monol,
+    phlog.monol.bg,
+    all = TRUE,
+    by = c("genotype", "replicate", "technical")
+  )
+phlog.monol$diff.adj <- phlog.monol$diff - phlog.monol$OD.bg
+phlog.monol <- subset(phlog.monol, cell.type != "PH")
+
+#### average per replicate (for boxplots) ####
+phlog.monol.pre <-
+  ddply(
+    phlog.monol,
+    c("genotype", "cell.type", "replicate"),
+    summarise,
+    mean.hue1 = mean(hue, na.rm = TRUE),
+    SD.hue1 = sd(hue, na.rm = TRUE),
+    mean.OD1 = mean(diff.adj, na.rm = TRUE),
+    SD.OD1 = sd(diff.adj, na.rm = TRUE)
+  )
+
+
+#### average per genotype (for barplots) ####
+phlog.monol.avg <-
+  ddply(
+    phlog.monol.pre,
+    c("genotype", "cell.type"),
+    summarise,
+    mean.hue2 = mean(mean.hue1, na.rm = TRUE),
+    SD.hue2 = sd(mean.hue1, na.rm = TRUE),
+    mean.OD2 = mean(mean.OD1, na.rm = TRUE),
+    SD.OD2 = sd(mean.OD1, na.rm = TRUE)
+  )
+
+#### import Raman measurements ####
 rspec <-
   read.csv(
     "file:///home/leonard/Documents/Uni/Phloroglucinol/18-06-25_RAMAN/raman_spectra.csv"
   )
-rspec_colMX <-
-  read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/18-06-25_RAMAN/WT_MX_1.csv")
-
-rspec.norm <- subset(rspec, wave.number == 1599.8)
-rspec.norm[, 5] <- subset(rspec, wave.number == 1095.3, select = 4)
-colnames(rspec.norm)[4] <- "lignin"
-colnames(rspec.norm)[5] <- "cellulose"
-
-rspec <-
-  merge(rspec,
-        rspec.norm[, 2:5],
-        by = c("genotype", "cell.type"),
-        all = TRUE)
-
-# CALCULATE RATIOS
-# rspec$mean <- rspec$mean / rspec$lignin
 
 raman.phlog <-
   dcast(subset(phlog.monol.avg, select = c(1, 2, 5)), genotype ~ cell.type)
@@ -55,14 +134,15 @@ raman.corr <-
     raman.phlog,
     (cell.type == "MX" |
        cell.type == "XF" |
-       cell.type == "IF") & (genotype == "4cl1x2" | genotype == "col-0")
+       cell.type == "IF") &
+      (genotype == "4cl1x2" | genotype == "col-0")
   ))
 
-# calculate linear regressions for log on both axes
+#### calculate linear regressions ####
 file.remove("r_squared_raman.csv")
 file.remove("corr_raman.csv")
 lin.reg <- function(x) {
-  corr.mat <- as.matrix(x[, c(4, 7)])
+  corr.mat <- as.matrix(x[, c(4, 5)])
   corr <- data.frame(rcorr(corr.mat)$r)
   corr$p <- data.frame(rcorr(corr.mat)$P)
   corr["wave.number"] <- unique(as.character(x$wave.number))
@@ -85,35 +165,32 @@ lin.reg <- function(x) {
   )
 }
 
-
 raman.corr %>%
   group_by(wave.number) %>%
   do(data.frame(lin.reg(.)))
 
 adj.r.sq <- read.csv("r_squared_raman.csv", header = FALSE)
 adj.r.sq <- adj.r.sq[, 2:3]
-adj.r.sq <- adj.r.sq[!duplicated(adj.r.sq), ]
+adj.r.sq <- adj.r.sq[!duplicated(adj.r.sq),]
 colnames(adj.r.sq) <-
   c("r2", "wave.number")
 
 corr <-
-  read.csv("file:///home/leonard/R/Output/wiesner/corr_raman.csv",
+  read.csv("corr_raman.csv",
            header = FALSE)
 corr <- subset(corr, select = c(1, 2, 4, 6))
-corr <- corr[!duplicated(corr), ]
+corr <- corr[!duplicated(corr),]
 colnames(corr) <- c("variable", "r", "p", "wave.number")
 corr <- subset(corr, variable == "absorbance", select = c(2:4))
 corr$y <- 1
 
 corr <- merge(corr, adj.r.sq)
 
-
+#### plot figure (needs rearrangement in inkscape) ####
 pdf("raman_corr.pdf")
 corr.heat <-
   ggplot(data = corr, aes(x = wave.number, y = y, fill = r)) +
   geom_tile() +
-  # scale_fill_distiller(palette = "Reds", direction = 1) +
-  # expand_limits(fill=1) +
   scale_fill_gradientn(
     colours = c(
       "#2166ac",
@@ -137,17 +214,15 @@ corr.heat <-
     legend.text = element_text(family = "Helvetica", size = 6),
     plot.margin = unit(c(-1.1, 0, 1.12, 0), "cm")
   )
-corr.heat
 
 p.heat <-
   ggplot(data = corr, aes(x = wave.number, y = y, fill = p)) +
   geom_tile() +
-  # scale_fill_viridis_c(trans = "log", direction = -1, limits = c(0,1)) +
   scale_fill_gradientn(
     trans = "log",
     limits = c(0.01, 1),
     breaks = c(0.01, 0.05, 0.1, 0.5),
-    colours = c("#FDE725FF", "#73D055FF","#238A8DFF", "#440154FF")
+    colours = c("#FDE725FF", "#73D055FF", "#238A8DFF", "#440154FF")
   ) +
   theme_void() +
   scale_x_reverse() +
@@ -160,7 +235,6 @@ p.heat <-
     legend.text = element_text(family = "Helvetica", size = 6),
     plot.margin = unit(c(-1.1, 0, 1.12, 0), "cm")
   )
-p.heat
 
 rspec.col.MX <-
   ggplot(data = subset(rspec, cell.type == "MX" &
@@ -183,7 +257,6 @@ rspec.col.MX <-
   ) +
   geom_line(group = 1, size = 0.5) +
   theme_few() +
-  # scale_y_continuous(limits = c(0, 1000)) +
   expand_limits(y = -150) +
   scale_x_reverse(breaks = c(750, 1000, 1250, 1500, 1750)) +
   labs(x = expression(paste('Wave number [cm' ^ {
@@ -210,8 +283,8 @@ rspec.col.MX <-
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
     plot.margin = unit(c(0.75, 0.75, -1.25, 0.75), "cm")
   )
-rspec.col.MX
 dev.off()
+
 pdf("rspec_grid.pdf", height = 3, width = 8)
 plot_grid(
   rspec.col.MX,
@@ -223,34 +296,3 @@ plot_grid(
   align = "v"
 )
 dev.off()
-
-# rspec_mod <- rasterGrob(readPNG("/home/leonard/Documents/LaTex/figures_edouard/RAMAN_corr.pdf"))
-# pdf("rspec_heat.pdf", height = 10, width = 6)
-# plot_grid(fire,
-#           rspec_mod,
-#           labels = c("", "M"),
-#           label_fontfamily = "Helvetica",
-#           label_colour = "white",
-#           scale = 0.98,
-#           ncol = 1,
-#           nrow = 2,
-#           hjust = 0,
-#           vjust = 1,
-#           label_x = 0.02,
-#           label_y = 0.98,
-#           rel_heights = c(0.8, 0.4))
-# dev.off()
-# pdf("rspec_grid_complete.pdf", height = 6, width = 5)
-# plot_grid(
-#   raw,
-#   cellu,
-#   lig,
-#   labels = c("Absolute", "Norm. to cellulose", "Norm. to lignin"),
-#   label_fontfamily = "Helvetica",
-#   label_fontface = "plain",
-#   ncol = 1,
-#   align = "v",
-#   hjust = 0,
-#   label_x = 0.01
-# )
-# dev.off()

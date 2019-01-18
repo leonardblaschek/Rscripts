@@ -9,24 +9,24 @@ library(plyr)
 library(dplyr)
 library(rowr)
 library(cowplot)
+library(png)
+library(grid)
 
-###############################
-# import Helvetica Neue
-###############################
-font_add("Helvetica", regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+
+#### import Helvetica Neue ####
+font_add("Helvetica",
+         regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
          italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
          bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf")
 showtext_auto()
 
-###############################
-# remove previous statistic files
-###############################
+
+#### remove previous statistic files ####
 file.remove("stats_OD.csv")
 file.remove("stats_hue.csv")
 
-###############################
-# establish tukey-test functions
-###############################
+
+#### establish tukey-test functions ####
 print.HSD.OD <- function(x) {
   aov1 <- aov(mean.OD1 ~ genotype, data = x)
   groups <- HSD.test(aov1, "genotype", alpha = 0.05)
@@ -54,20 +54,13 @@ print.HSD.hue <- function(x) {
   )
 }
 
-###############################
-# import measurements
-###############################
-phlog.monol <-
-  read.csv(
-    "/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
-    skip = 2
-  )
-###############################
-# calculate pixel values from OD
-###############################
-# phlog.monol$OD.stained <- 255/(10^phlog.monol$OD.stained)
-# phlog.monol$OD.unstained <- 255/(10^phlog.monol$OD.unstained)
 
+#### import measurements ####
+phlog.monol <-
+  read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
+           skip = 2)
+
+#### calculate pixel values from OD ####
 phlog.monol$genotype <-
   ordered(
     phlog.monol$genotype,
@@ -87,10 +80,9 @@ phlog.monol$genotype <-
     )
   )
 
-###############################
-# set cell types according to measurement order
-###############################
-phlog.monol[1:50 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <- 
+
+#### set cell types according to measurement order ####
+phlog.monol[1:50 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
   "IF"
 phlog.monol[51:100 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
   "MX"
@@ -103,17 +95,15 @@ phlog.monol[201:250 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50)
 phlog.monol[251:300 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
   "PH"
 
-###############################
-# calculate the correct hue on the 360 point circular scale
-###############################
+
+#### calculate the correct hue on the 360 point circular scale ####
 phlog.monol$hue <- ((phlog.monol$h.stained + 128) / 255 * 360)
 
 phlog.monol$replicate <-
   as.factor(as.character(phlog.monol$replicate))
 
-###############################
-# calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. for the unlignified phloem
-###############################
+
+#### calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. for the unlignified phloem ####
 phlog.monol$diff <-
   phlog.monol$OD.stained - phlog.monol$OD.unstained
 phlog.monol.bg <-
@@ -134,9 +124,8 @@ phlog.monol <-
 phlog.monol$diff.adj <- phlog.monol$diff - phlog.monol$OD.bg
 phlog.monol <- subset(phlog.monol, cell.type != "PH")
 
-###############################
-# average per replicate (for boxplots)
-###############################
+
+#### average per replicate (for boxplots) ####
 phlog.monol.pre <-
   ddply(
     phlog.monol,
@@ -148,9 +137,8 @@ phlog.monol.pre <-
     SD.OD1 = sd(diff.adj, na.rm = TRUE)
   )
 
-###############################
-# average per genotype (for barplots)
-###############################
+
+#### average per genotype (for barplots) ####
 phlog.monol.avg <-
   ddply(
     phlog.monol.pre,
@@ -162,9 +150,8 @@ phlog.monol.avg <-
     SD.OD2 = sd(mean.OD1, na.rm = TRUE)
   )
 
-###############################
-# set graph colours according to averaged measurements per genotype/cell type
-###############################
+
+#### set graph colours according to averaged measurements per genotype/cell type ####
 barcols <- phlog.monol.avg[, c(1, 2, 3, 5)]
 colnames(barcols)[3] <- 'H'
 colnames(barcols)[4] <- 'S'
@@ -181,23 +168,21 @@ phlog.monol.pre$cell <-
   as.factor(paste(phlog.monol.pre$genotype, phlog.monol.pre$cell.type))
 names(barcols) <- phlog.monol.avg$cell
 
-###############################
-# set statistical letters for hue
-###############################
+
+#### set statistical letters for hue ####
 phlog.monol.pre %>%
   group_by(cell.type) %>%
   do(data.frame(print.HSD.hue(.)))
 letters.hue.monol <-
-  read.csv("file:///home/leonard/R/Output/wiesner/stats_hue.csv",
+  read.csv("stats_hue.csv",
            header = FALSE)
 colnames(letters.hue.monol) <-
   c("genotype", "mean.hue1", "group", "cell.type")
 letters.hue.monol$cell <-
   as.factor(paste(letters.hue.monol$genotype, letters.hue.monol$cell.type))
 
-###############################
-# plot hue
-###############################
+
+#### plot hue ####
 b <-
   ggplot(data = phlog.monol.pre, aes(x = genotype, y = mean.hue1)) +
   geom_vline(xintercept = 1,
@@ -218,17 +203,34 @@ b <-
   geom_vline(xintercept = 11,
              size = 5,
              color = "grey95") +
-  geom_jitter(width = 0.1, alpha = 0.75, shape = 21, size = 3, stroke = 0.25) +
-  stat_summary(fun.y = mean, fun.ymin = mean, fun.ymax = mean,
-               geom = "crossbar", width = 1, size = 0.5, fatten = 0) +
+  geom_jitter(
+    width = 0.1,
+    alpha = 0.75,
+    shape = 21,
+    size = 3,
+    stroke = 0.25
+  ) +
+  stat_summary(
+    fun.y = mean,
+    fun.ymin = mean,
+    fun.ymax = mean,
+    geom = "crossbar",
+    width = 1,
+    size = 0.5,
+    fatten = 0
+  ) +
   theme_minimal() +
   theme(
     text = element_text(size = 14, family = "Helvetica"),
-    axis.ticks.y = element_line(size = 0.25, lineend = "square", color = "black"),
+    axis.ticks.y = element_line(
+      size = 0.25,
+      lineend = "square",
+      color = "black"
+    ),
     axis.title.y = element_text(size = 14),
     axis.text.y = element_text(size = 12, colour = "black"),
     axis.text.x = element_text(
-      size =12,
+      size = 12,
       colour = "black",
       angle = 90,
       vjust = 0.5,
@@ -240,7 +242,7 @@ b <-
     panel.spacing.x = unit(1.5, "mm"),
     legend.position = "none",
     strip.text = element_blank(),
-    plot.margin = unit(c(0,0,0,0), "cm")
+    plot.margin = unit(c(0, 0, 0, 0), "cm")
   ) +
   labs(y = "Hue", x = " ") +
   scale_x_discrete(
@@ -265,7 +267,7 @@ b <-
       c('310', '330', '350', '10'),
     limits = c(300, 370)
   ) +
-  facet_wrap( ~ cell.type, ncol = 6) +
+  facet_wrap(~ cell.type, ncol = 6) +
   aes(fill = cell) +
   scale_fill_manual(values = barcols) +
   geom_text(
@@ -282,23 +284,21 @@ pdf("hue_monol_rev.pdf", height = 4, width = 10)
 b
 dev.off()
 
-###############################
-# set statistical letters for absorbance
-###############################
+
+#### set statistical letters for absorbance ####
 phlog.monol.pre %>%
   group_by(cell.type) %>%
   do(data.frame(print.HSD.OD(.)))
 letters.OD.monol <-
-  read.csv("file:///home/leonard/R/Output/wiesner/stats_OD.csv",
+  read.csv("stats_OD.csv",
            header = FALSE)
 colnames(letters.OD.monol) <-
   c("genotype", "mean.OD2", "group", "cell.type")
 letters.OD.monol$cell <-
   as.factor(paste(letters.OD.monol$genotype, letters.OD.monol$cell.type))
 
-###############################
-# plot absorbance
-###############################
+
+#### plot absorbance ####
 a <- ggplot(phlog.monol.avg, aes(x = genotype, y = mean.OD2)) +
   geom_vline(xintercept = 1,
              size = 5,
@@ -322,7 +322,11 @@ a <- ggplot(phlog.monol.avg, aes(x = genotype, y = mean.OD2)) +
   theme(
     text = element_text(size = 14, family = "Helvetica"),
     legend.position = "none",
-    axis.ticks.y = element_line(size = 0.25, lineend = "square", color = "black"),
+    axis.ticks.y = element_line(
+      size = 0.25,
+      lineend = "square",
+      color = "black"
+    ),
     axis.title.y = element_text(size = 14),
     axis.text.y = element_text(size = 12, colour = "black"),
     panel.grid.major = element_blank(),
@@ -334,19 +338,27 @@ a <- ggplot(phlog.monol.avg, aes(x = genotype, y = mean.OD2)) +
       hjust = 0,
       face = "italic"
     ),
-    plot.margin = unit(c(0,0,-0.4,0), "cm")
+    plot.margin = unit(c(0, 0, -0.4, 0), "cm")
   ) +
   labs(y = "Absorbance", x = " ") +
   scale_x_discrete(breaks = c()) +
-  scale_y_continuous(limits = c(-0.09, 0.55), breaks = c(0, 0.2, 0.4), labels = c(' 0.0', ' 0.2', ' 0.4')) +
+  scale_y_continuous(
+    limits = c(-0.09, 0.55),
+    breaks = c(0, 0.2, 0.4),
+    labels = c(' 0.0', ' 0.2', ' 0.4')
+  ) +
   geom_bar(stat = "identity",
            position = position_dodge(width = 0.85),
            width = 0.75) +
-  facet_wrap( ~ cell.type, ncol = 6) +
+  facet_wrap(~ cell.type, ncol = 6) +
   aes(fill = cell) +
-  scale_fill_manual(values = barcols) + 
-  geom_jitter(data = phlog.monol.pre,
-              aes(x = genotype, y = mean.OD1), width = 0.1, alpha = 0.5) +
+  scale_fill_manual(values = barcols) +
+  geom_jitter(
+    data = phlog.monol.pre,
+    aes(x = genotype, y = mean.OD1),
+    width = 0.1,
+    alpha = 0.5
+  ) +
   geom_text(
     data = letters.OD.monol,
     aes(label = group),
@@ -356,28 +368,274 @@ a <- ggplot(phlog.monol.avg, aes(x = genotype, y = mean.OD2)) +
     hjust = 1,
     size = 3,
     position = position_dodge(width = 0.85)
-  ) 
+  )
 pdf("OD_monol_rev.pdf", height = 3.7, width = 10)
 a
 dev.off()
 
-###############################
-# plot grid
-###############################
+#### import images ####
+WTstained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/WT_stained.png"
+    )
+  )
+cl1stained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/4cl1_stained.png"
+    )
+  )
+cl2stained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/4cl2_stained.png"
+    )
+  )
+cl1x2stained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/4cl1x2_stained.png"
+    )
+  )
+ccoaomtstained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/ccoaomt_stained.png"
+    )
+  )
+fah1stained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/fah1_stained.png"
+    )
+  )
+omt1stained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/omt1_stained.png"
+    )
+  )
+ccr1stained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/ccr1_stained.png"
+    )
+  )
+cad4stained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/cad4_stained.png"
+    )
+  )
+cad5stained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/cad5_stained.png"
+    )
+  )
+cad4x5stained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/cad4x5_stained.png"
+    )
+  )
+
+WTunstained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/WT_unstained.png"
+    )
+  )
+cl1unstained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/4cl1_unstained.png"
+    )
+  )
+cl2unstained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/4cl2_unstained.png"
+    )
+  )
+cl1x2unstained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/4cl1x2_unstained.png"
+    )
+  )
+ccoaomtunstained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/ccoaomt_unstained.png"
+    )
+  )
+fah1unstained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/fah1_unstained.png"
+    )
+  )
+omt1unstained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/omt1_unstained.png"
+    )
+  )
+ccr1unstained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/ccr1_unstained.png"
+    )
+  )
+cad4unstained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/cad4_unstained.png"
+    )
+  )
+cad5unstained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/cad5_unstained.png"
+    )
+  )
+cad4x5unstained <-
+  rasterGrob(
+    readPNG(
+      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/cad4x5_unstained.png"
+    )
+  )
+
+#### arrange stained images ####
+stained_pre <- plot_grid(
+  cl1stained,
+  cl2stained,
+  cl1x2stained,
+  ccoaomtstained,
+  fah1stained,
+  omt1stained,
+  ccr1stained,
+  cad4stained,
+  cad5stained,
+  cad4x5stained,
+  labels = c(
+    "4cl1",
+    "4cl2",
+    "4cl1x4cl2",
+    "ccoaomt1",
+    "fah1",
+    "omt1",
+    "ccr1",
+    "cad4",
+    "cad5",
+    "cad4xcad5"
+  ),
+  label_fontfamily = "Helvetica",
+  label_fontface = 3,
+  scale = 0.98,
+  ncol = 5,
+  nrow = 2,
+  hjust = 0,
+  vjust = 1,
+  label_x = 0.02,
+  label_y = 0.98,
+  label_size = 12
+)
+
+stained <- plot_grid(
+  WTstained,
+  stained_pre,
+  labels = c("Col-0", ""),
+  label_fontfamily = "Helvetica",
+  label_fontface = 1,
+  scale = 0.99,
+  ncol = 2,
+  nrow = 1,
+  hjust = 0.5,
+  vjust = 1,
+  label_x = 0.5,
+  label_y = 0.98,
+  label_size = 12,
+  rel_widths = c(2.86, 7.14)
+)
+
+#### arrange unstained images ####
+unstained_pre <- plot_grid(
+  cl1unstained,
+  cl2unstained,
+  cl1x2unstained,
+  ccoaomtunstained,
+  fah1unstained,
+  omt1unstained,
+  ccr1unstained,
+  cad4unstained,
+  cad5unstained,
+  cad4x5unstained,
+  labels = c(
+    "4cl1",
+    "4cl2",
+    "4cl1x4cl2",
+    "ccoaomt1",
+    "fah1",
+    "omt1",
+    "ccr1",
+    "cad4",
+    "cad5",
+    "cad4xcad5"
+  ),
+  label_fontfamily = "Helvetica",
+  label_fontface = 3,
+  scale = 0.98,
+  ncol = 5,
+  nrow = 2,
+  hjust = 0,
+  vjust = 1,
+  label_x = 0.02,
+  label_y = 0.98,
+  label_size = 12
+)
+
+unstained <- plot_grid(
+  WTunstained,
+  unstained_pre,
+  labels = c("Col-0", ""),
+  label_fontfamily = "Helvetica",
+  label_fontface = 1,
+  scale = 0.99,
+  ncol = 2,
+  nrow = 1,
+  hjust = 0.5,
+  vjust = 1,
+  label_x = 0.5,
+  label_y = 0.99,
+  label_size = 12,
+  rel_widths = c(2.86, 7.14)
+)
+
+
+#### plot grid ####
 pdf("genotypes_grid.pdf", height = 11.75, width = 10)
-plot_grid(unstained,
-          stained,
-          a,
-          b,
-          labels = c('(a)', '(b)', '(c)', '(d)'),
-          ncol=1,
-          nrow = 4,
-          hjust = 0,
-          vjust = 1,
-          label_x = 0.001,
-          label_y = 0.99,
-          label_size = 18,
-          label_fontfamily = "Helvetica",
-          rel_heights = c(1.2, 1.2, 1, 1.21))
+plot_grid(
+  unstained,
+  stained,
+  a,
+  b,
+  labels = c('(a)', '(b)', '(c)', '(d)'),
+  ncol = 1,
+  nrow = 4,
+  hjust = 0,
+  vjust = 1,
+  label_x = 0.001,
+  label_y = 0.99,
+  label_size = 18,
+  label_fontfamily = "Helvetica",
+  rel_heights = c(1.2, 1.2, 1, 1.21)
+)
 dev.off()
-system("gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r600 -sOutputFile=geno_grid.pdf genotypes_grid.pdf")
+
+#### reduce figure size via ghostscript ####
+system(
+  "gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r600 -sOutputFile=geno_grid.pdf genotypes_grid.pdf"
+)

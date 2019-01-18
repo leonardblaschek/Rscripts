@@ -1,4 +1,5 @@
 library(dplyr)
+library(broom)
 library(purrr)
 library(tidyr)
 library(ggplot2)
@@ -6,12 +7,14 @@ library(Hmisc)
 library(PerformanceAnalytics)
 library(showtext)
 
+#### import Helvetica Neue ####
 font_add("Helvetica", regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
          italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
          bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
          bolditalic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf")
 showtext_auto()
 
+#### import data ####
 fw.data <-
   read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/foodweb.csv")
 
@@ -22,10 +25,7 @@ fw.data <-
     adj.cell.type = recode(adj.cell.type, "V" = "MX")
   )
 
-###############################
-# Pixel values of the measured image were multiplied by 255 for better visualisation
-###############################
-fw.data$od <- fw.data$ODx255 / 255
+fw.data$od <- fw.data$ODx255 / 255 # Pixel values of the measured image were multiplied by 255 for better visualisation
 
 fw.avg <- fw.data %>%
   group_by(genotype, cell.type, adj.cell.type, replicate) %>%
@@ -35,6 +35,7 @@ fw.spread <- fw.avg %>%
   unite(cell.wall, cell.type, adj.cell.type) %>%
   spread(cell.wall, od)
 
+#### calculate relative influence ####
 fw.loading <- fw.spread %>%
   group_by(genotype, replicate) %>%
   summarise(
@@ -54,6 +55,7 @@ fw.loading <- fw.spread %>%
   ) %>%
   gather(-genotype, -replicate, key = "relationship", value = "od")
 
+#### calculate linear regressions for the network ####
 fw.lm <- ungroup(fw.spread) %>%
   select(-genotype, -replicate) %>%
   do("MX -> PX" = lm(PX_MX ~ MX_MX, data = .),
@@ -74,23 +76,22 @@ fw.lm.tidy <- full_join(
   by = "relationship")
 fw.lm.tidy$relationship <- fw.lm$relationship
 
-# write.csv(fw.lm.tidy, file = "FW_regressions.csv")
+#### export regression values for network ####
+write.csv(fw.lm.tidy, file = "FW_regressions.csv")
 
 fw.matrix <- ungroup(fw.spread) %>%
   select(-genotype, -replicate) %>%
   as.matrix(.)
 
+#### calculate pearson correlations ####
 fw.corr <- rcorr(fw.matrix)
 
-pdf("r_squared_replicates_AT.pdf", width = 15)
-ggplot(data = fw.lm.tidy, aes(x = relationship, y = adj.r.squared)) +
-  geom_bar(stat = "identity")
-dev.off()
-
+#### plot pearson corelations (Fig. S7) ####
 pdf("corrplots.pdf", width = 12, height = 12)
 chart.Correlation(fw.matrix, histogram=TRUE, pch=21)
 dev.off()
 
+#### plot relative influence (Fig. 8b) ####
 interaction <-
   ggplot(data = fw.loading, aes(x = ordered(
     genotype,

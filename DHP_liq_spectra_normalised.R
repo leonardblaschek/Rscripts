@@ -265,9 +265,9 @@ labels$value <- as.numeric(as.character(labels$value))
 DSLS <-
   ggplot(data = G.DHP,
          aes(y = value, x = wavelength, group = condition)) +
-geom_vline(xintercept = 558,
-           color = "grey35",
-           linetype = 1) +
+# geom_vline(xintercept = 558,
+           # color = "grey35",
+           # linetype = 1) +
 # annotate(
 #   "text",
 #   x = 567,
@@ -338,7 +338,7 @@ scale_fill_manual(values = c(
              # scales = "free_y"
   )
 pdf("spectra_DHPs.pdf",
-    height = 2,
+    height = 3.75,
     width = 5)
 DSLS
 dev.off()

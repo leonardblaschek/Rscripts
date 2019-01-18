@@ -15,15 +15,13 @@ font_add("Helvetica",
          bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Md.otf")
 showtext_auto()
 
-###############################
-# remove previous statistic files
-###############################
+
+#### remove previous statistic files ####
 file.remove("stats_OD_poplarFW.csv")
 file.remove("stats_hue_poplarFW.csv")
 
-###############################
-# establish tukey-test functions
-###############################
+
+#### establish tukey-test functions ####
 print.HSD.OD <- function(x) {
   aov1 <- aov(mean.od ~ bin + genotype, data = x)
   groups <- HSD.test(aov1, c("bin", "genotype"), alpha = 0.05)
@@ -51,6 +49,7 @@ print.HSD.hue <- function(x) {
   )
 }
 
+#### import poplar measurements ####
 poplar <-
   read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/poplar_foodweb.csv")
 poplar <- poplar[, -16]
@@ -75,10 +74,10 @@ poplar$adj.cell.type <- plyr::revalue(
   )
 )
 
-###############################
+
+#### calculate distance to the cambium reference line 
 # 5.9 is the number of pixels per µm
-# X and Y are already measured according to scale, the ref values are given in pixels (see Fiji macro)
-###############################
+# X and Y are already measured according to scale, the ref values are given in pixels (see Fiji macro) ####
 poplar$Distance <-
   apply(poplar[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
         1 ,
@@ -115,9 +114,8 @@ poplar$diff.adj <- poplar$diff - poplar$OD.bg
 poplar$genotype <-
   ordered(poplar$genotype, levels = c("WT", "c4h", "ccr"))
 
-###############################
-# calculate the correct hue on the 360 point circular scale
-###############################
+
+#### calculate the correct hue on the 360 point circular scale ####
 poplar$hue <- ((poplar$H.stained + 128) / 255 * 360)
 
 poplar <- poplar %>%
@@ -167,9 +165,8 @@ poplar.bin.avg <- poplar.bin.pre %>%
 poplar.bin$bin <-
   ordered(poplar.bin$bin, levels = c("I", "II", "III"))
 
-###############################
-# set graph colours according to averaged measurements per genotype/cell type
-###############################
+
+#### set graph colours according to averaged measurements per genotype/cell type ####
 barcols <- poplar.bin.avg[, c(1, 2, 3, 4, 6)]
 colnames(barcols)[4] <- 'S'
 colnames(barcols)[5] <- 'H'
@@ -181,19 +178,26 @@ barcols <- hex(HSV(data.matrix(barcols[, c(5, 4, 6)])))
 poplar.bin$cell <-
   as.factor(paste(poplar.bin$genotype, poplar.bin$cell.type, poplar.bin$bin))
 poplar.bin.avg$cell <-
-  as.factor(paste(poplar.bin.avg$genotype, poplar.bin.avg$cell.type, poplar.bin.avg$bin))
+  as.factor(paste(
+    poplar.bin.avg$genotype,
+    poplar.bin.avg$cell.type,
+    poplar.bin.avg$bin
+  ))
 poplar.bin.pre$cell <-
-  as.factor(paste(poplar.bin.pre$genotype, poplar.bin.pre$cell.type, poplar.bin.pre$bin))
+  as.factor(paste(
+    poplar.bin.pre$genotype,
+    poplar.bin.pre$cell.type,
+    poplar.bin.pre$bin
+  ))
 names(barcols) <- poplar.bin.avg$cell
 
-###############################
-# set statistical letters for absorbance
-###############################
+
+#### set statistical letters for absorbance ####
 poplar.bin.pre %>%
   group_by(cell.type) %>%
   do(data.frame(print.HSD.OD(.)))
 letters.OD.monol <-
-  read.csv("file:///home/leonard/R/Output/PhD/stats_OD_poplarFW.csv",
+  read.csv("stats_OD_poplarFW.csv",
            header = FALSE)
 colnames(letters.OD.monol) <-
   c("genobin", "mean.od", "group", "cell.type")
@@ -210,9 +214,8 @@ letters.OD.monol$cell <-
     )
   )
 
-###############################
-# plot absorbance
-###############################
+
+#### plot absorbance ####
 poplar.OD_dist <-
   ggplot(data = poplar.bin.pre, aes(
     y = mean.od,
@@ -279,17 +282,16 @@ poplar.OD_dist <-
     hjust = 1,
     size = 4
   ) +
-  facet_grid( ~ cell.type) +
+  facet_grid(~ cell.type) +
   scale_fill_manual(values = barcols, guide = FALSE)
 
-###############################
-# set statistical letters for hue
-###############################
+
+#### set statistical letters for hue ####
 poplar.bin.pre %>%
   group_by(cell.type) %>%
   do(data.frame(print.HSD.hue(.)))
 letters.hue.monol <-
-  read.csv("file:///home/leonard/R/Output/PhD/stats_hue_poplarFW.csv",
+  read.csv("stats_hue_poplarFW.csv",
            header = FALSE)
 colnames(letters.hue.monol) <-
   c("genobin", "mean.hue", "group", "cell.type")
@@ -306,9 +308,8 @@ letters.hue.monol$cell <-
     )
   )
 
-###############################
-# plot hue
-###############################
+
+#### plot hue ####
 poplar.hue_dist <-
   ggplot(data = poplar.bin.pre, aes(
     y = mean.hue,
@@ -376,17 +377,10 @@ poplar.hue_dist <-
   ) +
   scale_fill_manual(values = barcols, guide = FALSE) +
   scale_colour_manual(values = c("black", "black", "black")) +
-  facet_grid( ~ cell.type)
+  facet_grid(~ cell.type)
 
 
-pdf("foodweb_poplar.pdf", width = 7, height = 3)
-poplar.OD_dist
-poplar.hue_dist
-dev.off()
-
-###############################
-# plot grid
-###############################
+#### plot figure 7b,c ####
 pdf("poplar_basic_grid.pdf", height = 4, width = 10)
 plot_grid(
   poplar.OD_dist,
@@ -403,26 +397,47 @@ plot_grid(
 )
 dev.off()
 
+
+####### distance distribution and correlation with absorbance #### ####
 pdf("distance_dist.pdf", width = 7, height = 4)
 ggplot(data = poplar, aes(x = Distance, fill = genotype)) +
-  geom_density(adjust = 2, color = NA, alpha = 0.75) +
-  geom_vline(xintercept = 50, linetype = 2, color = "grey") +
-  geom_vline(xintercept = 100, linetype = 2, color = "grey") +
+  geom_density(adjust = 2,
+               color = NA,
+               alpha = 0.75) +
+  geom_vline(xintercept = 50,
+             linetype = 2,
+             color = "grey") +
+  geom_vline(xintercept = 100,
+             linetype = 2,
+             color = "grey") +
   facet_grid(genotype ~ replicate) +
   scale_fill_few() +
   theme_few() +
-  theme(text = element_text(family = "Helvetica"),
-        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+  theme(
+    text = element_text(family = "Helvetica"),
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1,
+      vjust = 0.5
+    )
+  )
 dev.off()
 
 pdf("distance_od.pdf", width = 7, height = 7)
-ggplot(data = subset(poplar, cell.type == "Vessel"), aes(x = Distance, y = rel.od, fill = genotype)) +
+ggplot(data = subset(poplar, cell.type == "Vessel"),
+       aes(x = Distance, y = rel.od, fill = genotype)) +
   geom_point(alpha = 0.75, shape = 21) +
   geom_smooth(method = "lm") +
   scale_x_continuous(limits = c(0, 300)) +
-  facet_wrap(~ genotype, ncol = 1) +
+  facet_wrap( ~ genotype, ncol = 1) +
   scale_fill_few() +
   theme_few() +
-  theme(text = element_text(family = "Helvetica"),
-        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+  theme(
+    text = element_text(family = "Helvetica"),
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1,
+      vjust = 0.5
+    )
+  )
 dev.off()

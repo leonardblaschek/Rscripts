@@ -8,26 +8,21 @@ library(showtext)
 library(cowplot)
 library(ggthemes)
 
-# import Helvetica Neue
+#### import Helvetica Neue ####
 font_add("Helvetica", regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
          italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
          bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf")
 showtext_auto()
 
-###############################
-# import measurements
-###############################
-phlog.monol <-
-  read.csv(
-    "/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
-    skip = 2
-  )
-###############################
-# calculate pixel values from OD
-###############################
-# phlog.monol$OD.stained <- 255/(10^phlog.monol$OD.stained)
-# phlog.monol$OD.unstained <- 255/(10^phlog.monol$OD.unstained)
+color.fun <- colorRampPalette(brewer.pal(11, "RdBu"))
 
+
+#### import measurements ####
+phlog.monol <-
+  read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
+           skip = 2)
+
+#### calculate pixel values from OD ####
 phlog.monol$genotype <-
   ordered(
     phlog.monol$genotype,
@@ -47,10 +42,9 @@ phlog.monol$genotype <-
     )
   )
 
-###############################
-# set cell types according to measurement order
-###############################
-phlog.monol[1:50 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <- 
+
+#### set cell types according to measurement order ####
+phlog.monol[1:50 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
   "IF"
 phlog.monol[51:100 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
   "MX"
@@ -63,17 +57,15 @@ phlog.monol[201:250 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50)
 phlog.monol[251:300 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
   "PH"
 
-###############################
-# calculate the correct hue on the 360 point circular scale
-###############################
+
+#### calculate the correct hue on the 360 point circular scale ####
 phlog.monol$hue <- ((phlog.monol$h.stained + 128) / 255 * 360)
 
 phlog.monol$replicate <-
   as.factor(as.character(phlog.monol$replicate))
 
-###############################
-# calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. for the unlignified phloem
-###############################
+
+#### calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. for the unlignified phloem ####
 phlog.monol$diff <-
   phlog.monol$OD.stained - phlog.monol$OD.unstained
 phlog.monol.bg <-
@@ -94,9 +86,8 @@ phlog.monol <-
 phlog.monol$diff.adj <- phlog.monol$diff - phlog.monol$OD.bg
 phlog.monol <- subset(phlog.monol, cell.type != "PH")
 
-###############################
-# average per replicate (for boxplots)
-###############################
+
+#### average per replicate (for boxplots) ####
 phlog.monol.pre <-
   ddply(
     phlog.monol,
@@ -108,9 +99,8 @@ phlog.monol.pre <-
     SD.OD1 = sd(diff.adj, na.rm = TRUE)
   )
 
-###############################
-# average per genotype (for barplots)
-###############################
+
+#### average per genotype (for barplots) ####
 phlog.monol.avg <-
   ddply(
     phlog.monol.pre,
@@ -121,7 +111,6 @@ phlog.monol.avg <-
     mean.OD2 = mean(mean.OD1, na.rm = TRUE),
     SD.OD2 = sd(mean.OD1, na.rm = TRUE)
   )
-
 
 # pca.wiesner <- phlog.monol.pre[, c(1:4,6)] # OD AND HUE
 pca.wiesner <- phlog.monol.pre[, c(1:3,6)] # ONLY OD
@@ -139,9 +128,6 @@ pca.wiesner <- melt(pca.wiesner, id = c("cell.type", "replicate", "genotype"))
 pca.wiesner$value[pca.wiesner$value < 0] <- 0.001
 pca.wiesner <- dcast(pca.wiesner, cell.type + replicate ~ variable + genotype)
 
-###############################
-# shorten variable titles when only using OD
-###############################
 colnames(pca.wiesner) <- c("cell.type",
                            "replicate",
                            "Col-0",
@@ -193,6 +179,7 @@ pca.wiesner.ind.melt <- melt(pca.wiesner.ind[, c(1,2,3,14)], id = c("number", "c
 gg.pca <- data.frame(pca.wiesner.post$x, cell.type = pca.wiesner$cell.type)
 gg.rota <- data.frame(pca.wiesner.post$rotation)
 
+#### plot individuals ####
 pca <- ggplot(gg.pca, aes(x = PC1, y = PC2, fill = cell.type)) + 
   geom_hline(yintercept = 0, linetype = 1) +
   geom_vline(xintercept = 0, linetype = 1) +
@@ -230,12 +217,9 @@ pca <- ggplot(gg.pca, aes(x = PC1, y = PC2, fill = cell.type)) +
 
 pdf("PCA_wiesner.pdf")
 pca
-fviz_pca_ind(pca.wiesner.post, geom.ind = "point", col.ind = pca.wiesner$cell.type, 
-             addEllipses = TRUE, ellipse.type = "confidence",
-             legend.title = "Groups"
-)
 dev.off()
 
+#### plot variables and loadings ####
 top <- plot_grid(
   fviz_pca_var(pca.wiesner.post,
                repel = TRUE,
@@ -283,45 +267,13 @@ mid <- plot_grid(
   labels = c("(c)", "(d)"),
   label_fontfamily = "Helvetica"
 )
-
-bottom <- ggplot(data = pca.wiesner.loading.melt, aes(x = genotype, y = value)) + 
-  geom_point(shape = 21, size = 2) +
-  geom_line(aes(group = variable, linetype = variable)) +
-  scale_x_discrete(
-    labels = c(
-      "col-0",
-      expression(italic("4cl1")),
-      expression(italic("4cl2")),
-      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
-      expression(italic("ccoaomt1")),
-      expression(italic("fah1")),
-      expression(italic("omt1")),
-      expression(italic("ccr1")),
-      expression(paste(italic("ccr1"), "x", italic("fah1"))),
-      expression(italic("cad4")),
-      expression(italic("cad5")),
-      expression(paste(italic("cad4"), "x", italic("cad5")))
-    )
-  ) +
-  labs(x = "Variable [genotype]",
-       y = "Loadings") +
-  theme_few() +
-  theme(text = element_text(family = "Helvetica"),
-        legend.title = element_blank(),
-        legend.position = c(0.05,0.85))
-
-pdf("PCA_supplemental.pdf", height = 13, width = 10)
+pdf("PCA_supplemental.pdf")
 plot_grid(
   top,
   mid,
-  bottom,
-  nrow = 3,
-  labels = c("","","(e)"),
+  nrow = 2,
+  labels = c("",""),
   label_fontfamily = "Helvetica",
-  rel_heights = c(2,1,1)
+  rel_heights = c(2,1)
 )
-
-# ggplot(data = pca.wiesner.ind.melt, aes(x = number, y = value)) + 
-#   geom_point(aes(fill = cell.type, group = variable), shape = 21, size = 5) +
-#   geom_line(aes(group = variable, linetype = variable))
 dev.off()
