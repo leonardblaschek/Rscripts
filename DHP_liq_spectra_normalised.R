@@ -123,17 +123,19 @@ colnames(labels) <-
 labels$variable <- as.numeric(as.character(labels$variable))
 labels$value <- as.numeric(as.character(labels$value))
 
-#divide by 280 nm
-# liq.DHP.280 <-
-#   subset(liq.DHP, variable == '280', select = c(2, 3, 4))
-# colnames(liq.DHP.280)[3] <- 'reference'
-# liq.DHP <-
-#   merge(liq.DHP,
-#         liq.DHP.280,
-#         # by = c("condition", "compound"),
-#         all = TRUE)
+# divide by 280 nm
+liq.DHP.280 <-
+  subset(liq.DHP, variable == '280', select = c(2, 3, 4))
+colnames(liq.DHP.280)[3] <- 'reference'
+liq.DHP <-
+  merge(liq.DHP,
+        liq.DHP.280,
+        # by = c("condition", "compound"),
+        all = TRUE)
 liq.DHP <- subset(liq.DHP, compound != 'blank')
-# liq.DHP$value <- liq.DHP$value / liq.DHP$reference
+liq.DHP$value <- liq.DHP$value / liq.DHP$reference
+liq.DHP <- liq.DHP %>%
+  select(-reference)
 
 liq.DHP$compound <-
   ordered(liq.DHP$compound,
@@ -156,7 +158,7 @@ liq.DHP$gamma[liq.DHP$compound == "G-OH"] <- "OH"
 liq.DHP$gamma[liq.DHP$compound == "S-OH"] <- "OH"
 
 g.dhp.liq <- subset(liq.DHP, ring == "G")
-colnames(g.dhp.liq)[1] <- "wavelength"
+colnames(g.dhp.liq)[3] <- "wavelength"
 g.dhp.liq$state <- "liquid"
 
 G.DHP <- merge(g.dhp.liq, g.dhp.solid, by = c("wavelength", "condition", "gamma", "state", "value"), all = TRUE)
@@ -324,7 +326,7 @@ scale_fill_manual(values = c(
     legend.key.height = unit(4, "mm")
   ) +
   xlim(270, 650) +
-  scale_y_continuous(breaks = c(0, 1, 2), limits = c(-0.1, 2.5)) +
+  scale_y_continuous(breaks = c(0, 1, 2), limits = c(-0.1, 2.6)) +
   labs(x = "Wavelength [nm]", y = "Absorbance") +
   # geom_text(
   #   data = labels,
