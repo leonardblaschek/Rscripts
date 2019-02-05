@@ -78,9 +78,12 @@ raman.data$technical <- factor(raman.data$technical)
 raman.data$wavenumber <- round(raman.data$wavenumber, digits = 0)
 
 #### average data ####
-# raman.data.ratios <- raman.data %>%
-#   group_by(genotype, cell.type, replicate, technical) %>%
-#   summarise(me)
+raman.data.ratios <- raman.data %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate("rel.cellulose" = intensity / intensity[wavenumber == 381],
+         "rel.hemicellulose" = intensity / intensity[wavenumber == 1257],
+         "rel.lignin" = intensity / intensity[wavenumber == 1599])
+
 raman.data.pre <- raman.data %>%
   group_by(genotype, cell.type, replicate, wavenumber) %>%
   summarise(
@@ -97,9 +100,27 @@ raman.data.avg <- raman.data.pre %>%
   )
 
 spectra.WT.MX <- ggplot() +
-  geom_vline(xintercept = 380, size = 0.2, alpha = 0.5) +
+  geom_vline(xintercept = 382, size = 0.2, alpha = 0.5) +
   geom_vline(xintercept = 1600, size = 0.2, alpha = 0.5) +
   geom_vline(xintercept = 1256, size = 0.2, alpha = 0.5) +
+  annotate("text", x = 382, y = 5000, 
+           label = "Cellulose~(382~cm^-1)", 
+           parse = TRUE,
+           family = "Helvetica",
+           size = 2,
+           hjust = 0) +
+  annotate("text", x = 1600, y = 15000, 
+           label = "Lignin~(1600~cm^-1)", 
+           parse = TRUE,
+           family = "Helvetica",
+           size = 2,
+           hjust = 0) +
+  annotate("text", x = 1256, y = -1000, 
+           label = "Hemicellulose~(1256~cm^-1)", 
+           parse = TRUE,
+           family = "Helvetica",
+           size = 2,
+           hjust = 0) +
   geom_line(data = raman.data.avg,
             aes(x = wavenumber, y = mean.intensity),
             size = 0.1) +
@@ -126,20 +147,30 @@ spectra.WT.MX <- ggplot() +
   ) +
   facet_grid(genotype ~ cell.type) +
   scale_x_continuous(limits = c(300, 2000)) +
-  scale_y_continuous(limits = c(-500, 20000)) +
+  scale_y_continuous(limits = c(-1000, 20000)) +
   scale_fill_viridis_d() +
   theme_few() +
   theme(text = element_text(family = "Helvetica")) +
   geom_text(
     data = subset(raman.data.avg, wavenumber == 1430),
     x = 1900,
-    y = 9000,
+    y = 19000,
     aes(label = samples),
-    stat = "identity"
+    stat = "identity",
+    family = "Helvetica"
   )
 
 pdf("spectra_RAMAN.pdf", 15, 15)
 spectra.WT.MX
 dev.off()
 
-# write_csv(raman.data, "raman_data.csv")
+rel.lignin <- ggplot(data = subset(raman.data, wavenumber == 1599 & cell.type != "？？"), 
+                     aes(x = genotype, y = intensity)) +
+  geom_jitter(width = 0.1) +
+  geom_violin() +
+  # scale_y_continuous(limits = c(-20, 20)) +
+  facet_wrap(~ cell.type, ncol = 2)
+
+pdf("lignin_to_cellulose.pdf")
+rel.lignin
+dev.off()
