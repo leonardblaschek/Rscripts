@@ -5,6 +5,7 @@ library(tidyr)
 library(ggplot2)
 library(ggthemes)
 library(showtext)
+library(baseline)
 
 #### import Helvetica Neue ####
 font_add(
@@ -76,6 +77,38 @@ raman.data$cell.type <- factor(raman.data$cell.type)
 raman.data$replicate <- factor(raman.data$replicate)
 raman.data$technical <- factor(raman.data$technical)
 raman.data$wavenumber <- round(raman.data$wavenumber, digits = 0)
+
+#### baseline correct ####
+test.spectra <- raman.data %>%
+  filter(genotype == "Col-0" &
+           cell.type == "MX" &
+           replicate == 5 &
+           technical == 1 &
+           wavenumber > 0) %>%
+  select(wavenumber, intensity) 
+test.spectra.t <- t(test.spectra[, 2])
+colnames(test.spectra.t) <- test.spectra$wavenumber
+rownames(test.spectra.t) <- NULL
+test.spectra.t <- as.matrix(test.spectra.t)
+test.spectra.corrected <- baseline(test.spectra.t, method = "als")
+plot(test.spectra.corrected)
+
+raman.data.corrected <- raman.data %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(group_id = row_number()) %>%
+  spread(wavenumber, intensity) %>%
+  dplyr::select(-group_id) %>%
+  summarise_all(funs(unique(.[which(!is.na(.))])))
+
+raman.data.corrected.mx <- as.matrix(raman.data.corrected[, -c(1:4)])
+rownames(raman.data.corrected.mx) <- paste(raman.data.corrected$genotype, 
+                                        raman.data.corrected$cell.type,
+                                        raman.data.corrected$replicate,
+                                        raman.data.corrected$technical,
+                                        sep = "_")
+
+corrected.spectra <- baseline(raman.data.corrected.mx, method = "als")
+plot(corrected.spectra)
 
 #### average data ####
 raman.data.ratios <- raman.data %>%
@@ -164,12 +197,14 @@ pdf("spectra_RAMAN.pdf", 15, 15)
 spectra.WT.MX
 dev.off()
 
-rel.lignin <- ggplot(data = subset(raman.data, wavenumber == 1599 & cell.type != "？？"), 
-                     aes(x = genotype, y = intensity)) +
+rel.lignin <- ggplot(data = subset(raman.data.ratios, wavenumber == 1599 & cell.type != "？？"), 
+                     aes(x = genotype, y = log(rel.cellulose))) +
   geom_jitter(width = 0.1) +
-  geom_violin() +
-  # scale_y_continuous(limits = c(-20, 20)) +
-  facet_wrap(~ cell.type, ncol = 2)
+  geom_violin(draw_quantiles = 0.5) +
+  # scale_y_continuous(limits = c(-50, 50)) +
+  facet_wrap(~ cell.type, ncol = 2) +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90))
 
 pdf("lignin_to_cellulose.pdf")
 rel.lignin
