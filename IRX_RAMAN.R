@@ -1,3 +1,4 @@
+library(baseline)
 library(dplyr)
 library(readr)
 library(stringr)
@@ -5,7 +6,10 @@ library(tidyr)
 library(ggplot2)
 library(ggthemes)
 library(showtext)
-library(baseline)
+library(purrr)
+library(tibble)
+library(zoo)
+
 
 #### import Helvetica Neue ####
 font_add(
@@ -68,7 +72,8 @@ raman.data <- raman.data %>%
                        "px" = "PX"),
     replicate = recode(replicate,
                        "＃5" = "5")
-  )
+  ) %>%
+  filter(cell.type != "？？")
 
 raman.data$technical <- str_remove(raman.data$technical, ".txt")
 
@@ -79,26 +84,26 @@ raman.data$technical <- factor(raman.data$technical)
 raman.data$wavenumber <- round(raman.data$wavenumber, digits = 0)
 
 #### baseline correct ####
-test.spectra <- raman.data %>%
-  filter(genotype == "Col-0" &
-           cell.type == "MX" &
-           replicate == 5 &
-           technical == 1 &
-           wavenumber > 0) %>%
-  select(wavenumber, intensity) 
-test.spectra.t <- t(test.spectra[, 2])
-colnames(test.spectra.t) <- test.spectra$wavenumber
-rownames(test.spectra.t) <- NULL
-test.spectra.t <- as.matrix(test.spectra.t)
-test.spectra.corrected <- baseline(test.spectra.t, method = "als")
-plot(test.spectra.corrected)
+# test.spectra <- raman.data %>%
+#   filter(genotype == "Col-0" &
+#            cell.type == "MX" &
+#            replicate == 5 &
+#            technical == 1 &
+#            wavenumber > 0) %>%
+#   select(wavenumber, intensity) 
+# test.spectra.t <- t(test.spectra[, 2])
+# colnames(test.spectra.t) <- test.spectra$wavenumber
+# rownames(test.spectra.t) <- NULL
+# test.spectra.t <- as.matrix(test.spectra.t)
+# test.spectra.corrected <- baseline(test.spectra.t, method = "als")
+# plot(test.spectra.corrected)
 
 raman.data.corrected <- raman.data %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   mutate(group_id = row_number()) %>%
   spread(wavenumber, intensity) %>%
-  dplyr::select(-group_id) %>%
-  summarise_all(funs(unique(.[which(!is.na(.))])))
+  select(-group_id) %>%
+  summarise_all(funs(sum(., na.rm = TRUE))) 
 
 raman.data.corrected.mx <- as.matrix(raman.data.corrected[, -c(1:4)])
 rownames(raman.data.corrected.mx) <- paste(raman.data.corrected$genotype, 
@@ -107,21 +112,32 @@ rownames(raman.data.corrected.mx) <- paste(raman.data.corrected$genotype,
                                         raman.data.corrected$technical,
                                         sep = "_")
 
-corrected.spectra <- baseline(raman.data.corrected.mx, method = "als")
-plot(corrected.spectra)
+corrected.spectra <- baseline.als(raman.data.corrected.mx)
+corrected <- data.frame(corrected.spectra$corrected)
+
+raman.data.corrected <- corrected %>%
+  rownames_to_column() %>%
+  separate(rowname, sep = "_", into = c("genotype", "cell.type", "replicate", "technical"), remove = TRUE) %>%
+  gather(key = "wavenumber", value = "corrected.intensity", - c(genotype, cell.type, replicate, technical)) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X."), replacement = "-")) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X"), replacement = "")) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  inner_join(., raman.data, by = c("genotype", "cell.type", "replicate", "technical", "wavenumber"))
 
 #### average data ####
-raman.data.ratios <- raman.data %>%
+raman.data.ratios <- raman.data.corrected %>%
   group_by(genotype, cell.type, replicate, technical) %>%
-  mutate("rel.cellulose" = intensity / intensity[wavenumber == 381],
-         "rel.hemicellulose" = intensity / intensity[wavenumber == 1257],
-         "rel.lignin" = intensity / intensity[wavenumber == 1599])
+  mutate("rel.381" = corrected.intensity / corrected.intensity[wavenumber == 381],
+         "rel.1119" = corrected.intensity / corrected.intensity[wavenumber == 1119],
+         "rel.1599" = corrected.intensity / corrected.intensity[wavenumber == 1599])
 
-raman.data.pre <- raman.data %>%
+raman.data.pre <- raman.data.corrected %>%
   group_by(genotype, cell.type, replicate, wavenumber) %>%
   summarise(
-    mean.intensity.pre = mean(intensity, na.rm = TRUE),
-    sd.intensity.pre = sd(intensity, na.rm = TRUE)
+    mean.intensity.pre = mean(corrected.intensity, na.rm = TRUE),
+    sd.intensity.pre = sd(corrected.intensity, na.rm = TRUE),
+    samples.pre = length(corrected.intensity)
   )
 
 raman.data.avg <- raman.data.pre %>%
@@ -129,7 +145,10 @@ raman.data.avg <- raman.data.pre %>%
   summarise(
     mean.intensity = mean(mean.intensity.pre, na.rm = TRUE),
     sd.intensity = sd(mean.intensity.pre, na.rm = TRUE),
-    samples = paste("n = ", length(mean.intensity.pre))
+    plants = paste("plants: ", length(mean.intensity.pre)),
+    bundles = ifelse(length(mean.intensity.pre) > 1, 
+                     paste("bundles: ", min(samples.pre), "—", max(samples.pre), sep = ""),
+                     paste("bundles: ", min(samples.pre)))
   )
 
 spectra.WT.MX <- ggplot() +
@@ -155,14 +174,14 @@ spectra.WT.MX <- ggplot() +
            size = 2,
            hjust = 0) +
   geom_line(data = raman.data.avg,
-            aes(x = wavenumber, y = mean.intensity),
+            aes(x = wavenumber, y = rollmean(mean.intensity, 5, na.pad=TRUE)),
             size = 0.1) +
   geom_ribbon(
     data = raman.data.pre,
     aes(x = wavenumber,
       fill = replicate,
-      ymin = mean.intensity.pre - sd.intensity.pre,
-      ymax = mean.intensity.pre + sd.intensity.pre
+      ymin = rollmean(mean.intensity.pre, 5, na.pad=TRUE) - rollmean(sd.intensity.pre, 5, na.pad=TRUE),
+      ymax = rollmean(mean.intensity.pre, 5, na.pad=TRUE) + rollmean(sd.intensity.pre, 5, na.pad=TRUE)
     ),
     alpha = 0.25
   ) +
@@ -173,8 +192,8 @@ spectra.WT.MX <- ggplot() +
     linetype = 2,
     size = 0.05,
     aes(x = wavenumber,
-        ymin = mean.intensity - sd.intensity,
-        ymax = mean.intensity + sd.intensity
+        ymin = rollmean(mean.intensity, 5, na.pad=TRUE) - rollmean(sd.intensity, 5, na.pad=TRUE),
+        ymax = rollmean(mean.intensity, 5, na.pad=TRUE) + rollmean(sd.intensity, 5, na.pad=TRUE)
     ),
     alpha = 0.25
   ) +
@@ -186,25 +205,40 @@ spectra.WT.MX <- ggplot() +
   theme(text = element_text(family = "Helvetica")) +
   geom_text(
     data = subset(raman.data.avg, wavenumber == 1430),
-    x = 1900,
-    y = 19000,
-    aes(label = samples),
+    x = 2050,
+    y = 19500,
+    aes(label = plants),
     stat = "identity",
-    family = "Helvetica"
+    family = "Helvetica",
+    size = 2.5,
+    hjust = 1
+  ) +
+  geom_text(
+    data = subset(raman.data.avg, wavenumber == 1430),
+    x = 2050,
+    y = 17500,
+    aes(label = bundles),
+    stat = "identity",
+    family = "Helvetica",
+    size = 2.5,
+    hjust = 1
   )
 
 pdf("spectra_RAMAN.pdf", 15, 15)
 spectra.WT.MX
 dev.off()
 
-rel.lignin <- ggplot(data = subset(raman.data.ratios, wavenumber == 1599 & cell.type != "？？"), 
-                     aes(x = genotype, y = log(rel.cellulose))) +
-  geom_jitter(width = 0.1) +
-  geom_violin(draw_quantiles = 0.5) +
+rel.lignin <- ggplot(data = subset(raman.data.corrected, wavenumber == 1119),
+                     aes(x = genotype, y = log(corrected.intensity), fill = replicate)) +
+  geom_jitter(width = 0.25, shape = 21, stroke = 0.1, size = 2) +
+  # geom_violin(draw_quantiles = 0.5, fill = NA) +
+  geom_boxplot(fill = NA) +
   # scale_y_continuous(limits = c(-50, 50)) +
+  scale_fill_viridis_d() +
   facet_wrap(~ cell.type, ncol = 2) +
   theme_few() +
-  theme(axis.text.x = element_text(angle = 90))
+  theme(text = element_text(family = "Helvetica"), 
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
 
 pdf("lignin_to_cellulose.pdf")
 rel.lignin
