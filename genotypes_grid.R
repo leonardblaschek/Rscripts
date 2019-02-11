@@ -5,7 +5,6 @@ library(RColorBrewer)
 library(reshape2)
 library(colorspace)
 library(agricolae)
-library(plyr)
 library(dplyr)
 library(rowr)
 library(cowplot)
@@ -95,6 +94,7 @@ phlog.monol[201:250 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50)
 phlog.monol[251:300 + rep(seq(0, (nrow(phlog.monol) - 50), by = 300), each = 50), 4] <-
   "PH"
 
+phlog.monol$cell.type <- factor(phlog.monol$cell.type)
 
 #### calculate the correct hue on the 360 point circular scale ####
 phlog.monol$hue <- ((phlog.monol$h.stained + 128) / 255 * 360)
@@ -106,13 +106,12 @@ phlog.monol$replicate <-
 #### calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. for the unlignified phloem ####
 phlog.monol$diff <-
   phlog.monol$OD.stained - phlog.monol$OD.unstained
-phlog.monol.bg <-
-  ddply(
-    subset(phlog.monol, cell.type == "PH", select = c(1, 2, 3, 4, 10)),
-    c("genotype", "replicate", "technical"),
-    summarise,
-    OD.bg = mean(diff, na.rm = TRUE)
-  )
+phlog.monol.bg <- phlog.monol %>%
+  filter(cell.type == "PH") %>%
+  select(1:4, 10) %>%
+  group_by(genotype, replicate, technical) %>%
+  summarise(OD.bg = mean(diff, na.rm = TRUE))
+
 phlog.monol.bg$cell.type <- NULL
 phlog.monol <-
   merge(
@@ -126,11 +125,9 @@ phlog.monol <- subset(phlog.monol, cell.type != "PH")
 
 
 #### average per replicate (for boxplots) ####
-phlog.monol.pre <-
-  ddply(
-    phlog.monol,
-    c("genotype", "cell.type", "replicate"),
-    summarise,
+phlog.monol.pre <-  phlog.monol %>%
+    group_by(genotype, cell.type, replicate) %>%
+    summarise(
     mean.hue1 = mean(hue, na.rm = TRUE),
     SD.hue1 = sd(hue, na.rm = TRUE),
     mean.OD1 = mean(diff.adj, na.rm = TRUE),
@@ -139,11 +136,9 @@ phlog.monol.pre <-
 
 
 #### average per genotype (for barplots) ####
-phlog.monol.avg <-
-  ddply(
-    phlog.monol.pre,
-    c("genotype", "cell.type"),
-    summarise,
+phlog.monol.avg <- phlog.monol.pre %>%
+    group_by(genotype, cell.type) %>%
+    summarise(
     mean.hue2 = mean(mean.hue1, na.rm = TRUE),
     SD.hue2 = sd(mean.hue1, na.rm = TRUE),
     mean.OD2 = mean(mean.OD1, na.rm = TRUE),
@@ -155,9 +150,10 @@ phlog.monol.avg <-
 barcols <- phlog.monol.avg[, c(1, 2, 3, 5)]
 colnames(barcols)[3] <- 'H'
 colnames(barcols)[4] <- 'S'
-barcols[, 4] <- barcols[, 4] * 2.5
-barcols[, 4] <- ifelse(barcols[, 4] > 1, 1, barcols[, 4])
-barcols[, 4] <- ifelse(barcols[, 4] < 0.1, 0.1, barcols[, 4])
+barcols <- barcols %>%
+  mutate(S = S*2.5) %>%
+  mutate(S = ifelse(S > 1, 1, S),
+         S = ifelse(S < 0.1, 0.1, S))
 barcols$V <- 0.95
 barcols <- hex(HSV(data.matrix(barcols[, c(3, 4, 5)])))
 phlog.monol$cell <-
@@ -374,139 +370,139 @@ a
 dev.off()
 
 #### import images ####
-WTstained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/WT_stained.png"
-    )
-  )
-cl1stained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/4cl1_stained.png"
-    )
-  )
-cl2stained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/4cl2_stained.png"
-    )
-  )
-cl1x2stained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/4cl1x2_stained.png"
-    )
-  )
-ccoaomtstained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/ccoaomt_stained.png"
-    )
-  )
-fah1stained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/fah1_stained.png"
-    )
-  )
-omt1stained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/omt1_stained.png"
-    )
-  )
-ccr1stained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/ccr1_stained.png"
-    )
-  )
-cad4stained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/cad4_stained.png"
-    )
-  )
-cad5stained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/cad5_stained.png"
-    )
-  )
-cad4x5stained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/cad4x5_stained.png"
-    )
-  )
-
-WTunstained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/WT_unstained.png"
-    )
-  )
-cl1unstained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/4cl1_unstained.png"
-    )
-  )
-cl2unstained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/4cl2_unstained.png"
-    )
-  )
-cl1x2unstained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/4cl1x2_unstained.png"
-    )
-  )
-ccoaomtunstained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/ccoaomt_unstained.png"
-    )
-  )
-fah1unstained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/fah1_unstained.png"
-    )
-  )
-omt1unstained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/omt1_unstained.png"
-    )
-  )
-ccr1unstained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/ccr1_unstained.png"
-    )
-  )
-cad4unstained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/cad4_unstained.png"
-    )
-  )
-cad5unstained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/cad5_unstained.png"
-    )
-  )
-cad4x5unstained <-
-  rasterGrob(
-    readPNG(
-      "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/cad4x5_unstained.png"
-    )
-  )
+# WTstained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/WT_stained.png"
+#     )
+#   )
+# cl1stained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/4cl1_stained.png"
+#     )
+#   )
+# cl2stained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/4cl2_stained.png"
+#     )
+#   )
+# cl1x2stained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/4cl1x2_stained.png"
+#     )
+#   )
+# ccoaomtstained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/ccoaomt_stained.png"
+#     )
+#   )
+# fah1stained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/fah1_stained.png"
+#     )
+#   )
+# omt1stained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/omt1_stained.png"
+#     )
+#   )
+# ccr1stained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/ccr1_stained.png"
+#     )
+#   )
+# cad4stained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/cad4_stained.png"
+#     )
+#   )
+# cad5stained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/cad5_stained.png"
+#     )
+#   )
+# cad4x5stained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/stained/cad4x5_stained.png"
+#     )
+#   )
+# 
+# WTunstained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/WT_unstained.png"
+#     )
+#   )
+# cl1unstained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/4cl1_unstained.png"
+#     )
+#   )
+# cl2unstained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/4cl2_unstained.png"
+#     )
+#   )
+# cl1x2unstained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/4cl1x2_unstained.png"
+#     )
+#   )
+# ccoaomtunstained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/ccoaomt_unstained.png"
+#     )
+#   )
+# fah1unstained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/fah1_unstained.png"
+#     )
+#   )
+# omt1unstained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/omt1_unstained.png"
+#     )
+#   )
+# ccr1unstained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/ccr1_unstained.png"
+#     )
+#   )
+# cad4unstained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/cad4_unstained.png"
+#     )
+#   )
+# cad5unstained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/cad5_unstained.png"
+#     )
+#   )
+# cad4x5unstained <-
+#   rasterGrob(
+#     readPNG(
+#       "~/Documents/Uni/Phloroglucinol/18-06_draft/Images/unstained/cad4x5_unstained.png"
+#     )
+#   )
 
 #### arrange stained images ####
 stained_pre <- plot_grid(

@@ -66,38 +66,28 @@ raman.data <- raman.data %>%
       "ccoaomt" = "ccoaomt1",
       "ccr1" = "ccr1-3",
       "col.o" = "Col-0",
+      "Col.0" = "Col-0",
       "ccr1＆fah1" = "ccr1xfah1"
     ),
     cell.type = recode(cell.type,
-                       "px" = "PX"),
-    replicate = recode(replicate,
-                       "＃5" = "5")
+                       "px" = "PX",
+                       "SX" = "SMX"),
+    replicate = str_extract(replicate,
+                       "\\d"),
+    technical = str_extract(technical,
+                            "(\\d)+")
   ) %>%
   filter(cell.type != "？？")
 
-raman.data$technical <- str_remove(raman.data$technical, ".txt")
 
-raman.data$genotype <- factor(raman.data$genotype)
-raman.data$cell.type <- factor(raman.data$cell.type)
-raman.data$replicate <- factor(raman.data$replicate)
-raman.data$technical <- factor(raman.data$technical)
+
+# raman.data$genotype <- factor(raman.data$genotype)
+# raman.data$cell.type <- factor(raman.data$cell.type)
+# raman.data$replicate <- factor(raman.data$replicate)
+# raman.data$technical <- factor(raman.data$technical)
 raman.data$wavenumber <- round(raman.data$wavenumber, digits = 0)
 
 #### baseline correct ####
-# test.spectra <- raman.data %>%
-#   filter(genotype == "Col-0" &
-#            cell.type == "MX" &
-#            replicate == 5 &
-#            technical == 1 &
-#            wavenumber > 0) %>%
-#   select(wavenumber, intensity) 
-# test.spectra.t <- t(test.spectra[, 2])
-# colnames(test.spectra.t) <- test.spectra$wavenumber
-# rownames(test.spectra.t) <- NULL
-# test.spectra.t <- as.matrix(test.spectra.t)
-# test.spectra.corrected <- baseline(test.spectra.t, method = "als")
-# plot(test.spectra.corrected)
-
 raman.data.corrected <- raman.data %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   mutate(group_id = row_number()) %>%
