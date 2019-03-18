@@ -1,4 +1,5 @@
 library(baseline)
+library(agricolae)
 library(dplyr)
 library(readr)
 library(stringr)
@@ -9,6 +10,7 @@ library(showtext)
 library(purrr)
 library(tibble)
 library(zoo)
+library(cowplot)
 
 
 #### import Helvetica Neue ####
@@ -21,10 +23,59 @@ font_add(
 )
 showtext_auto()
 
+#### generating plot theme ####
+theme_leo <- function(base_size = 12,
+                      base_family = "Helvetica"){
+  theme_minimal(base_size = base_size,
+                base_family = base_family) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.25,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.title = element_blank(),
+      axis.text.y = element_text(colour = "black"),
+      axis.text.x = element_text(
+        colour = "black",
+        angle = 90,
+        vjust = 0.5,
+        hjust = 1
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "bottom",
+      legend.text = element_text(size = rel(0.8)),
+      legend.key.height = unit(4, "mm"),
+      legend.key.width = unit(30, "mm"),
+      # plot.margin = unit(c(0, 0, 0, 0), "cm"),   
+      
+      complete = TRUE
+    )
+}
+
+###############################
+# functions for scaling and statistics
+###############################
+scale_this <- function(x){
+  (x - mean(x, na.rm=TRUE)) / sd(x, na.rm=TRUE)
+}
+
+tukey <- function(x) {
+  aov1 <- aov(data = x, value ~ genotype)
+  groups <- HSD.test(aov1, "genotype", alpha = 0.05)
+  groups$groups[["genotype"]] <- rownames(groups$groups)
+  groups$groups[["value"]] <- 0
+  return(groups[["groups"]])
+}
+
 #### import and tidy data ####
 raman.files <-
   list.files(
-    path = "/home/leonard/Documents/Uni/PhD/IRX/RAMAN",
+    path = "/home/leonard/Documents/Uni/PhD/IRX/RAMAN/nuoendagula/",
     pattern = "*.txt",
     recursive = TRUE,
     full.names = TRUE
@@ -42,8 +93,7 @@ raman.data <- lapply(raman.files, read_plus) %>%
   bind_rows()
 
 raman.data <- raman.data %>%
-  select(c(1:3)) %>%
-  filter(!str_detect(filename, "baseline corrected"))
+  select(c(1:3))
 
 raman.data$filename <- basename(raman.data$filename)
 
@@ -51,6 +101,7 @@ raman.data$filename <-
   str_replace(raman.data$filename, fixed("fah 1"), "fah1")
 
 raman.data <- raman.data %>%
+  distinct(X1, filename, .keep_all = TRUE) %>%
   separate(
     filename,
     into = c("genotype", "replicate", "cell.type", "technical"),
@@ -115,12 +166,56 @@ raman.data.corrected <- corrected %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   inner_join(., raman.data, by = c("genotype", "cell.type", "replicate", "technical", "wavenumber"))
 
+raman.data.corrected$genotype <- ordered(raman.data.corrected$genotype,
+                                         levels = c(
+                                           "Col-0",
+                                           "4cl1",
+                                           "4cl2",
+                                           "4cl1x4cl2",
+                                           "ccoaomt1",
+                                           "fah1",
+                                           "omt1",
+                                           "ccr1-3",
+                                           "ccr1xfah1",
+                                           "cad4",
+                                           "cad5",
+                                           "cad4xcad5"
+                                         ))
+
 #### average data ####
 raman.data.ratios <- raman.data.corrected %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   mutate("rel.381" = corrected.intensity / corrected.intensity[wavenumber == 381],
          "rel.1119" = corrected.intensity / corrected.intensity[wavenumber == 1119],
-         "rel.1599" = corrected.intensity / corrected.intensity[wavenumber == 1599])
+         "rel.1599" = corrected.intensity / corrected.intensity[wavenumber == 1599],
+         "rel.1257" = corrected.intensity / corrected.intensity[wavenumber == 1257],
+         "lig.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1550, to = 1640))
+
+raman.data.plot <- raman.data.corrected %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate("1599 ~ cm ^ -1" = corrected.intensity[wavenumber == 1599],
+         "1119 ~ cm ^ -1" = corrected.intensity[wavenumber == 1119],
+         "1599 ~ cm ^ -1/1119 ~cm ^ -1" = corrected.intensity[wavenumber == 1599] / corrected.intensity[wavenumber == 1119],
+         "Integrated~lignin~peak" = MESS::auc(wavenumber, corrected.intensity, from = 1550, to = 1640),
+         "Integrated~cellulose~peak" = MESS::auc(wavenumber, corrected.intensity, from = 1110, to = 1130)) %>%
+  mutate("1599 ~ cm ^ -1/1119 ~cm ^ -1" = ifelse(`1599 ~ cm ^ -1/1119 ~cm ^ -1` > 30, NA, ifelse(`1599 ~ cm ^ -1/1119 ~cm ^ -1` < -10, NA, `1599 ~ cm ^ -1/1119 ~cm ^ -1`))
+             )
+
+raman.data.peaks <- raman.data.corrected %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  filter(wavenumber > 1500) %>%
+  mutate("Lignin~peak~position" = wavenumber[which.max(corrected.intensity)]) %>%
+  filter(wavenumber == 1599)
+
+raman.data.plot <- inner_join(raman.data.plot, raman.data.peaks) %>%
+  ungroup() %>%
+  select(-wavenumber, -intensity, -corrected.intensity) %>%
+  gather(key = variable, value = value, -c(genotype:technical)) %>%
+  group_by(variable) %>%
+  mutate(value.scaled = scale_this(value)) %>%
+  filter(cell.type != "IF" & genotype != "ccr1xfah1") %>%
+  mutate(cell.type = recode(cell.type, "MX" = "PMX"),
+         cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX")))
 
 raman.data.pre <- raman.data.corrected %>%
   group_by(genotype, cell.type, replicate, wavenumber) %>%
@@ -137,16 +232,20 @@ raman.data.avg <- raman.data.pre %>%
     sd.intensity = sd(mean.intensity.pre, na.rm = TRUE),
     plants = paste("plants: ", length(mean.intensity.pre)),
     bundles = ifelse(length(mean.intensity.pre) > 1, 
-                     paste("bundles: ", min(samples.pre), "—", max(samples.pre), sep = ""),
-                     paste("bundles: ", min(samples.pre)))
+                     paste("cells/plant: ", min(samples.pre), "—", max(samples.pre), sep = ""),
+                     paste("cells/plant: ", min(samples.pre)))
   )
 
 spectra.WT.MX <- ggplot() +
-  geom_vline(xintercept = 382, size = 0.2, alpha = 0.5) +
+  geom_vline(xintercept = 1120, size = 0.2, alpha = 0.5) +
   geom_vline(xintercept = 1600, size = 0.2, alpha = 0.5) +
   geom_vline(xintercept = 1256, size = 0.2, alpha = 0.5) +
-  annotate("text", x = 382, y = 5000, 
-           label = "Cellulose~(382~cm^-1)", 
+  geom_vline(xintercept = 1550, size = 0.1, alpha = 0.5, linetype = 2) +
+  geom_vline(xintercept = 1640, size = 0.1, alpha = 0.5, linetype = 2) +
+  geom_vline(xintercept = 1110, size = 0.1, alpha = 0.5, linetype = 2) +
+  geom_vline(xintercept = 1130, size = 0.1, alpha = 0.5, linetype = 2) +
+  annotate("text", x = 1120, y = 5000, 
+           label = "Cellulose~(1120~cm^-1)", 
            parse = TRUE,
            family = "Helvetica",
            size = 2,
@@ -191,7 +290,7 @@ spectra.WT.MX <- ggplot() +
   scale_x_continuous(limits = c(300, 2000)) +
   scale_y_continuous(limits = c(-1000, 20000)) +
   scale_fill_viridis_d() +
-  theme_few() +
+  theme_leo() +
   theme(text = element_text(family = "Helvetica")) +
   geom_text(
     data = subset(raman.data.avg, wavenumber == 1430),
@@ -218,18 +317,52 @@ pdf("spectra_RAMAN.pdf", 15, 15)
 spectra.WT.MX
 dev.off()
 
-rel.lignin <- ggplot(data = subset(raman.data.corrected, wavenumber == 1119),
-                     aes(x = genotype, y = log(corrected.intensity), fill = replicate)) +
-  geom_jitter(width = 0.25, shape = 21, stroke = 0.1, size = 2) +
-  # geom_violin(draw_quantiles = 0.5, fill = NA) +
-  geom_boxplot(fill = NA) +
-  # scale_y_continuous(limits = c(-50, 50)) +
-  scale_fill_viridis_d() +
-  facet_wrap(~ cell.type, ncol = 2) +
-  theme_few() +
-  theme(text = element_text(family = "Helvetica"), 
-        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+raman.letters <- raman.data.plot %>%
+  group_by(cell.type, variable) %>%
+  do(data.frame(tukey(.)))
 
-pdf("lignin_to_cellulose.pdf")
-rel.lignin
+raman.letters$value <- ifelse(raman.letters$variable == "Lignin~peak~position", 1585, raman.letters$value)
+
+
+raman.summary <- ggplot(data = raman.data.plot, aes(x = genotype, y = value)) +
+  geom_jitter(
+    aes(fill = value.scaled),
+    shape = 21,
+    width = 0.1,
+    alpha = 0.9,
+    size = 2,
+    stroke = 0.25
+  ) +
+  # geom_violin(draw_quantiles = 0.5, adjust = 1.5, fill = rgb(1,1,1,0.5)) +
+  geom_boxplot(fill = rgb(1,1,1,0.5), outlier.alpha = 0) +
+  geom_text(data = raman.letters,
+            aes(label = groups),
+            angle = 90,
+            hjust = 1,
+            family = "Helvetica") +
+  scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow", limits = c(-6, 6)) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.2,0.05))) +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  theme_leo() +
+  theme(strip.text = element_text(face = "italic")) +
+  facet_grid(variable ~ cell.type,
+             scales = "free_y",
+             labeller = label_parsed)
+  
+pdf("raman_summary.pdf", width = 10, height = 12)
+raman.summary
 dev.off()

@@ -59,7 +59,6 @@ phlog.monol <-
   read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
            skip = 2)
 
-#### calculate pixel values from OD ####
 phlog.monol$genotype <-
   ordered(
     phlog.monol$genotype,
@@ -243,7 +242,7 @@ b <-
   labs(y = "Hue", x = " ") +
   scale_x_discrete(
     labels = c(
-      "col-0",
+      "Col-0",
       expression(italic("4cl1")),
       expression(italic("4cl2")),
       expression(paste(italic("4cl1"), "x", italic("4cl2"))),

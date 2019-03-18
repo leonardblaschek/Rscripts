@@ -15,6 +15,44 @@ font_add(
 )
 showtext_auto()
 
+#### generating plot theme ####
+theme_leo <- function(base_size = 12,
+                      base_family = "Helvetica"){
+  theme_minimal(base_size = base_size,
+                base_family = base_family) %+replace%
+    theme(
+      strip.text = element_text(
+        hjust = 0, 
+        # face = "italic"
+        ),
+      axis.ticks = element_line(
+        size = 0.25,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.title = element_blank(),
+      axis.text.y = element_text(colour = "black"),
+      axis.text.x = element_text(
+        colour = "black",
+        angle = 90,
+        vjust = 0.5,
+        hjust = 1
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "bottom",
+      legend.text = element_text(size = rel(0.8)),
+      legend.key.height = unit(4, "mm"),
+      legend.key.width = unit(30, "mm"),
+      # plot.margin = unit(c(0, 0, 0, 0), "cm"),   
+      
+      complete = TRUE
+    )
+}
+
+
 ###############################
 # functions for scaling and statistics
 ###############################
@@ -186,6 +224,7 @@ irx.melt$genotype <-
     )
   )
 
+irx.melt <- filter(irx.melt, genotype != "ccr1xfah1" & genotype != "cad4")
 ###############################
 # calculate relative distance, where the innermost PX coordinate
 # denotes the end (1) of the vascular bundle
@@ -260,7 +299,8 @@ irx.overview <-
     size = 2,
     stroke = 0.25
   ) +
-  geom_violin(draw_quantiles = 0.5, adjust = 1.5, fill = rgb(1,1,1,0.5)) +
+  # geom_violin(draw_quantiles = 0.5, adjust = 1.5, fill = rgb(1,1,1,0.5)) +
+  geom_boxplot(fill = rgb(1,1,1,0.5), outlier.alpha = 0) +
   # geom_label(data = irx.letters, 
   #            aes(label = groups), 
   #            angle = 90,
@@ -273,7 +313,7 @@ irx.overview <-
              angle = 90,
              hjust = 1, 
              family = "Helvetica") +
-  scale_fill_distiller(palette = "RdBu", name = "Z-score by\ncolumn") +
+  scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow") +
   scale_y_continuous(expand = expand_scale(mult = c(0.28,0.05))) +
   scale_x_discrete(
     labels = c(
@@ -285,43 +325,11 @@ irx.overview <-
       expression(italic("fah1")),
       expression(italic("omt1")),
       expression(italic("ccr1")),
-      expression(paste(italic("ccr1"), "x", italic("fah1"))),
-      expression(italic("cad4")),
       expression(italic("cad5")),
       expression(paste(italic("cad4"), "x", italic("cad5")))
     )
   ) +
-  theme_minimal() +
-  theme(
-    text = element_text(size = 14, family = "Helvetica"),
-    strip.text = element_text(hjust = 0, face = "italic"),
-    # axis.line.y = element_line(size = 0.75, lineend = "square"),
-    axis.ticks = element_line(
-      size = 0.25,
-      lineend = "square",
-      color = "black"
-    ),
-    axis.title = element_blank(),
-    axis.text.y = element_text(size = 12, colour = "black"),
-    axis.text.x = element_text(
-      colour = "black",
-      size = 10,
-      angle = 90,
-      vjust = 0.5,
-      hjust = 1
-    ),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    panel.border = element_rect(fill = NA, color = "black", size = 0.25),
-    panel.spacing = unit(1.5, "mm"),
-    # plot.margin = unit(c(0, 0, 0, 0), "cm"),
-    legend.position = "bottom",
-    # legend.title = element_blank(),
-    legend.text = element_text(size = 9),
-    legend.key.height = unit(4, "mm"),
-    legend.key.width = unit(30, "mm"),
-    plot.margin = unit(c(0, 0, 0, 0), "cm")
-  ) +
+  theme_leo() +
   facet_grid(variable ~ object, scales = "free_y") 
   # coord_flip()
 

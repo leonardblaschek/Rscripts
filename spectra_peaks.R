@@ -9,8 +9,8 @@ data(illuminants)
 
 #### import Helvetica Neue ####
 font_add("Helvetica",
-         regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
-         italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+         regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Roman.otf",
+         italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-It.otf",
          bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf")
 showtext_auto()
 
@@ -115,13 +115,13 @@ SP <-
   theme(
     text = element_text(size = 15, family = "Helvetica"),
     strip.text = element_blank(),
-    axis.ticks = element_line(
+    axis.ticks.x = element_line(
       size = 0.25,
       lineend = "square",
       color = "black"
     ),
     axis.title = element_text(size = 12),
-    axis.text.y = element_text(size = 10, color = "black"),
+    axis.text.y = element_blank(),
     axis.text.x = element_text(
       size = 10,
       angle = 45,
@@ -164,6 +164,6 @@ SP <-
     hjust = 0
   )
 
-pdf("spectra_peaks.pdf", width = 6, height = 1.5)
+pdf("spectra_peaks.pdf", width = 5.5, height = 1.75)
 SP
 dev.off()
