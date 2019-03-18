@@ -5,18 +5,23 @@ library(PerformanceAnalytics)
 raman.spread <- raman.data.plot %>%
   ungroup() %>%
   mutate(cell.type = dplyr::recode(cell.type, "MX" = "PMX")) %>%
-  group_by(genotype, cell.type) %>%
-  select(-technical, -replicate, -value.scaled) %>%
-  spread(variable, value)
+  group_by(genotype, cell.type, replicate) %>%
+  select(-value.scaled) %>%
+  spread(variable, value) %>%
+  ungroup() %>%
+  select(-technical) %>%
+  group_by(genotype, cell.type, replicate) %>%
+  summarise_all(funs(mean(., na.rm = TRUE)))
+
 
 irx.spread <- irx.data %>%
   rename(cell.type = object) %>%
-  group_by(genotype, cell.type) %>%
-  select(-technical, -replicate, -number) %>%
-  summarise_all(mean)
+  group_by(genotype, cell.type, replicate) %>%
+  select(-number, -technical) %>%
+  summarise_all(funs(mean(., na.rm = TRUE)))
 
 #### linear regression with lignin content ####
-irx.corr.lm <- inner_join(irx.spread, raman.spread)
+irx.corr.lm <- full_join(irx.spread, raman.spread)
 write.csv(irx.corr.lm, file = "SEM_data.csv")
 
 lignin_plot <- ggplot(data = irx.corr.lm, aes(x = Circ., y = intensity1599)) +
