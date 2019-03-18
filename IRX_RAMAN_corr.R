@@ -2,19 +2,12 @@ library(dplyr)
 library(PerformanceAnalytics)
 
 #### AVERAGES ####
-raman.spread <- raman.data.corrected %>%
+raman.spread <- raman.data.plot %>%
   ungroup() %>%
   mutate(cell.type = dplyr::recode(cell.type, "MX" = "PMX")) %>%
-  group_by(genotype, cell.type, wavenumber) %>%
-  filter(wavenumber %in% c(381, 1119, 1599, 1621, 1662)) %>%
-  summarise(
-    intensity = mean(corrected.intensity, na.rm = TRUE)
-  ) %>%
-  gather(variable, value, -(genotype:wavenumber)) %>%
-  unite(WN_var, variable, wavenumber, sep = "") %>%
-  spread(WN_var, value) %>%
-  mutate(LigBy1119 = intensity1599/intensity1119,
-         LigBy381 = intensity1599/intensity381)
+  group_by(genotype, cell.type) %>%
+  select(-technical, -replicate, -value.scaled) %>%
+  spread(variable, value)
 
 irx.spread <- irx.data %>%
   rename(cell.type = object) %>%
@@ -24,6 +17,7 @@ irx.spread <- irx.data %>%
 
 #### linear regression with lignin content ####
 irx.corr.lm <- inner_join(irx.spread, raman.spread)
+write.csv(irx.corr.lm, file = "SEM_data.csv")
 
 lignin_plot <- ggplot(data = irx.corr.lm, aes(x = Circ., y = intensity1599)) +
   geom_point(shape = 21, stroke = 0.2, size = 2, aes(fill = cell.type)) +

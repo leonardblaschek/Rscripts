@@ -1,7 +1,7 @@
 # R scripts used in Publications
 #### _Leonard Blaschek_
 
-Listed are all scripts that were used to create figures in published or submitted manuscripts. All scripts are independent of each other. For the used data files, see the respective supplementary files on the journal page. Subfigures that are not listed were done outside of R. Do not hesitate to contact me if something is unclear or missing.  
+Listed are all scripts that I used to create figures in published or submitted manuscripts. All scripts are independent of each other. For the used data files, see the respective supplementary files on the journal page. Subfigures that are not listed were done outside of R or by co-authors. Do not hesitate to contact me if something is unclear or missing.  
 
 ### Wiesner Test Manuscript, Blaschek _et al._, 2019
 #### Figure 1
@@ -14,7 +14,7 @@ Listed are all scripts that were used to create figures in published or submitte
 **(b)** spectra_DHPs
 
 #### Figure 4
-**(b--d)** Figure.R
+**(b--d)** fig4.R
 
 #### Figure 5
 **(a)** pyro_corr.R  
