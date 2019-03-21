@@ -1,0 +1,283 @@
+---
+title: "SEM course"
+output: 
+  pdf_document: 
+    fig_height: 6
+    includes:  
+      in_header: rmd_temp.tex
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Building a Model 
+
+### Model Saturation
+
+Models can be fitted if
+$$t \le \frac{n(n+1)}{2}$$
+where
+
+$n$ = knowns (variables/variation)
+
+$t$ = unknowns (correlations/covariation)
+
+This condition is sually only unsatisfied when fitting bidirectional realtionships.
+
+## Global Estimation with Lavaan
+
+```{r testrun, message = FALSE}
+library(lavaan)
+library(piecewiseSEM)
+data(keeley)
+head(keeley, n = 1)
+
+#fit linear model
+keeley_lm <- lm(cover ~ age, keeley)
+summary(keeley_lm)
+coefs(keeley_lm)
+
+#fit linear model with lavaan
+keeley_formula1 <- "cover ~ age"
+keeley_sem1 <- sem(keeley_formula1, data = keeley) #"meanstructure = T" for intercept
+summary(keeley_sem1, standardized = TRUE, rsq = TRUE)
+
+#fit partial mediation SEM
+keeley_formula2 <- "
+firesev ~ age
+cover ~ age + firesev
+"
+keeley_sem2 <- sem(keeley_formula2, data = keeley)
+# standardized variances are error correlations, 1-them is explained variance
+summary(keeley_sem2, standardized = TRUE, rsq = TRUE)
+
+#indirect effects
+keeley_formula2.1 <- "
+firesev ~ af * age
+cover ~ ac * age + fc * firesev
+
+indirect := af * fc 
+total := ac + af * fc
+"
+summary(sem(keeley_formula2.1, keeley), standardize = TRUE, rsq = TRUE)
+
+#fit distance -> rich (directly + via abiotic and hetero)
+#chi-square should be high to show that model is not sig. diff. from data
+keeley_formula3 <- "
+abiotic ~ da * distance
+hetero ~ dh * distance
+rich ~ dr * distance + hr * hetero + ar * abiotic 
+
+direct := dr
+indirect := ar * da + hr * dh
+"
+summary(sem(keeley_formula3, keeley, estimator = "MLM"), standardize = TRUE, rsq = TRUE)
+
+#fix mediated path coefficients to zero
+keeley_formula4 <- "
+firesev ~ 1
+cover ~ age
+"
+summary(sem(keeley_formula4, keeley), standardize = TRUE, rsq = TRUE)
+
+#correlated errors
+keeley_formula5 <- "
+cover ~ age
+firesev ~ age
+cover ~~ firesev"
+summary(sem(keeley_formula5, keeley), standardize = TRUE, rsq = TRUE)
+```
+
+## Local Estimation with piecewiseSEM
+
+```{r piecewise test, message = FALSE}
+keeley.sem <- psem(
+  lm(abiotic ~ distance, data = keeley),
+  lm(hetero ~ distance, data = keeley),
+  lm(rich ~ abiotic + hetero, data = keeley),
+  data = keeley
+)
+basisSet(keeley.sem)
+
+#Conduct d-sep tests
+keeley.dsep <- dSep(keeley.sem, conditioning = TRUE)
+keeley.dsep
+
+#Fisher's C test
+fisherC(keeley.sem)
+
+#Update the model
+keeley.sem2 <- psem(
+  lm(abiotic ~ distance, data = keeley),
+  lm(hetero ~ distance, data = keeley),
+  lm(rich ~ distance + abiotic + hetero, data = keeley),
+  data = keeley
+)
+basisSet(keeley.sem2)
+
+#Conduct d-sep tests on updated model
+keeley.dsep <- dSep(keeley.sem2, conditioning = TRUE)
+keeley.dsep
+
+#Fisher's C test of updated model
+fisherC(keeley.sem2)
+
+#get coefficients
+coefs(keeley.sem2)
+
+#get R-squared
+rsquared(keeley.sem2)
+
+#get summary
+summary(keeley.sem2)
+
+#compare to lavaan
+keeley.model <- "
+abiotic ~ distance
+hetero ~ distance
+rich ~ distance + hetero + abiotic
+"
+summary(sem(keeley.model, data = keeley), standardize = TRUE, rsq = TRUE)
+
+#correlated errors, in case the causality between rich and abiotic is unclear
+keeley.sem3 <- psem(
+  lm(abiotic ~ distance, data = keeley),
+  lm(hetero ~ distance, data = keeley),
+  lm(rich ~ distance + abiotic + hetero, data = keeley),
+  rich %~~% abiotic,
+  data = keeley
+)
+summary(keeley.sem3)
+
+#keep a variable (abiotic) in the system, without paths
+keeley.sem4 <- psem(
+  lm(hetero ~ distance, data = keeley),
+  lm(rich ~ distance + hetero, data = keeley),
+  abiotic ~ 1,
+  data = keeley
+)
+summary(keeley.sem4)
+
+#poisson distributed response variable (rich)
+keeley.glm.sem <- psem(
+  lm(abiotic ~ distance, data = keeley),
+  lm(hetero ~ distance, data = keeley),
+  glm(rich ~ distance + abiotic + hetero, family = "poisson", data = keeley),
+  data = keeley
+)
+summary(keeley.glm.sem)
+
+#shipley pSEM
+library(nlme)
+library(lme4)
+
+data(shipley)
+
+shipley.sem <- psem(
+  lme(DD ~ lat, random = ~1|site/tree, na.action = na.omit, data = shipley),
+  lme(Date ~ DD, random = ~1|site/tree, na.action = na.omit, data = shipley),
+  lme(Growth ~ Date, random = ~1|site/tree, na.action = na.omit, data = shipley),
+  glmer(Live ~ Growth + (1|site) + (1|tree), family = binomial(link = "logit"),
+        data = shipley)
+)
+summary(shipley.sem, .progressBar = FALSE)
+
+#durocher SEM
+durocher <- read.csv("file:///home/leonard/Dropbox/2019 Stockholm Course/9_Mixed_Models/durocher.csv")
+head(durocher, n = 1)
+
+durocher.sem <- psem(
+  lme(CR ~ Std.Temp, random = ~1|Pond.ID, na.action = na.omit, data = durocher),
+  lme(Prich ~ Std.Temp, random = ~1|Pond.ID, na.action = na.omit, data = durocher),
+  lme(Pbio ~ Prich, random = ~1|Pond.ID, na.action = na.omit, data = durocher),
+  lme(GPP ~ Pbio, random = ~1|Pond.ID, na.action = na.omit, data = durocher),
+  data = durocher
+)
+summary(durocher.sem)
+```
+
+
+## piecewiseSEM on IRX data
+
+![First model, including all measured parameters that are implicated by logic or the literature](/home/leonard/Dropbox/SEM course/causal_model_1.pdf)
+
+### Loading the Data
+
+I start with data averaged by genotype, before hopefully coming back to it with data paired by vessel.
+
+```{r load data, message = FALSE}
+library(dplyr)
+sem.data <- read.csv("file:///home/leonard/Dropbox/SEM_data.csv") %>%
+  select(-replicate, -X, -X1599...cm....1.1119..cm....1) %>%
+  filter(genotype != "ccr1xfah1") %>%
+  group_by(genotype, cell.type) %>%
+  summarise_all(funs(mean(., na.rm = TRUE))) %>%
+  rename(Cellulose = X1119...cm....1,
+         Lignin = X1599...cm....1
+         )
+sem.data <- as.data.frame(sem.data)
+head(sem.data)
+```
+
+### Overall Correlations
+
+```{r plot correlations, message = FALSE}
+library(PerformanceAnalytics)
+chart.Correlation(select(ungroup(sem.data), -genotype, -cell.type), histogram=TRUE, pch=21)
+```
+
+![Second model, now simplified and focused on the variables that are central to the hypothesis or implicated by direct correlation](/home/leonard/Dropbox/SEM course/causal_model_2.pdf)
+
+### Fit First pSEM Model
+
+```{r first psem}
+first.model <- psem(
+  lm(Circ. ~ n_v + 
+       Integrated.cellulose.peak +
+       Integrated.lignin.peak,
+     # family = "binomial",
+     data = sem.data),
+  lm(Plant.height ~ Circ., data = sem.data),
+  data = sem.data
+)
+summary(first.model, .progressBar = FALSE)
+```
+
+![Third model, now including the composite variable "Cellular environment"](/home/leonard/Dropbox/SEM course/causal_model_3.pdf)
+
+
+```{r second psem}
+#introduce neighbourhood composite
+betas <- summary(lm(Circ. ~ n_f + n_v,
+     data = sem.data))$coefficients[-1,1]
+
+sem.data$composite <- rowSums(sem.data[, c("n_f", "n_v")] * betas)
+
+head(sem.data, n = 1)
+
+second.model <- psem(
+  lm(Circ. ~ composite + 
+       Integrated.cellulose.peak +
+       Integrated.lignin.peak,
+     # family = "binomial",
+     data = sem.data),
+  lm(Plant.height ~ Circ., data = sem.data),
+  data = sem.data
+)
+summary(second.model, .progressBar = FALSE)
+```
+
+### Pointers for follow-ups
+
+* multigroup analysis for cell type comparison
+* categorical cell type for qualitative comparisons
+* paths that can be constrained will be estimated from all data in the final diagram
+* std. estimates are not comparable across multigroup models because they're dependent on the variance within the respective group
+
+```{r multigroup}
+second.model.multigroup <- multigroup(second.model, 
+                                      group = "cell.type"
+                                      )
+second.model.multigroup
+```
