@@ -7,22 +7,25 @@ raman.spread <- raman.data.plot %>%
   mutate(cell.type = dplyr::recode(cell.type, "MX" = "PMX")) %>%
   group_by(genotype, cell.type, replicate) %>%
   select(-value.scaled) %>%
-  spread(variable, value) %>%
-  ungroup() %>%
-  select(-technical) %>%
-  group_by(genotype, cell.type, replicate) %>%
-  summarise_all(funs(mean(., na.rm = TRUE)))
+  spread(variable, value)
 
 
-irx.spread <- irx.data %>%
-  rename(cell.type = object) %>%
-  group_by(genotype, cell.type, replicate) %>%
-  select(-number, -technical) %>%
-  summarise_all(funs(mean(., na.rm = TRUE)))
+raman.irx <- read.csv("file:///home/leonard/Dropbox/raman_IRX.csv") %>%
+  select(genotype:Perim., Circ.)
+raman.irx$replicate <- as.character(raman.irx$replicate)
+raman.irx$technical <- as.character(raman.irx$technical)
+
+raman.heights <- read.csv("file:///home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
+  select(genotype, replicate, height) %>%
+  mutate(genotype = recode(genotype, "col-0" = "Col-0")) %>%
+  rename("Plant.height" = "height")
+
+raman.heights$replicate <- as.character(raman.heights$replicate)
 
 #### linear regression with lignin content ####
-irx.corr.lm <- full_join(irx.spread, raman.spread)
-write.csv(irx.corr.lm, file = "SEM_data.csv")
+raman.irx <- left_join(raman.irx, raman.spread)
+raman.irx <- left_join(raman.irx, raman.heights)
+write.csv(raman.irx, file = "SEM_data.csv")
 
 lignin_plot <- ggplot(data = irx.corr.lm, aes(x = Circ., y = intensity1599)) +
   geom_point(shape = 21, stroke = 0.2, size = 2, aes(fill = cell.type)) +

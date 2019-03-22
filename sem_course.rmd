@@ -1,10 +1,12 @@
 ---
 title: "SEM course"
+always_allow_html: yes
 output: 
-  pdf_document: 
-    fig_height: 6
-    includes:  
-      in_header: rmd_temp.tex
+  # pdf_document:
+  #   fig_height: 6
+  #   includes:
+  #     in_header: rmd_temp.tex
+  html_document
 ---
 
 ```{r setup, include = FALSE}
@@ -184,7 +186,7 @@ shipley.sem <- psem(
 summary(shipley.sem, .progressBar = FALSE)
 
 #durocher SEM
-durocher <- read.csv("file:///home/leonard/Dropbox/2019 Stockholm Course/9_Mixed_Models/durocher.csv")
+durocher <- read.csv("file:///home/leonard/Dropbox/2019 Stockholm Course/Lectures/9_Mixed_Models/durocher.csv")
 head(durocher, n = 1)
 
 durocher.sem <- psem(
@@ -206,25 +208,35 @@ summary(durocher.sem)
 
 I start with data averaged by genotype, before hopefully coming back to it with data paired by vessel.
 
-```{r load data, message = FALSE}
+```{r load data, message = FALSE, include=TRUE}
 library(dplyr)
-sem.data <- read.csv("file:///home/leonard/Dropbox/SEM_data.csv") %>%
-  select(-replicate, -X, -X1599...cm....1.1119..cm....1) %>%
-  filter(genotype != "ccr1xfah1") %>%
-  group_by(genotype, cell.type) %>%
-  summarise_all(funs(mean(., na.rm = TRUE))) %>%
-  rename(Cellulose = X1119...cm....1,
-         Lignin = X1599...cm....1
-         )
-sem.data <- as.data.frame(sem.data)
-head(sem.data)
+library(tidyr)
+library(ggplot2)
+sem.data <- read.csv("file:///home/leonard/R/Output/PhD/SEM_data.csv") %>%
+  select(-X, -X1599...cm....1.1119..cm....1) %>%
+  drop_na()
+
+# sem.gather <- sem.data %>%
+#   gather(key = "variable",
+#          value = "value",
+#          - genotype,
+#          - replicate,
+#          - cell.type,
+#          - technical)
+# head(sem.gather)
+ggplot(sem.data, aes(x = genotype, y = Integrated.lignin.peak)) +
+  geom_violin() +
+  geom_jitter() +
+  facet_wrap(~ cell.type, ncol = 3)
 ```
 
 ### Overall Correlations
 
 ```{r plot correlations, message = FALSE}
 library(PerformanceAnalytics)
-chart.Correlation(select(ungroup(sem.data), -genotype, -cell.type), histogram=TRUE, pch=21)
+chart.Correlation(select(ungroup(sem.data), 
+                         -genotype, -cell.type, -replicate, -technical), 
+                  histogram=TRUE, pch=21)
 ```
 
 ![Second model, now simplified and focused on the variables that are central to the hypothesis or implicated by direct correlation](/home/leonard/Dropbox/SEM course/causal_model_2.pdf)
@@ -254,18 +266,29 @@ betas <- summary(lm(Circ. ~ n_f + n_v,
 
 sem.data$composite <- rowSums(sem.data[, c("n_f", "n_v")] * betas)
 
-head(sem.data, n = 1)
-
 second.model <- psem(
-  lm(Circ. ~ composite + 
-       Integrated.cellulose.peak +
-       Integrated.lignin.peak,
+  lme(Circ. ~ 
+        composite +
+        # n_v +
+        # n_f +
+        Integrated.cellulose.peak +
+        Integrated.lignin.peak +
+        Lignin.peak.position,
+      random = ~1|cell.type/replicate,
      # family = "binomial",
      data = sem.data),
-  lm(Plant.height ~ Circ., data = sem.data),
+  lme(Plant.height ~ Circ. +
+        Integrated.lignin.peak +
+        Lignin.peak.position,
+     random = ~1|replicate,
+     data = sem.data
+     ),
   data = sem.data
 )
+
 summary(second.model, .progressBar = FALSE)
+
+plot(second.model)
 ```
 
 ### Pointers for follow-ups
@@ -276,8 +299,8 @@ summary(second.model, .progressBar = FALSE)
 * std. estimates are not comparable across multigroup models because they're dependent on the variance within the respective group
 
 ```{r multigroup}
-second.model.multigroup <- multigroup(second.model, 
-                                      group = "cell.type"
-                                      )
-second.model.multigroup
+# second.model.multigroup <- multigroup(second.model,
+#                                       group = "cell.type"
+#                                       )
+# second.model.multigroup
 ```

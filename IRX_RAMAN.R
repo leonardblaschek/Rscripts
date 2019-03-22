@@ -85,7 +85,10 @@ read_plus <- function(flnm) {
   read_tsv(flnm,
            comment = "#",
            col_names = FALSE,
-           skip = 1) %>%
+           skip = 1,
+           cols_only(X1 = col_number(),
+                     X2 = col_number())
+           ) %>%
     mutate(filename = flnm)
 }
 
@@ -203,7 +206,7 @@ raman.data.plot <- raman.data.corrected %>%
 
 raman.data.peaks <- raman.data.corrected %>%
   group_by(genotype, cell.type, replicate, technical) %>%
-  filter(wavenumber > 1500) %>%
+  filter(wavenumber > 1500 & wavenumber < 2000) %>%
   mutate("Lignin~peak~position" = wavenumber[which.max(corrected.intensity)]) %>%
   filter(wavenumber == 1599)
 
