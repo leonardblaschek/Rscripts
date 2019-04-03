@@ -1,0 +1,232 @@
+---
+title: "piecewise SEM of IRX phenotypes"
+author: "Leonard Blaschek"
+date: "26 March 2019"
+output: pdf_document
+always_allow_html: yes
+---
+
+```{r setup, include=FALSE, fig.width=10, fig.height=5, fig.path='figures/', dev=c('png', 'pdf')}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(nlme)
+library(piecewiseSEM)
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 12,
+                      base_family = "Helvetica"){
+  theme_minimal(base_size = base_size,
+                base_family = base_family) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.25,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(colour = "black", # flipped coords
+                                 margin = margin(1, 1, 1, 1)),
+      axis.text.y = element_text(
+        colour = "black",
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "bottom",
+      legend.text = element_text(size = rel(0.8)),
+      legend.key.height = unit(4, "mm"),
+      legend.key.width = unit(30, "mm"),
+      # plot.margin = unit(c(0, 0, 0, 0), "cm"),   
+      
+      complete = TRUE
+    )
+}
+```
+
+![First model, including all measured parameters that are implicated by logic or the literature](/home/leonard/Dropbox/SEM course/causal_model_1.pdf)
+
+### Loading the Data
+
+
+```{r load data, message = FALSE, include=TRUE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+sem.data <- read.csv("file:///home/leonard/R/Output/PhD/SEM_data.csv") %>%
+  select(-X, -X1599...cm....1.1119..cm....1)
+
+summary(sem.data)
+
+ggplot(sem.data, aes(x = genotype, y = Integrated.lignin.peak)) +
+  geom_violin() +
+  geom_jitter() +
+  theme_leo() +
+  theme(axis.text.x = element_text(angle = 90,
+                                   hjust = 1,
+                                   vjust = 0.5)) +
+  facet_wrap(~ cell.type, ncol = 3)
+
+ggplot(sem.data, aes(x = genotype, y = Circ.)) +
+  geom_violin() +
+  geom_jitter() +
+  scale_y_continuous(limits = c(0,1)) +
+  theme_leo() +
+  theme(axis.text.x = element_text(angle = 90,
+                                   hjust = 1,
+                                   vjust = 0.5)) +
+  facet_wrap(~ cell.type, ncol = 3)
+```
+
+### Overall Correlations
+
+```{r plot correlations, message = FALSE}
+library(PerformanceAnalytics)
+chart.Correlation(select(ungroup(sem.data), 
+                         -genotype, -cell.type, -replicate, -technical), 
+                  histogram=TRUE, pch=21)
+
+ggplot(sem.data, aes(x = Integrated.lignin.peak, y = Circ., fill = cell.type)) +
+  scale_fill_viridis_d() +
+  scale_colour_viridis_d() +
+  geom_point(shape = 21, alpha = 0.75, size = 3) +
+  stat_smooth(method="loess", linetype = 2, se = FALSE, aes(colour = cell.type)) +
+  theme_leo()
+
+ggplot(sem.data, aes(x = Circ., y = Plant.height, fill = cell.type)) +
+  scale_fill_viridis_d() +
+  geom_point(shape = 21, alpha = 0.75, size = 3) +
+  stat_smooth(method="loess", colour = "black", linetype = 2, se = FALSE, aes(group = 1)) +
+  theme_leo()
+```
+
+![Second model, now simplified and focused on the variables that are central to the hypothesis or implicated by direct correlation](/home/leonard/Dropbox/SEM course/causal_model_2.pdf)
+
+### Fit First pSEM Model
+
+This model includes only primary metaxylem vessels and uses simple linear regressions without random effects.
+
+```{r first psem}
+first.model <- psem(
+  lm(Circ. ~ 
+       n_v +
+       mean.OD1 +
+       Integrated.cellulose.peak +
+       Lignin.peak.position +
+       Integrated.lignin.peak,
+     data = drop_na(filter(sem.data, cell.type == "PMX"))),
+  lm(Plant.height ~ 
+       Circ. +
+       Lignin.peak.position, 
+     data = drop_na(filter(sem.data, cell.type == "PMX"))),
+  data = drop_na(filter(sem.data, cell.type == "PMX"))
+)
+summary(first.model, .progressBar = FALSE)
+
+plot(first.model, digits = 2)
+```
+ Here is the same model with a poisson regression for the plant height, increasing the explained variance to 70%. Note that the shown estimates are **not standardised**.
+```{r first psem.2, message = FALSE, warning = FALSE}
+first.model.poisson <- psem(
+  lm(Circ. ~ 
+       n_v +
+       mean.OD1 +
+       Integrated.cellulose.peak +
+       Lignin.peak.position +
+       Integrated.lignin.peak,
+     data = drop_na(filter(sem.data, cell.type == "PMX"))),
+  glm(Plant.height ~ 
+       Circ. +
+       Lignin.peak.position, 
+       family = poisson(),
+     data = drop_na(filter(sem.data, cell.type == "PMX"))),
+  data = drop_na(filter(sem.data, cell.type == "PMX"))
+)
+summary(first.model.poisson, .progressBar = FALSE)
+
+plot(first.model.poisson, digits = 6, show = "unstd")
+```
+
+![Third model, now including the composite variable "Cellular environment"](/home/leonard/Dropbox/SEM course/causal_model_3.pdf)
+
+### pSEM including all three vessel types
+
+This model incorporates all measured vessel types (PX, PMX, SMX), as well as random effects for the cell type and the replicate.
+The composite variable was dropped again to emphasise the neagtive effect of vessel neighbourhood on circularity.
+
+```{r second psem}
+#introduce neighbourhood composite
+betas <- summary(lm(Circ. ~ n_f + n_v,
+     data = sem.data))$coefficients[-1,1]
+
+sem.data$composite <- rowSums(sem.data[, c("n_f", "n_v")] * betas)
+
+second.model <- psem(
+  lme(Circ. ~ 
+        # composite +
+        n_v +
+        # n_p +
+        # mean.OD1 +
+        Integrated.cellulose.peak +
+        Integrated.lignin.peak +
+        Lignin.peak.position,
+      random = ~1|cell.type/replicate,
+      data = drop_na(sem.data)),
+  lme(Plant.height ~ 
+        Circ. +
+        Integrated.lignin.peak +
+        Integrated.cellulose.peak +
+        Lignin.peak.position,
+      random = ~1|cell.type/replicate,
+      data = drop_na(sem.data)
+  ),
+  data = drop_na(sem.data)
+)
+
+summary(second.model, .progressBar = FALSE)
+
+plot(second.model, digits = 2)
+```
+
+### multigroup pSEM comparing IRX repsonses of the three vessel types
+
+This third model is a multigroup model contrasting the IRX responses and their causes between vessel types. Lignin content is only a significant predictor for circularity in the PMX.However, lignin content of both PMX and SMX directly impacts plant height.
+
+```{r multigroup}
+third.model <- psem(
+  lme(Circ. ~ 
+        n_v +
+        # n_f +
+        # mean.OD1 +
+        Integrated.cellulose.peak +
+        Integrated.lignin.peak +
+        Lignin.peak.position,
+      random = ~1|replicate,
+      data = drop_na(sem.data)),
+  lme(Plant.height ~ 
+        Circ. +
+        Integrated.lignin.peak +
+        Integrated.cellulose.peak +
+        Lignin.peak.position,
+      random = ~1|replicate,
+      data = drop_na(sem.data)
+  ),
+  data = drop_na(sem.data)
+)
+
+summary(third.model, .progressBar = FALSE)
+
+plot(third.model, digits = 2)
+
+third.model.multigroup <- multigroup(third.model,
+                                      group = "cell.type"
+                                      )
+third.model.multigroup
+```

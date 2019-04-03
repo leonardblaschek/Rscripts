@@ -1,6 +1,92 @@
 library(dplyr)
 library(PerformanceAnalytics)
 
+phlog.irx <-
+  read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
+           skip = 2)
+
+phlog.irx$genotype <- recode(phlog.irx$genotype, cad4x5 = "cad4xcad5")
+
+#### set cell types according to measurement order ####
+phlog.irx[1:50 + rep(seq(0, (nrow(phlog.irx) - 50), by = 300), each = 50), 4] <-
+  "IF"
+phlog.irx[51:100 + rep(seq(0, (nrow(phlog.irx) - 50), by = 300), each = 50), 4] <-
+  "MX"
+phlog.irx[101:150 + rep(seq(0, (nrow(phlog.irx) - 50), by = 300), each = 50), 4] <-
+  "XF"
+phlog.irx[151:200 + rep(seq(0, (nrow(phlog.irx) - 50), by = 300), each = 50), 4] <-
+  "PX"
+phlog.irx[201:250 + rep(seq(0, (nrow(phlog.irx) - 50), by = 300), each = 50), 4] <-
+  "LP"
+phlog.irx[251:300 + rep(seq(0, (nrow(phlog.irx) - 50), by = 300), each = 50), 4] <-
+  "PH"
+
+#### import SMX measurements ####
+phlog.irx.SMX <- read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/measurements_SMX.csv",
+                            skip = 2)
+phlog.irx.SMX$replicate <- as.factor(phlog.irx.SMX$replicate)
+
+phlog.irx <- full_join(select(phlog.irx, -technical), select(phlog.irx.SMX, -technical))
+
+phlog.irx$genotype <-
+  ordered(
+    phlog.irx$genotype,
+    levels = c(
+      "col-0",
+      "4cl1",
+      "4cl2",
+      "4cl1x2",
+      "ccoaomt1",
+      "fah1",
+      "omt1",
+      "ccr1-3",
+      "ccr1xfah1",
+      "cad4",
+      "cad5",
+      "cad4xcad5"
+    )
+  )
+
+#### calculate the correct hue on the 360 point circular scale ####
+phlog.irx$hue <- ((phlog.irx$h.stained + 128) / 255 * 360)
+
+phlog.irx$replicate <-
+  as.factor(as.character(phlog.irx$replicate))
+
+#### calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. for the unlignified phloem ####
+phlog.irx$diff <-
+  phlog.irx$OD.stained - phlog.irx$OD.unstained
+phlog.irx.bg <- phlog.irx %>%
+  filter(cell.type == "PH") %>%
+  select(1:3, 9) %>%
+  group_by(genotype, replicate) %>%
+  summarise(OD.bg = mean(diff, na.rm = TRUE))
+
+phlog.irx.bg$cell.type <- NULL
+phlog.irx <-
+  merge(
+    phlog.irx,
+    phlog.irx.bg,
+    all = TRUE,
+    by = c("genotype", "replicate")
+  )
+phlog.irx$diff.adj <- phlog.irx$diff - phlog.irx$OD.bg
+phlog.irx <- subset(phlog.irx, cell.type != "PH")
+
+#### average per replicate (for boxplots) ####
+phlog.irx.pre <-  phlog.irx %>%
+  mutate(cell.type = recode(cell.type, "MX" = "PMX"),
+         genotype = recode(genotype, "col-0" = "Col-0",
+                           "4cl1x2" = "4cl1x4cl2")) %>%
+  group_by(genotype, cell.type, replicate) %>%
+  summarise(
+    mean.hue1 = mean(hue, na.rm = TRUE),
+    SD.hue1 = sd(hue, na.rm = TRUE),
+    mean.OD1 = mean(diff.adj, na.rm = TRUE),
+    SD.OD1 = sd(diff.adj, na.rm = TRUE)
+  ) %>%
+  select(genotype, cell.type, replicate, mean.OD1)
+  
 #### AVERAGES ####
 raman.spread <- raman.data.plot %>%
   ungroup() %>%
@@ -11,20 +97,22 @@ raman.spread <- raman.data.plot %>%
 
 
 raman.irx <- read.csv("file:///home/leonard/Dropbox/raman_IRX.csv") %>%
-  select(genotype:Perim., Circ.)
+  select(genotype:Perim., Circ., Round)
 raman.irx$replicate <- as.character(raman.irx$replicate)
 raman.irx$technical <- as.character(raman.irx$technical)
 
 raman.heights <- read.csv("file:///home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
   select(genotype, replicate, height) %>%
   mutate(genotype = recode(genotype, "col-0" = "Col-0")) %>%
-  rename("Plant.height" = "height")
+  rename("Plant.height" = "height") %>%
+  rbind(read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/heights_haris.csv"))
 
 raman.heights$replicate <- as.character(raman.heights$replicate)
 
 #### linear regression with lignin content ####
 raman.irx <- left_join(raman.irx, raman.spread)
 raman.irx <- left_join(raman.irx, raman.heights)
+raman.irx <- left_join(raman.irx, phlog.irx.pre)
 write.csv(raman.irx, file = "SEM_data.csv")
 
 lignin_plot <- ggplot(data = irx.corr.lm, aes(x = Circ., y = intensity1599)) +

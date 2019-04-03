@@ -11,6 +11,40 @@ output:
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+#### generating plot theme ####
+theme_leo <- function(base_size = 12,
+                      base_family = "Helvetica"){
+  theme_minimal(base_size = base_size,
+                base_family = base_family) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.25,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(colour = "black", # flipped coords
+                                 margin = margin(1, 1, 1, 1)),
+      axis.text.y = element_text(
+        colour = "black",
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "bottom",
+      legend.text = element_text(size = rel(0.8)),
+      legend.key.height = unit(4, "mm"),
+      legend.key.width = unit(30, "mm"),
+      # plot.margin = unit(c(0, 0, 0, 0), "cm"),   
+      
+      complete = TRUE
+    )
+}
 ```
 
 ## Building a Model 
@@ -203,6 +237,7 @@ summary(durocher.sem)
 ## piecewiseSEM on IRX data
 
 ![First model, including all measured parameters that are implicated by logic or the literature](/home/leonard/Dropbox/SEM course/causal_model_1.pdf)
+<img src="/home/leonard/Dropbox/SEM course/causal_model_1.pdf" alt="First model, including all measured parameters that are implicated by logic or the literature"  width="4200" height="4200">
 
 ### Loading the Data
 
@@ -213,8 +248,9 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 sem.data <- read.csv("file:///home/leonard/R/Output/PhD/SEM_data.csv") %>%
-  select(-X, -X1599...cm....1.1119..cm....1) %>%
-  drop_na()
+  select(-X, -X1599...cm....1.1119..cm....1)
+
+summary(sem.data)
 
 # sem.gather <- sem.data %>%
 #   gather(key = "variable",
@@ -227,6 +263,10 @@ sem.data <- read.csv("file:///home/leonard/R/Output/PhD/SEM_data.csv") %>%
 ggplot(sem.data, aes(x = genotype, y = Integrated.lignin.peak)) +
   geom_violin() +
   geom_jitter() +
+  theme_leo() +
+  theme(axis.text.x = element_text(angle = 90,
+                                   hjust = 1,
+                                   vjust = 0.5)) +
   facet_wrap(~ cell.type, ncol = 3)
 ```
 
@@ -237,6 +277,19 @@ library(PerformanceAnalytics)
 chart.Correlation(select(ungroup(sem.data), 
                          -genotype, -cell.type, -replicate, -technical), 
                   histogram=TRUE, pch=21)
+
+ggplot(sem.data, aes(x = Integrated.lignin.peak, y = Circ., fill = cell.type)) +
+  scale_fill_viridis_d() +
+  scale_colour_viridis_d() +
+  geom_point(shape = 21, alpha = 0.75, size = 3) +
+  stat_smooth(method="loess", linetype = 2, se = FALSE, aes(colour = cell.type)) +
+  theme_leo()
+
+ggplot(sem.data, aes(x = Circ., y = Plant.height, fill = cell.type)) +
+  scale_fill_viridis_d() +
+  geom_point(shape = 21, alpha = 0.75, size = 3) +
+  stat_smooth(method="loess", colour = "black", linetype = 2, se = FALSE, aes(group = 1)) +
+  theme_leo()
 ```
 
 ![Second model, now simplified and focused on the variables that are central to the hypothesis or implicated by direct correlation](/home/leonard/Dropbox/SEM course/causal_model_2.pdf)
@@ -245,15 +298,22 @@ chart.Correlation(select(ungroup(sem.data),
 
 ```{r first psem}
 first.model <- psem(
-  lm(Circ. ~ n_v + 
+  lm(Circ. ~ 
+       n_v +
+       mean.OD1 +
        Integrated.cellulose.peak +
+       Lignin.peak.position +
        Integrated.lignin.peak,
-     # family = "binomial",
-     data = sem.data),
-  lm(Plant.height ~ Circ., data = sem.data),
-  data = sem.data
+      # family = poisson(link = "log"),
+     data = drop_na(filter(sem.data, cell.type == "PMX"))),
+  lm(Plant.height ~ 
+       Circ. +
+       Lignin.peak.position, 
+     data = drop_na(filter(sem.data, cell.type == "PMX"))),
+  data = drop_na(filter(sem.data, cell.type == "PMX"))
 )
 summary(first.model, .progressBar = FALSE)
+plot(first.model, digits = 2)
 ```
 
 ![Third model, now including the composite variable "Cellular environment"](/home/leonard/Dropbox/SEM course/causal_model_3.pdf)
@@ -268,27 +328,37 @@ sem.data$composite <- rowSums(sem.data[, c("n_f", "n_v")] * betas)
 
 second.model <- psem(
   lme(Circ. ~ 
-        composite +
-        # n_v +
+        n_v +
         # n_f +
+        # mean.OD1 +
         Integrated.cellulose.peak +
         Integrated.lignin.peak +
         Lignin.peak.position,
       random = ~1|cell.type/replicate,
-     # family = "binomial",
-     data = sem.data),
-  lme(Plant.height ~ Circ. +
+      data = drop_na(sem.data)),
+  lme(Plant.height ~ 
+        Circ. +
         Integrated.lignin.peak +
+        Integrated.cellulose.peak +
         Lignin.peak.position,
-     random = ~1|replicate,
-     data = sem.data
-     ),
-  data = sem.data
+      random = ~1|cell.type/replicate,
+      data = drop_na(sem.data)
+  ),
+  data = drop_na(sem.data)
 )
 
 summary(second.model, .progressBar = FALSE)
 
-plot(second.model)
+plot(second.model, digits = 2)
+
+# y, given x2
+mod1 <- lm(Circ. ~ n_v, data = sem.data)
+resid.1 <- resid(mod1)
+
+# x1, given x2
+mod2 <- lm(Integrated.lignin.peak ~ n_v, data = sem.data)
+resid.2 <- resid(mod2)
+plot(resid.2, resid.1, main='Circ.|n_v ~ Lignin|n_v')
 ```
 
 ### Pointers for follow-ups

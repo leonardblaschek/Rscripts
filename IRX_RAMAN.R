@@ -197,6 +197,7 @@ raman.data.ratios <- raman.data.corrected %>%
 raman.data.plot <- raman.data.corrected %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   mutate("1599 ~ cm ^ -1" = corrected.intensity[wavenumber == 1599],
+         "1662 ~ cm ^ -1" = corrected.intensity[wavenumber == 1662],
          "1119 ~ cm ^ -1" = corrected.intensity[wavenumber == 1119],
          "1599 ~ cm ^ -1/1119 ~cm ^ -1" = corrected.intensity[wavenumber == 1599] / corrected.intensity[wavenumber == 1119],
          "Integrated~lignin~peak" = MESS::auc(wavenumber, corrected.intensity, from = 1550, to = 1640),

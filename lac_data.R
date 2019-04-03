@@ -5,6 +5,7 @@ library(ggthemes)
 library(showtext)
 library(reshape2)
 library(cowplot)
+library(ggbeeswarm)
 
 
 # import Helvetica Neue
@@ -28,8 +29,9 @@ lac.short$Temperature.optimum <- as.numeric(as.character(lac.short$Temperature.o
 
 
 lac.fig.km <- ggplot(data = subset(lac.short, var == "Km"), aes(x = Kingdom, y = value, fill = Kingdom)) +
+  geom_quasirandom(shape = 21, stroke = 0.1, size = 2, alpha = 0.75) +
   geom_violin(draw_quantiles = 0.5, alpha = 0.25) +
-  geom_jitter(shape = 21, width = 0.05, stroke = 0.1, size = 2, alpha = 0.75) +
+  # geom_jitter(shape = 21, width = 0.05, stroke = 0.1, size = 2, alpha = 0.75) +
   # geom_boxplot(fill = NA, outlier.alpha = 0, width = 0.25, colour = "black") +
   scale_y_log10(limits = c(0.5, 10000)) +
   labs(y = "Km [µM]") +
@@ -46,8 +48,9 @@ lac.fig.km <- ggplot(data = subset(lac.short, var == "Km"), aes(x = Kingdom, y =
   facet_wrap(~ substrate)
 
 lac.fig.ph <- ggplot(data = subset(lac.short, var == "pH"), aes(x = Kingdom, y = value, fill = Kingdom)) +
+  geom_quasirandom(shape = 21, stroke = 0.1, size = 2, alpha = 0.75) +
   geom_violin(draw_quantiles = 0.5, alpha = 0.25) +
-  geom_jitter(shape = 21, width = 0.05, stroke = 0.1, size = 2, alpha = 0.75) +
+  # geom_jitter(shape = 21, width = 0.05, stroke = 0.1, size = 2, alpha = 0.75) +
   # geom_boxplot(fill = NA, outlier.alpha = 0, width = 0.25, colour = "black") +
   labs(y = "pH optimum") +
   scale_fill_brewer(palette = "Set1") +
@@ -66,8 +69,9 @@ lac.fig.ph <- ggplot(data = subset(lac.short, var == "pH"), aes(x = Kingdom, y =
   facet_wrap(~ substrate, strip.position="bottom")
 
 lac.fig.temp <- ggplot(data = lac.short, aes(x = Kingdom, y = Temperature.optimum, fill = Kingdom)) +
+  geom_quasirandom(shape = 21, stroke = 0.1, size = 2, alpha = 0.75) +
   geom_violin(draw_quantiles = 0.5, alpha = 0.25) +
-  geom_jitter(shape = 21, width = 0.05, stroke = 0.1, size = 2, alpha = 0.5) +
+  # geom_jitter(shape = 21, width = 0.05, stroke = 0.1, size = 2, alpha = 0.5) +
   # geom_boxplot(fill = NA, outlier.alpha = 0, width = 0.25, colour = "black") +
   labs(y = "Temperature optimum [°C]") +
   scale_fill_brewer(palette = "Set1") +
@@ -85,8 +89,9 @@ lac.fig.temp <- ggplot(data = lac.short, aes(x = Kingdom, y = Temperature.optimu
   ) 
 
 lac.fig.pi <- ggplot(data = lac.short, aes(x = Kingdom, y = PI, fill = Kingdom)) +
+  geom_quasirandom(shape = 21, stroke = 0.1, size = 2, alpha = 0.75) +
   geom_violin(draw_quantiles = 0.5, alpha = 0.25) +
-  geom_jitter(shape = 21, width = 0.05, stroke = 0.1, size = 2, alpha = 0.5) +
+  # geom_jitter(shape = 21, width = 0.05, stroke = 0.1, size = 2, alpha = 0.5) +
   # geom_boxplot(fill = NA, outlier.alpha = 0, width = 0.25, colour = "black") +
   labs(y = "Isoelectric point") +
   scale_fill_brewer(palette = "Set1") +
