@@ -197,7 +197,7 @@ plot(second.model, digits = 2)
 
 ### multigroup pSEM comparing IRX repsonses of the three vessel types
 
-This third model is a multigroup model contrasting the IRX responses and their causes between vessel types. Lignin content is only a significant predictor for circularity in the PMX.However, lignin content of both PMX and SMX directly impacts plant height.
+This third model is a multigroup model contrasting the IRX responses and their causes between vessel types. Lignin content is only a significant predictor for circularity in the PMX. However, lignin content of both PMX and SMX directly impacts plant height.
 
 ```{r multigroup}
 third.model <- psem(
@@ -221,7 +221,7 @@ third.model <- psem(
   data = drop_na(sem.data)
 )
 
-summary(third.model, .progressBar = FALSE)
+# summary(third.model, .progressBar = FALSE)
 
 plot(third.model, digits = 2)
 
@@ -229,4 +229,43 @@ third.model.multigroup <- multigroup(third.model,
                                       group = "cell.type"
                                       )
 third.model.multigroup
+
+TM.multigroup <- function(x) {
+  psem(
+    lme(Circ. ~ 
+          n_v +
+          # n_f +
+          mean.OD1 +
+          # Integrated.cellulose.peak +
+          Integrated.lignin.peak +
+          Lignin.peak.position,
+        random = ~1|replicate,
+        data = filter(drop_na(sem.data), cell.type == x)),
+    lme(Area ~ 
+          n_v +
+          # n_f +
+          mean.OD1 +
+          # Integrated.cellulose.peak +
+          Integrated.lignin.peak +
+          Lignin.peak.position,
+        random = ~1|replicate,
+        data = filter(drop_na(sem.data), cell.type == x)),
+    lme(Perim. ~ 
+          n_v +
+          # n_f +
+          mean.OD1 +
+          # Integrated.cellulose.peak +
+          Integrated.lignin.peak +
+          Lignin.peak.position,
+        random = ~1|replicate,
+        data = filter(drop_na(sem.data), cell.type == x)),
+    data = drop_na(sem.data)
+  )
+}
+
+plot(TM.multigroup("PX"))
+plot(TM.multigroup("PMX"))
+plot(TM.multigroup("SMX"))
 ```
+
+
