@@ -125,7 +125,8 @@ raman.data <- raman.data %>%
     ),
     cell.type = recode(cell.type,
                        "px" = "PX",
-                       "SX" = "SMX"),
+                       "SX" = "SMX",
+                       "MX" = "PMX"),
     replicate = str_extract(replicate,
                        "\\d"),
     technical = str_extract(technical,
@@ -140,6 +141,8 @@ raman.data <- raman.data %>%
 # raman.data$replicate <- factor(raman.data$replicate)
 # raman.data$technical <- factor(raman.data$technical)
 raman.data$wavenumber <- round(raman.data$wavenumber, digits = 0)
+
+raman.data <- inner_join(raman.irx[,c(1:4)], raman.data)
 
 #### baseline correct ####
 raman.data.corrected <- raman.data %>%
@@ -239,6 +242,8 @@ raman.data.avg <- raman.data.pre %>%
                      paste("cells/plant: ", min(samples.pre), "—", max(samples.pre), sep = ""),
                      paste("cells/plant: ", min(samples.pre)))
   )
+
+write_csv(raman.data.corrected, "Raman_corrected_and_filtered.csv")
 
 spectra.WT.MX <- ggplot() +
   geom_vline(xintercept = 1120, size = 0.2, alpha = 0.5) +
