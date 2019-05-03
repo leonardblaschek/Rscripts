@@ -156,38 +156,37 @@ phlog.monol.avg <- phlog.monol.pre %>%
     SD.OD2 = sd(mean.OD1, na.rm = TRUE)
   )
 # ggthemr("dust")
-wiesner_smx <- ggplot(phlog.monol.avg, aes(x = genotype, y = mean.OD2)) +
+wiesner_smx <- ggplot(phlog.monol.avg, aes(x = cell.type, y = mean.OD2)) +
   theme_leo() +
   scale_y_continuous(limits = c(-0.01,0.55), expand = c(0.0,0.0)) +
   geom_bar(stat = "identity",
            position = position_dodge(width = 0.85),
-           width = 0.75,
-           fill = "black") +
-  facet_wrap(~ cell.type, nrow = 7) +
+           width = 0.75) +
+  facet_wrap(~ genotype, nrow = 6) +
   geom_jitter(
     data = phlog.monol.pre,
-    aes(x = genotype, y = mean.OD1),
+    aes(x = cell.type, y = mean.OD1),
     shape = 21,
     width = 0.1,
     stroke = 0.1,
     alpha = 0.95,
     fill = "white"
   ) +
-  scale_x_discrete(
-    labels = c(
-      "Col-0",
-      expression(italic("4cl1")),
-      expression(italic("4cl2")),
-      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
-      expression(italic("ccoaomt1")),
-      expression(italic("fah1")),
-      expression(italic("omt1")),
-      expression(italic("ccr1")),
-      expression(paste(italic("ccr1"), "x", italic("fah1"))),
-      expression(italic("cad4")),
-      expression(italic("cad5")),
-      expression(paste(italic("cad4"), "x", italic("cad5")))
-    )) +
+  # scale_x_discrete(
+  #   labels = c(
+  #     "Col-0",
+  #     expression(italic("4cl1")),
+  #     expression(italic("4cl2")),
+  #     expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+  #     expression(italic("ccoaomt1")),
+  #     expression(italic("fah1")),
+  #     expression(italic("omt1")),
+  #     expression(italic("ccr1")),
+  #     expression(paste(italic("ccr1"), "x", italic("fah1"))),
+  #     expression(italic("cad4")),
+  #     expression(italic("cad5")),
+  #     expression(paste(italic("cad4"), "x", italic("cad5")))
+  #   )) +
   coord_flip()
 
 pdf("wiesner_smx.pdf", height = 9, width = 3)

@@ -286,6 +286,7 @@ irx.letters <- irx.melt %>%
   group_by(object, variable) %>%
   do(data.frame(tukey(.)))
 
+write_csv(irx.data, "Wiesner_IRX_data.csv")
 ###############################
 # shape and position overview plot
 ###############################

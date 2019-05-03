@@ -188,8 +188,13 @@ raman.data.corrected$genotype <- ordered(raman.data.corrected$genotype,
                                            "cad4xcad5"
                                          ))
 
+raman.data.corrected$cell.type <- as.factor(raman.data.corrected$cell.type)
+raman.data.corrected$replicate <- as.factor(raman.data.corrected$replicate)
+raman.data.corrected$technical <- as.factor(raman.data.corrected$technical)
+raman.data.corrected$technical <- as.factor(raman.data.corrected$technical)
+
 #### average data ####
-raman.data.ratios <- raman.data.corrected %>%
+raman.data.ratios <- distinct(raman.data.corrected) %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   mutate("rel.381" = corrected.intensity / corrected.intensity[wavenumber == 381],
          "rel.1119" = corrected.intensity / corrected.intensity[wavenumber == 1119],
@@ -197,7 +202,7 @@ raman.data.ratios <- raman.data.corrected %>%
          "rel.1257" = corrected.intensity / corrected.intensity[wavenumber == 1257],
          "lig.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1550, to = 1640))
 
-raman.data.plot <- raman.data.corrected %>%
+raman.data.plot <- distinct(raman.data.corrected) %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   mutate("1599 ~ cm ^ -1" = corrected.intensity[wavenumber == 1599],
          "1662 ~ cm ^ -1" = corrected.intensity[wavenumber == 1662],
@@ -208,7 +213,7 @@ raman.data.plot <- raman.data.corrected %>%
   mutate("1599 ~ cm ^ -1/1119 ~cm ^ -1" = ifelse(`1599 ~ cm ^ -1/1119 ~cm ^ -1` > 30, NA, ifelse(`1599 ~ cm ^ -1/1119 ~cm ^ -1` < -10, NA, `1599 ~ cm ^ -1/1119 ~cm ^ -1`))
              )
 
-raman.data.peaks <- raman.data.corrected %>%
+raman.data.peaks <- distinct(raman.data.corrected) %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   filter(wavenumber > 1500 & wavenumber < 2000) %>%
   mutate("Lignin~peak~position" = wavenumber[which.max(corrected.intensity)]) %>%
