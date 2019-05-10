@@ -58,7 +58,6 @@ irx.py.corr.coef <- tidy(irx.pyr.corr, lignin.fit)
 irx.pyr.avg <- irx.pyr.avg %>%
   full_join(., subset(irx.py.corr.coef, term == "value"))
 
-
 plot_df <- irx.pyr.avg %>%
   filter(residue == "Lignin", variable == "Circ.") %>%
   ungroup() %>%

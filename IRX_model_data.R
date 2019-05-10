@@ -153,9 +153,9 @@ wiesner.data.pre <-  wiesner.data %>%
     mean.hue1 = mean(hue, na.rm = TRUE),
     SD.hue1 = sd(hue, na.rm = TRUE),
     mean.OD1 = mean(diff.adj, na.rm = TRUE),
-    SD.OD1 = sd(diff.adj, na.rm = TRUE)
-  ) %>%
-  select(genotype, cell.type, replicate, mean.OD1)
+    SD.OD1 = sd(diff.adj, na.rm = TRUE)) %>%
+  mutate(value.scaled = scale_this(mean.OD1)) %>%
+  select(genotype, cell.type, replicate, mean.OD1, value.scaled)
 
 #### import and tidy shape data of the vessels from the Raman measurements ####
 raman.irx <- read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/raman_IRX_revisited.csv") %>%
@@ -291,6 +291,7 @@ raman.data.plot <- raman.data.corrected %>%
          "1662" = corrected.intensity[wavenumber == 1662],
          "1119" = corrected.intensity[wavenumber == 1119],
          "1599/1119" = corrected.intensity[wavenumber == 1599] / corrected.intensity[wavenumber == 1119],
+         "1621/1599" = corrected.intensity[wavenumber == 1621] / corrected.intensity[wavenumber == 1599],
          "lig.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1550, to = 1640),
          "cellu.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1110, to = 1130)) %>%
   mutate("1599/1119" = ifelse(`1599/1119` > 30, NA, ifelse(`1599/1119` < -10, NA, `1599/1119`))
@@ -366,3 +367,343 @@ raman.spread.avg <- raman.data.spread %>%
 irx.avg <-left_join(raman.spread.avg, irx.avg)
 irx.avg <- left_join(irx.avg, wiesner.data.pre)
 write.csv(raman.irx, file = "SEM_data_avg.csv")
+
+#### plotting ####
+
+# spectra overview
+spectra.WT.MX <- ggplot() +
+  geom_vline(xintercept = 1120, size = 0.2, alpha = 0.5) +
+  geom_vline(xintercept = 1600, size = 0.2, alpha = 0.5) +
+  geom_vline(xintercept = 1256, size = 0.2, alpha = 0.5) +
+  geom_vline(xintercept = 1550, size = 0.1, alpha = 0.5, linetype = 2) +
+  geom_vline(xintercept = 1640, size = 0.1, alpha = 0.5, linetype = 2) +
+  geom_vline(xintercept = 1110, size = 0.1, alpha = 0.5, linetype = 2) +
+  geom_vline(xintercept = 1130, size = 0.1, alpha = 0.5, linetype = 2) +
+  annotate("text", x = 1120, y = 5000, 
+           label = "Cellulose~(1120~cm^-1)", 
+           parse = TRUE,
+           family = "Helvetica",
+           size = 2,
+           hjust = 0) +
+  annotate("text", x = 1600, y = 15000, 
+           label = "Lignin~(1600~cm^-1)", 
+           parse = TRUE,
+           family = "Helvetica",
+           size = 2,
+           hjust = 0) +
+  annotate("text", x = 1256, y = -1000, 
+           label = "Hemicellulose~(1256~cm^-1)", 
+           parse = TRUE,
+           family = "Helvetica",
+           size = 2,
+           hjust = 0) +
+  geom_line(data = raman.data.avg,
+            aes(x = wavenumber, y = rollmean(mean.intensity, 5, na.pad=TRUE)),
+            size = 0.1) +
+  geom_ribbon(
+    data = raman.data.pre,
+    aes(x = wavenumber,
+        fill = replicate,
+        ymin = rollmean(mean.intensity.pre, 5, na.pad=TRUE) - rollmean(sd.intensity.pre, 5, na.pad=TRUE),
+        ymax = rollmean(mean.intensity.pre, 5, na.pad=TRUE) + rollmean(sd.intensity.pre, 5, na.pad=TRUE)
+    ),
+    alpha = 0.25
+  ) +
+  geom_ribbon(
+    data = raman.data.avg,
+    fill = NA,
+    colour = "black",
+    linetype = 2,
+    size = 0.05,
+    aes(x = wavenumber,
+        ymin = rollmean(mean.intensity, 5, na.pad=TRUE) - rollmean(sd.intensity, 5, na.pad=TRUE),
+        ymax = rollmean(mean.intensity, 5, na.pad=TRUE) + rollmean(sd.intensity, 5, na.pad=TRUE)
+    ),
+    alpha = 0.25
+  ) +
+  facet_grid(genotype ~ cell.type) +
+  scale_x_continuous(limits = c(300, 2000)) +
+  scale_y_continuous(limits = c(-1000, 20000)) +
+  scale_fill_viridis_d() +
+  theme_leo() +
+  theme(text = element_text(family = "Helvetica")) +
+  geom_text(
+    data = subset(raman.data.avg, wavenumber == 1430),
+    x = 2050,
+    y = 19500,
+    aes(label = plants),
+    stat = "identity",
+    family = "Helvetica",
+    size = 2.5,
+    hjust = 1
+  ) +
+  geom_text(
+    data = subset(raman.data.avg, wavenumber == 1430),
+    x = 2050,
+    y = 17500,
+    aes(label = bundles),
+    stat = "identity",
+    family = "Helvetica",
+    size = 2.5,
+    hjust = 1
+  )
+
+pdf("spectra_RAMAN.pdf", 15, 15)
+spectra.WT.MX
+dev.off()
+
+# raman spectra genoype comparison
+spectra.comp <- ggplot(data = filter(raman.data.avg, genotype == "Col-0" & cell.type == "PMX")) +
+  geom_vline(xintercept = 1120, size = 0.2, alpha = 0.5) +
+  geom_vline(xintercept = 1600, size = 0.2, alpha = 0.5) +
+  # geom_vline(xintercept = 1256, size = 0.2, alpha = 0.5) +
+  geom_vline(xintercept = 1550, size = 0.1, alpha = 0.5, linetype = 2) +
+  geom_vline(xintercept = 1640, size = 0.1, alpha = 0.5, linetype = 2) +
+  geom_vline(xintercept = 1110, size = 0.1, alpha = 0.5, linetype = 2) +
+  geom_vline(xintercept = 1130, size = 0.1, alpha = 0.5, linetype = 2) +
+  annotate("text", x = 1120, y = 5000,
+           label = "Cellulose~(1120~cm^-1)",
+           parse = TRUE,
+           family = "Helvetica",
+           size = 4,
+           hjust = 0) +
+  annotate("text", x = 1600, y = 11000,
+           label = "Lignin~(1600~cm^-1)",
+           parse = TRUE,
+           family = "Helvetica",
+           size = 4,
+           hjust = 0) +
+  # annotate("text", x = 1256, y = -1000, 
+  #          label = "Hemicellulose~(1256~cm^-1)", 
+  #          parse = TRUE,
+  #          family = "Helvetica",
+  #          size = 2,
+  #          hjust = 0) +
+  geom_line(aes(x = wavenumber,
+                y = rollmean(mean.intensity, 5, na.pad=TRUE)),
+            size = 0.3) +
+  # geom_ribbon(
+  #   data = raman.data.pre,
+  #   aes(x = wavenumber,
+  #       fill = replicate,
+  #       ymin = rollmean(mean.intensity.pre, 5, na.pad=TRUE) - rollmean(sd.intensity.pre, 5, na.pad=TRUE),
+  #       ymax = rollmean(mean.intensity.pre, 5, na.pad=TRUE) + rollmean(sd.intensity.pre, 5, na.pad=TRUE)
+  #   ),
+  #   alpha = 0.25
+  # ) +
+  geom_ribbon(
+    # colour = "black",
+    # linetype = 2,
+    # size = 0.05,
+    aes(x = wavenumber,
+        ymin = rollmean(mean.intensity, 5, na.pad=TRUE) - rollmean(sd.intensity, 5, na.pad=TRUE),
+        ymax = rollmean(mean.intensity, 5, na.pad=TRUE) + rollmean(sd.intensity, 5, na.pad=TRUE)
+    ),
+    alpha = 0.25
+  ) +
+  facet_wrap(~ cell.type, nrow = 1) +
+  scale_x_continuous(limits = c(300, 2000)) +
+  scale_y_continuous(limits = c(-1000, 11000)) +
+  # scale_fill_viridis_d() +
+  # scale_fill_brewer(palette = "Set1") +
+  # scale_colour_brewer(palette = "Set1") +
+  theme_leo() +
+  labs(x = bquote(Wavenumber~(cm^-1))) +
+  theme(text = element_text(family = "Helvetica"),
+        axis.text.x = element_text(angle = 0, hjust = 0.5),
+        legend.position = c(0.05, 0.85),
+        legend.key.width = unit(3, "mm"),
+        legend.key.height = unit(3, "mm"),
+        legend.title = element_blank(),
+        axis.title = element_text(),
+        axis.title.y = element_blank())
+  # geom_text(
+  #   data = subset(raman.data.avg, wavenumber == 1430),
+  #   x = 2050,
+  #   y = 19500,
+  #   aes(label = plants),
+  #   stat = "identity",
+  #   family = "Helvetica",
+  #   size = 2.5,
+  #   hjust = 1
+  # ) +
+  # geom_text(
+  #   data = subset(raman.data.avg, wavenumber == 1430),
+  #   x = 2050,
+  #   y = 17500,
+  #   aes(label = bundles),
+  #   stat = "identity",
+  #   family = "Helvetica",
+  #   size = 2.5,
+  #   hjust = 1
+  # )
+
+pdf("comp_spectra_RAMAN.pdf", 10, 3)
+spectra.comp
+dev.off()
+
+# raman data overview
+raman.letters <- filter(raman.data.plot, variable %in% c("1599", "1119", "1599/1119", "1621/1599")) %>%
+  group_by(cell.type, variable) %>%
+  do(data.frame(tukey(.)))
+
+raman.letters$value <- ifelse(raman.letters$variable == "lig.peak.pos", 1585, raman.letters$value)
+
+
+raman.summary <- ggplot(data = filter(raman.data.plot, variable %in% c("1599", "1119", "1599/1119", "1621/1599")), aes(x = genotype, y = value)) +
+  geom_jitter(
+    aes(fill = value.scaled),
+    shape = 21,
+    width = 0.1,
+    alpha = 0.9,
+    size = 2,
+    stroke = 0.25
+  ) +
+  # geom_violin(draw_quantiles = 0.5, adjust = 1.5, fill = rgb(1,1,1,0.5)) +
+  geom_boxplot(fill = rgb(1,1,1,0.5), outlier.alpha = 0) +
+  geom_text(data = raman.letters,
+            aes(label = groups),
+            angle = 90,
+            hjust = 1,
+            family = "Helvetica") +
+  scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow", limits = c(-6, 6)) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.2,0.05))) +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  theme_leo() +
+  theme(text = element_text(family = "Helvetica"),
+        legend.position = "none") +
+  facet_grid(variable ~ cell.type,
+             scales = "free_y")
+
+pdf("raman_summary.pdf", width = 10, height = 6)
+raman.summary
+dev.off()
+
+# wiesner data overview
+# 
+# wiesner.letters <- filter(wiesner.data.pre, cell.type %in% c("PX", "PMX", "SMX")) %>%
+#   group_by(cell.type) %>%
+#   do(data.frame(tukey(.)))
+wiesner.data.pre$cell.type <- ordered(wiesner.data.pre$cell.type, levels = c("IF", "LP", "XF", "PX", "PMX", "SMX"))
+wiesner.summary <- ggplot(data = filter(wiesner.data.pre, cell.type %in% c("PX", "PMX", "SMX") & genotype != "ccr1xfah1"), aes(x = genotype, y = mean.OD1)) +
+  geom_jitter(
+    aes(fill = value.scaled),
+    shape = 21,
+    width = 0.1,
+    alpha = 0.9,
+    size = 2,
+    stroke = 0.25
+  ) +
+  # geom_violin(draw_quantiles = 0.5, adjust = 1.5, fill = rgb(1,1,1,0.5)) +
+  geom_boxplot(fill = rgb(1,1,1,0.5), outlier.alpha = 0) +
+  # geom_text(data = wiesner.letters,
+  #           aes(label = groups),
+  #           angle = 90,
+  #           hjust = 1,
+  #           family = "Helvetica") +
+  scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow", limits = c(-6, 6)) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.2,0.05))) +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  theme_leo() +
+  theme(text = element_text(family = "Helvetica"),
+        legend.position = "none") +
+  facet_grid(~ cell.type)
+
+pdf("wiesner_summary.pdf", width = 10, height = 3)
+wiesner.summary
+dev.off()
+
+raman.irx$genotype <- ordered(raman.irx$genotype,
+                              levels = c(
+                                "Col-0",
+                                "4cl1",
+                                "4cl2",
+                                "4cl1x4cl2",
+                                "ccoaomt1",
+                                "fah1",
+                                "omt1",
+                                "ccr1-3",
+                                "cad4",
+                                "cad5",
+                                "cad4xcad5"
+                              ))
+
+raman.irx$cell.type <- ordered(raman.irx$cell.type,
+                               levels = c(
+                                 "PX",
+                                 "PMX",
+                                 "SMX"
+                               ))
+
+# irx neighbours
+irx.neighbours <-
+  ggplot(data = select(raman.irx, genotype:cell.type, n_f, n_v, n_p) %>% 
+           gather(key = "adjacency", value = "proportion",
+                   n_f, n_v, n_p) %>%
+           group_by(genotype, cell.type, adjacency) %>%
+           summarise(proportion.mean = mean(proportion, na.rm = TRUE),
+                     proportion.n = n()),
+         aes(x = genotype, y = proportion.mean)) +
+  geom_bar(
+    aes(fill = adjacency),
+    stat = "identity",
+    # width = 0.1,
+    alpha = 0.9,
+    size = 2
+    # stroke = 0.25
+  ) +
+  scale_fill_few() +
+  # scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow") +
+  # scale_y_continuous(expand = expand_scale(mult = c(0.28,0.05))) +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  geom_text(aes(x = genotype, y = 0, label = proportion.n)) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_wrap(~ cell.type, nrow = 1) 
+# coord_flip()
+
+pdf("irx_overview_5.pdf", width = 10, height = 6)
+irx.neighbours
+dev.off()

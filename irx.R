@@ -184,6 +184,7 @@ irx.roi <-
 ###############################
 # clean descriptive data for each vessel
 ###############################
+irx.data$HeightByWidth <- irx.data$Height / irx.data$Width
 irx.data <-
   irx.data[, c(
     "genotype",
@@ -195,6 +196,7 @@ irx.data <-
     "Perim.",
     "Width",
     "Height",
+    "HeightByWidth",
     "Circ.",
     "Distance"
   )]
@@ -280,18 +282,22 @@ irx.roi$object <-
 irx.melt <- subset(irx.melt, variable != "number")
 
 ###############################
+# export data
+###############################
+write_csv(irx.data, "Wiesner_IRX_data.csv")
+
+###############################
 # Tukey-HSD test 
 ###############################
-irx.letters <- irx.melt %>%
+irx.letters <- filter(irx.melt, variable %in% c("HeightByWidth")) %>%
   group_by(object, variable) %>%
   do(data.frame(tukey(.)))
 
-write_csv(irx.data, "Wiesner_IRX_data.csv")
 ###############################
 # shape and position overview plot
 ###############################
 irx.overview <-
-  ggplot(data = irx.melt, aes(x = genotype, y = value)) +
+  ggplot(data = filter(irx.melt, variable %in% c("HeightByWidth")), aes(x = genotype, y = value)) +
   geom_jitter(
     aes(fill = value.scaled),
     shape = 21,
@@ -331,9 +337,10 @@ irx.overview <-
     )
   ) +
   theme_leo() +
+  theme(legend.position = "none") +
   facet_grid(variable ~ object, scales = "free_y") 
   # coord_flip()
 
-pdf("irx_overview.pdf", width = 10, height = 12)
+pdf("irx_overview_4.pdf", width = 10, height = 6)
 irx.overview
 dev.off()

@@ -64,6 +64,12 @@ sem.data <- read.csv("file:///home/leonard/R/Output/PhD/SEM_data.csv")
 
 sem.data$replicate <- as.factor(sem.data$replicate)
 sem.data$technical <- as.factor(sem.data$technical)
+
+# calculate height and width relative to perimeter
+sem.data <- sem.data %>%
+  mutate(rel.Height = Height/Perim.,
+         rel.Width = Width/Perim.,
+         HeightByWidth = Height/Width)
 summary(sem.data)
 
 ggplot(sem.data, aes(x = genotype, y = lig.peak)) +
@@ -95,6 +101,13 @@ chart.Correlation(select(ungroup(sem.data),
                   histogram=TRUE, pch=21)
 
 ggplot(sem.data, aes(x = lig.peak, y = Circ., fill = cell.type)) +
+  scale_fill_viridis_d() +
+  scale_colour_viridis_d() +
+  geom_point(shape = 21, alpha = 0.75, size = 3) +
+  stat_smooth(method="loess", linetype = 2, se = FALSE, aes(colour = cell.type)) +
+  theme_leo()
+
+ggplot(sem.data, aes(x = X1599.1119, y = Circ., fill = cell.type)) +
   scale_fill_viridis_d() +
   scale_colour_viridis_d() +
   geom_point(shape = 21, alpha = 0.75, size = 3) +
@@ -204,11 +217,7 @@ This third model is a multigroup model contrasting the IRX responses and their c
 
 ```{r multigroup}
 
-# calculate height and width relative to perimeter
-sem.data <- sem.data %>%
-  mutate(rel.Height = Height/Perim.,
-         rel.Width = Width/Perim.,
-         HeightByWidth = Height/Width)
+
 
 third.model <-   psem(
   lme(Circ. ~
@@ -263,7 +272,8 @@ TM.multigroup <- function(x) {
           # n_f +
           mean.OD1 +
           Perim. +
-          # cellu.peak +
+          # X1599.1119,
+          cellu.peak +
           # lig.peak.pos +
           lig.peak,
         random = ~1|replicate,
@@ -282,6 +292,7 @@ TM.multigroup <- function(x) {
     lme(HeightByWidth ~
           # mean.OD1 +
           # lig.peak +
+          # n_v +
           Circ.,
         random = ~1|replicate,
         data = filter(drop_na(sem.data), cell.type == x)
