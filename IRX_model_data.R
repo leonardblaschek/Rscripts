@@ -309,9 +309,12 @@ raman.data.plot <- inner_join(raman.data.plot, raman.data.peaks) %>%
   gather(key = variable, value = value, -c(genotype:technical)) %>%
   group_by(variable) %>%
   mutate(value.scaled = scale_this(value)) %>%
-  filter(cell.type != "IF" & genotype != "ccr1xfah1") %>%
+  filter(
+    # cell.type != "IF" & 
+      genotype != "ccr1xfah1"
+    ) %>%
   mutate(cell.type = recode(cell.type, "MX" = "PMX"),
-         cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX")))
+         cell.type = ordered(cell.type, levels = c("IF", "PX", "PMX", "SMX")))
 
 raman.data.spread <- raman.data.plot %>%
   ungroup() %>%
@@ -566,7 +569,7 @@ raman.summary <- ggplot(data = filter(raman.data.plot, variable %in% c("1599", "
             angle = 90,
             hjust = 1,
             family = "Helvetica") +
-  scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow", limits = c(-6, 6)) +
+  scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow", limits = c(-10, 10)) +
   scale_y_continuous(expand = expand_scale(mult = c(0.2,0.05))) +
   scale_x_discrete(
     labels = c(
