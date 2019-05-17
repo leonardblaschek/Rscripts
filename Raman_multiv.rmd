@@ -1,0 +1,641 @@
+---
+title: "Raman Multivariate Analysis"
+author: "Leonard Blaschek"
+date: "16 May 2019"
+output: 
+    html_document
+#   pdf_document:
+#     latex_engine: lualatex
+#     fig_caption: yes
+#     fig_height: 6
+#     includes:
+#       in_header: rmd_temp.tex
+# sansfont: Cooper Hewitt
+# monofont: IBM Plex Mono
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ropls)
+library(factoextra)
+library(cowplot)
+library(showtext)
+library(ggthemes)
+library(plotly)
+library(zoo)
+library(kableExtra)
+library(tidyverse)
+library(ggrepel)
+library(gplots)
+library(viridis)
+
+#### import CooperHewitt Neue ####
+font_add(
+  "CooperHewitt",
+  regular = "/OFL_fonts/CooperHewitt-OTF-public/CooperHewitt-Book.otf",
+  italic = "/OFL_fonts/CooperHewitt-OTF-public/CooperHewitt-BookItalic.otf",
+  bold = "/OFL_fonts/CooperHewitt-OTF-public/CooperHewitt-Semibold.otf",
+  bolditalic = "/OFL_fonts/CooperHewitt-OTF-public/CooperHewitt-SemiboldItalic.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 14,
+                      base_family = "CooperHewitt"){
+  theme_minimal(base_size = base_size,
+                base_family = base_family) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.25,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(colour = "black", # flipped coords
+                                 margin = margin(1, 1, 1, 1)),
+      axis.text.y = element_text(
+        colour = "black",
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = rel(0.8)),
+      legend.key.height = unit(4, "mm"),
+      complete = TRUE
+    )
+}
+```
+
+## Raman peaks from the literature
+
+```{r literature, warning=FALSE, message=FALSE}
+rmn_tab <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/raman_peak_assignments.csv")
+kable(rmn_tab, caption = "Table 1: Peaks previously identified as diagnostic for lignin and cellulose.") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Read and tidy the Raman data
+
+```{r load data, warning=FALSE, message=FALSE}
+rmn_data <- read_csv("Raman_corrected_and_filtered.csv")
+rmn_data$replicate <- as.factor(rmn_data$replicate)
+rmn_data$technical <- as.factor(rmn_data$technical)
+head(rmn_data)
+```
+
+## Plot wild type spectra
+```{r plot spectra, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_data_pre <- rmn_data %>%
+  group_by(genotype, cell.type, replicate, wavenumber) %>%
+  summarise(
+    mean.intensity.pre = mean(corrected.intensity, na.rm = TRUE),
+    sd.intensity.pre = sd(corrected.intensity, na.rm = TRUE),
+    samples.pre = length(corrected.intensity),
+    mean.scaled = mean(scaled, na.rm = TRUE)
+  ) 
+
+rmn_data_avg <- rmn_data_pre %>%
+  group_by(genotype, cell.type, wavenumber) %>%
+  summarise(
+    mean.intensity = mean(mean.intensity.pre, na.rm = TRUE),
+    sd.intensity = sd(mean.intensity.pre, na.rm = TRUE),
+    plants = paste("plants: ", length(mean.intensity.pre)),
+    bundles = ifelse(length(mean.intensity.pre) > 1, 
+                     paste("cells/plant: ", min(samples.pre), "—", max(samples.pre), sep = ""),
+                     paste("cells/plant: ", min(samples.pre))),
+    mean.scaled = mean(mean.scaled, na.rm = TRUE)
+  )
+
+rmn_data_avg_WT <- filter(rmn_data_avg, genotype == "Col-0" & cell.type %in% c("PMX", "IF"))
+rmn_data_pre_WT <- filter(rmn_data_pre, genotype == "Col-0" & cell.type %in% c("PMX", "IF"))
+rmn_data_WT <- filter(rmn_data, genotype == "Col-0" & cell.type %in% c("PMX", "IF"))
+rmn_data_WT <- rmn_data_WT %>%
+  unite("grouptech", replicate, technical, remove = FALSE)
+
+#### plotting unscaled spectra ####
+spectra.WT.MX <- ggplot() +
+  geom_line(data = rmn_data_WT,
+            aes(
+              x = wavenumber, 
+              y = rollmean(corrected.intensity, 3, na.pad=TRUE),
+              colour = replicate,
+              group = grouptech
+              ),
+            size = 0.2,
+            alpha = 0.25
+            ) +
+  geom_line(data = rmn_data_avg_WT,
+            aes(x = wavenumber, y = rollmean(mean.intensity, 3, na.pad=TRUE)),
+            size = 0.1) +
+  scale_x_continuous(limits = c(300, 2000)) +
+  scale_y_continuous(limits = c(-1000, 14500)) +
+  scale_fill_viridis_d() +
+  scale_colour_few() +
+  labs(x = "Wavenumber",
+       y = "Corrected intensity") +
+  theme_leo() +
+  geom_text(
+    data = subset(rmn_data_avg_WT, wavenumber == 1430),
+    x = 1950,
+    y = 14500,
+    aes(label = plants),
+    stat = "identity",
+    family = "CooperHewitt",
+    size = 2.5,
+    hjust = 1
+  ) +
+  geom_text(
+    data = subset(rmn_data_avg_WT, wavenumber == 1430),
+    x = 1950,
+    y = 13500,
+    aes(label = bundles),
+    stat = "identity",
+    family = "CooperHewitt",
+    size = 2.5,
+    hjust = 1
+  ) +
+  facet_grid(cell.type ~ genotype) 
+ggplotly(spectra.WT.MX)
+
+#### plotting scaled spectra ####
+spectra.WT.scaled <- ggplot() +
+  geom_line(data = rmn_data_avg_WT,
+            aes(
+              x = wavenumber, 
+              y = rollmean(mean.scaled, 3, na.pad=TRUE),
+              colour = cell.type
+            ),
+            size = 1,
+            alpha = 1
+  ) +
+  scale_x_continuous(limits = c(300, 2000)) +
+  scale_y_continuous(limits = c(-0.1, 1)) +
+  scale_fill_viridis_d() +
+  scale_colour_few() +
+  theme_leo() +
+  labs(x = "Wavenumber",
+       y = "Normalised intensity")
+ggplotly(spectra.WT.scaled)
+```
+
+# Clustering
+
+```{r cluster, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_data_spread <- rmn_data %>%
+  filter(cell.type %in% c("PMX", "IF")) %>%
+  select(-intensity, -corrected.intensity) %>%
+  spread(key = wavenumber, value = scaled)
+
+rmn_data_mat <- rmn_data_spread %>%
+  select(-replicate, -technical) %>%
+  group_by(genotype, cell.type) %>%
+  summarise_all(list(mean)) %>%
+  ungroup()
+rmn_mat <- as.matrix(select(rmn_data_mat, -genotype, -cell.type))
+rwnms <- unite(rmn_data_mat,"ID", genotype, cell.type, sep = "_")
+rownames(rmn_mat) <- rwnms$ID
+heatmap.2(rmn_mat,
+          Colv = FALSE,
+          col = viridis,
+          trace = "none",
+          symbreaks = FALSE)
+```
+
+Basic clustering of the range normalised spectra groups the lignin deficient IFs together based on their high relative cellulose content (*ccr1*, *4cl1*, *4cl1/2*), but other patterns are harder todistinguish. Let's move on to methods for reducing dimensionality.
+
+# Principle component analysis (PCA)
+
+```{r PCA, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_pca <- prcomp(select(rmn_data_spread, -genotype, -cell.type, -replicate, -technical), center = TRUE, scale. = TRUE)
+rmn_pca_gg <- data.frame(rmn_pca$x, genotype = rmn_data_spread$genotype, cell.type = rmn_data_spread$cell.type)
+
+shapes = c("IF" = 21,
+           "PMX" = 22)
+
+ggplotly(ggplot(rmn_pca_gg, aes(x = PC1, y = PC2)) +
+  geom_hline(yintercept = 0, linetype = 1) +
+  geom_vline(xintercept = 0, linetype = 1) +
+  stat_ellipse(aes(fill = genotype, 
+                   group = interaction(genotype, cell.type)),
+               geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
+  stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2) +
+  geom_point(aes(shape = cell.type,
+                 fill = genotype),
+             size = 4,
+             stroke = 0.5,
+             alpha = 1) +
+  scale_shape_manual(values = shapes) +
+  scale_colour_viridis_d() +
+  theme_leo())
+
+top <- plot_grid(
+  fviz_eig(rmn_pca, 
+           main = "", 
+           font.family = "CooperHewitt",
+           ggtheme = theme_leo(),
+           barcolor = NA,
+           barfill = "#1d91c0",
+           font.xtickslab = c(20, "plain", "black"), 
+           font.ytickslab = c(20, "plain", "black"),
+           font.x = c(20, "plain", "black"),
+           font.y = c(20, "plain", "black")
+  ),
+  labels = c("(a)"),
+  label_fontfamily = "CooperHewitt",
+  label_size = 20,
+  rel_widths = c(2,1),
+  nrow = 1,
+  align = "h"
+)
+
+mid <- plot_grid(
+  fviz_contrib(rmn_pca, 
+               choice = "var", 
+               axes = 1, 
+               top = 12, 
+               title = "", 
+               font.family = "CooperHewitt",
+               ggtheme = theme_leo(),
+               color = NA,
+               fill = "#1d91c0",
+           font.xtickslab = c(20, "plain", "black"), 
+           font.ytickslab = c(20, "plain", "black"),
+           font.y = c(20, "plain", "black")
+  ),
+  fviz_contrib(rmn_pca, 
+               choice = "var", 
+               axes = 2, 
+               top = 12, 
+               title = "", 
+               font.family = "CooperHewitt",
+               ggtheme = theme_leo(),
+               color = NA,
+               fill = "#1d91c0",
+           font.xtickslab = c(20, "plain", "black"), 
+           font.ytickslab = c(20, "plain", "black"),
+           font.y = c(20, "plain", "black")
+  ),
+  labels = c("(b)", "(c)"),
+  label_fontfamily = "CooperHewitt",
+  label_size = 20,
+  nrow = 2
+)
+
+plot_grid(
+top,
+mid,
+nrow = 1
+)
+```
+**(b)** represents PC1, **(c)** represents PC2.
+
+# Orthogonal partial least square discriminant analysis (OPLS-DA)
+
+## Raman signals diagnostic for S, G and 5-OH-G units
+
+First, let's look at rough PCA and OPLS-DA differentiating IF (S-unit rich), from PMX (G-unit rich).
+
+```{r opls-da, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_mat <- data.matrix(select(rmn_data_spread, -genotype, -cell.type, -replicate, -technical))
+rwnms <- unite(rmn_data_spread,"ID", genotype, cell.type, replicate, technical, sep = "_")
+rownames(rmn_mat) <- rwnms$ID
+rmn_meta <- as.matrix(select(rmn_data_spread, genotype, cell.type, replicate, technical))
+
+rmn_pca <- opls(rmn_mat)
+cell.type <- rmn_meta[, "cell.type"]
+plot(rmn_pca,
+     typeVc = "x-score",
+     parAsColFcVn = cell.type)
+
+rmn_oplsda <- opls(rmn_mat, cell.type, predI = 1, orthoI = NA)
+```
+
+Next, let's have a look at the normalised spectra of the IF in the WT (S-units), *omt1* (5-OH-G-units), and *fah1* (only G-units).
+
+```{r S/G/5-OH-G spectra, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_data_avg_SG <- filter(rmn_data_avg, genotype %in% c("Col-0", "fah1", "omt1") & cell.type == "IF")
+rmn_data_pre_SG <- filter(rmn_data_pre, genotype %in% c("Col-0", "fah1", "omt1") & cell.type == "IF")
+rmn_data_SG <- filter(rmn_data, genotype %in% c("Col-0", "fah1", "omt1") & cell.type == "IF")
+rmn_data_SG <- rmn_data_SG %>%
+  unite("grouptech", replicate, technical, remove = FALSE)
+
+#### plotting scaled spectra ####
+spectra.SG.scaled <- ggplot() +
+  geom_line(data = rmn_data_avg_SG,
+            aes(
+              x = wavenumber, 
+              y = rollmean(mean.scaled, 3, na.pad=TRUE),
+              colour = genotype
+            ),
+            size = 1,
+            alpha = 1
+  ) +
+  scale_x_continuous(limits = c(300, 2000)) +
+  scale_y_continuous(limits = c(-0.1, 1)) +
+  scale_fill_viridis_d() +
+  scale_colour_few() +
+  theme_leo() +
+  labs(x = "Wavenumber",
+       y = "Normalised intensity")
+ggplotly(spectra.SG.scaled)
+
+```
+
+### OPLS-DA of PMX vs. IF in the wild type
+To see how the IF/PMX differentiation is affected by *fah1* and *omt1* mutants, here are OPLS-DA plots for only the WT spectra.
+
+```{r opls-da WT, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_mat <- data.matrix(rmn_data_spread %>%
+                         filter(genotype == "Col-0") %>%
+                         select(-genotype, -cell.type, -replicate, -technical))
+rwnms <- rmn_data_spread %>%
+  filter(genotype == "Col-0") %>%
+  select(genotype, cell.type, replicate, technical) %>%
+  unite("ID", genotype, cell.type, replicate, technical, sep = "_")
+rownames(rmn_mat) <- rwnms$ID
+rmn_meta <- as.matrix(rmn_data_spread %>%
+                         filter(genotype == "Col-0") %>%
+                         select(genotype, cell.type, replicate, technical))
+
+cell.type <- rmn_meta[, "cell.type"]
+rmn_oplsda <- opls(rmn_mat, cell.type, predI = 1, orthoI = NA)
+```
+
+Much clearer! So now let's have a look at the loadings.
+
+```{r opls-da WT loadings, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
+  rename(loading = p1) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
+              unite(lbl, Polymer, Substructure, sep = ", ") %>%
+              mutate(wavenumber = as.numeric(wavenumber),
+                     lbl = str_replace_all(lbl, "\\~", ""))) %>%
+  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad=TRUE))) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype =2) +
+  labs(x = "Wavenumber",
+       y = "Loading") +
+  theme_leo() +
+  geom_label_repel(aes(label = lbl), 
+                   nudge_y = 0.02,
+                   family = "CooperHewitt",
+                   segment.colour = "red")
+rmn_oplsda_load
+```
+
+Cellulose peaks are quite important in the OPLS-DA model for differentiating between IF and PMX. The most important lignin peaks are the ones assigned to G-OH and G-CHO unit C=C and C=O stretches at 1662, and the aryl-OH/OCH~3~ at 1336. Those two are arguably the ones most related to the S/G ratio, so that's no surprise.
+
+### OPLS-DA of PMX vs. IF in *fah1* and *omt1*
+In the converse, that should mean that S-units are crucial for distinction of PMX/IF spectra, and *fah1* and *omt1* should overlap closer.
+
+```{r opls-da noS, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_mat <- data.matrix(rmn_data_spread %>%
+                         filter(genotype %in% c("fah1", "omt1")) %>%
+                         select(-genotype, -cell.type, -replicate, -technical))
+rwnms <- rmn_data_spread %>%
+  filter(genotype %in% c("fah1", "omt1")) %>%
+  select(genotype, cell.type, replicate, technical) %>%
+  unite("ID", genotype, cell.type, replicate, technical, sep = "_")
+rownames(rmn_mat) <- rwnms$ID
+rmn_meta <- as.matrix(rmn_data_spread %>%
+                         filter(genotype %in% c("fah1", "omt1")) %>%
+                         select(genotype, cell.type, replicate, technical))
+
+cell.type <- rmn_meta[, "cell.type"]
+rmn_oplsda <- opls(rmn_mat, cell.type, predI = 1, orthoI = NA)
+```
+
+A little less clear of a divide between PMX and IF, but still there, meaning that we have more that just S/G to differentiate between those to lignins. So let's look at the loadings again.
+
+```{r opls-da noS loadings, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
+  rename(loading = p1) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
+              unite(lbl, Polymer, Substructure, sep = ", ") %>%
+              mutate(wavenumber = as.numeric(wavenumber),
+                     lbl = str_replace_all(lbl, "\\~", ""))) %>%
+  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad=TRUE))) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype =2) +
+  labs(x = "Wavenumber",
+       y = "Loading") +
+  theme_leo() +
+  geom_label_repel(aes(label = lbl), 
+                   nudge_y = 0.02,
+                   family = "CooperHewitt",
+                   segment.colour = "red")
+rmn_oplsda_load
+```
+
+The loadings look rather similar, with cellulose as the strongest predictor followed by the peaks at 1662 and 1336. Which means that these might be diagnostic for differences between G and 5-OH-G units. Let's see.
+
+### OPLS-DA of *fah1* vs. *omt1* in the IF
+
+```{r opls-da G to 5-OH-G, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_mat <- data.matrix(rmn_data_spread %>%
+                         filter(genotype %in% c("fah1", "omt1") & cell.type == "IF") %>%
+                         select(-genotype, -cell.type, -replicate, -technical))
+rwnms <- rmn_data_spread %>%
+  filter(genotype %in% c("fah1", "omt1") & cell.type == "IF") %>%
+  select(genotype, cell.type, replicate, technical) %>%
+  unite("ID", genotype, cell.type, replicate, technical, sep = "_")
+rownames(rmn_mat) <- rwnms$ID
+rmn_meta <- as.matrix(rmn_data_spread %>%
+                         filter(genotype %in% c("fah1", "omt1") & cell.type == "IF") %>%
+                         select(genotype, cell.type, replicate, technical))
+
+genotype <- rmn_meta[, "genotype"]
+rmn_oplsda <- opls(rmn_mat, genotype, predI = 1, orthoI = NA)
+```
+
+Still a good, predictive (Q2Y = 0.65), separation. Let's look at the loadings again.
+
+```{r opls-da G to 5-OH-G loadings, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
+  rename(loading = p1) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
+              unite(lbl, Polymer, Substructure, sep = ", ") %>%
+              mutate(wavenumber = as.numeric(wavenumber),
+                     lbl = str_replace_all(lbl, "\\~", ""))) %>%
+  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad=TRUE))) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype =2) +
+  labs(x = "Wavenumber",
+       y = "Loading") +
+  theme_leo() +
+  geom_label_repel(aes(label = lbl), 
+                   nudge_y = 0.02,
+                   family = "CooperHewitt",
+                   segment.colour = "red")
+rmn_oplsda_load
+```
+
+So the peak at 1662 is in fact specific to G units and not S or 5-OH-G units. So next, let's look how we can differentiate S from 5-OH-G units.
+
+### OPLS-DA of Col-0 vs. *omt1* in the IF
+
+```{r opls-da S to 5-OH-G, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_mat <- data.matrix(rmn_data_spread %>%
+                         filter(genotype %in% c("Col-0", "omt1") & cell.type == "IF") %>%
+                         select(-genotype, -cell.type, -replicate, -technical))
+rwnms <- rmn_data_spread %>%
+  filter(genotype %in% c("Col-0", "omt1") & cell.type == "IF") %>%
+  select(genotype, cell.type, replicate, technical) %>%
+  unite("ID", genotype, cell.type, replicate, technical, sep = "_")
+rownames(rmn_mat) <- rwnms$ID
+rmn_meta <- as.matrix(rmn_data_spread %>%
+                         filter(genotype %in% c("Col-0", "omt1") & cell.type == "IF") %>%
+                         select(genotype, cell.type, replicate, technical))
+
+genotype <- rmn_meta[, "genotype"]
+rmn_oplsda <- opls(rmn_mat, genotype, predI = 1, orthoI = NA)
+```
+
+It works, let's see how.
+
+```{r opls-da S to 5-OH-G loadings, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
+  rename(loading = p1) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
+              unite(lbl, Polymer, Substructure, sep = ", ") %>%
+              mutate(wavenumber = as.numeric(wavenumber),
+                     lbl = str_replace_all(lbl, "\\~", ""))) %>%
+  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad=TRUE))) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype =2) +
+  labs(x = "Wavenumber",
+       y = "Loading") +
+  theme_leo() +
+  geom_label_repel(aes(label = lbl), 
+                   nudge_y = 0.02,
+                   family = "CooperHewitt",
+                   segment.colour = "red")
+rmn_oplsda_load
+```
+
+So it looks like the peak at 1336 is specific to aryl-O-CH~3~, and does not actually respond to aryl-OH bonds. This could also be due to different concentrations of S-units in WT IF vs. 5-OH-G units in *omt1* IF, however.
+
+### Three-way PLS-DA of Col-0 vs. *fah1* vs. *omt1* in the IF
+
+In his FT-IR OPLS-DA paper, Andras' writes that he used OPLS-DA with three classes (fibres, vessels, rays). As far as I can make out however, having more than 2 classes somewhat defeats the purpose of OPLS-DA, which, to my understanding, is to compress the differentiating variation into one axis, while all variation that is not relevant to the discrimination between the two groups is expressed in the orthogonal axis. More than 2 classes would therefore remove the O(rthogonal) aspect, making it a PLS-DA. Accordingly, I did not find a way to perform a OPLS-DA with three classes in R. I could however perform a PLS-DA. 
+
+```{r opls-da S/G/5-OH-G, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_mat <- data.matrix(rmn_data_spread %>%
+                         filter(genotype %in% c("Col-0", "fah1", "omt1") & cell.type == "IF") %>%
+                         select(-genotype, -cell.type, -replicate, -technical))
+rwnms <- rmn_data_spread %>%
+  filter(genotype %in% c("Col-0", "fah1", "omt1") & cell.type == "IF") %>%
+  select(genotype, cell.type, replicate, technical) %>%
+  unite("ID", genotype, cell.type, replicate, technical, sep = "_")
+rownames(rmn_mat) <- rwnms$ID
+rmn_meta <- as.matrix(rmn_data_spread %>%
+                         filter(genotype %in% c("Col-0", "fah1", "omt1") & cell.type == "IF") %>%
+                         select(genotype, cell.type, replicate, technical))
+
+genotype <- rmn_meta[, "genotype"]
+rmn_plsda <- opls(rmn_mat, genotype)
+```
+
+
+```{r opls-da S/G/5-OH-G loadings, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_plsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
+  rename(loading = p1) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
+              unite(lbl, Polymer, Substructure, sep = ", ") %>%
+              mutate(wavenumber = as.numeric(wavenumber),
+                     lbl = str_replace_all(lbl, "\\~", ""))) %>%
+  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad=TRUE))) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype =2) +
+  labs(x = "Wavenumber",
+       y = "Loading") +
+  theme_leo() +
+  geom_label_repel(aes(label = lbl), 
+                   nudge_y = 0.02,
+                   family = "CooperHewitt",
+                   segment.colour = "red")
+rmn_plsda_load
+```
+
+## Raman signals diagnostic for aldehyde rich lignin
+
+### OPLS-DA of Col-0 vs. *cad4*x*cad5* in the IF
+
+```{r CHO spectra, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_data_avg_CHO <- filter(rmn_data_avg, genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF")
+rmn_data_pre_CHO <- filter(rmn_data_pre, genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF")
+rmn_data_CHO <- filter(rmn_data, genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF")
+rmn_data_CHO <- rmn_data_CHO %>%
+  unite("grouptech", replicate, technical, remove = FALSE)
+
+#### plotting scaled spectra ####
+spectra.CHO.scaled <- ggplot() +
+  geom_line(data = rmn_data_avg_CHO,
+            aes(
+              x = wavenumber, 
+              y = rollmean(mean.scaled, 3, na.pad=TRUE),
+              colour = genotype
+            ),
+            size = 1,
+            alpha = 1
+  ) +
+  scale_x_continuous(limits = c(300, 2000)) +
+  scale_y_continuous(limits = c(-0.1, 1)) +
+  scale_fill_viridis_d() +
+  scale_colour_few() +
+  theme_leo() +
+  labs(x = "Wavenumber",
+       y = "Normalised intensity")
+ggplotly(spectra.CHO.scaled)
+
+```
+
+```{r opls-da CHO, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_mat <- data.matrix(rmn_data_spread %>%
+                         filter(genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF") %>%
+                         select(-genotype, -cell.type, -replicate, -technical))
+rwnms <- rmn_data_spread %>%
+  filter(genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF") %>%
+  select(genotype, cell.type, replicate, technical) %>%
+  unite("ID", genotype, cell.type, replicate, technical, sep = "_")
+rownames(rmn_mat) <- rwnms$ID
+rmn_meta <- as.matrix(rmn_data_spread %>%
+                         filter(genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF") %>%
+                         select(genotype, cell.type, replicate, technical))
+
+genotype <- rmn_meta[, "genotype"]
+rmn_oplsda <- opls(rmn_mat, genotype, predI = 1, orthoI = NA)
+```
+
+
+```{r opls-da CHO loadings, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
+  rename(loading = p1) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
+              unite(lbl, Polymer, Substructure, sep = ", ") %>%
+              mutate(wavenumber = as.numeric(wavenumber),
+                     lbl = str_replace_all(lbl, "\\~", ""))) %>%
+  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad=TRUE))) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype =2) +
+  labs(x = "Wavenumber",
+       y = "Loading") +
+  theme_leo() +
+  geom_label_repel(aes(label = lbl), 
+                   nudge_y = 0.02,
+                   family = "CooperHewitt",
+                   segment.colour = "red")
+rmn_oplsda_load
+```

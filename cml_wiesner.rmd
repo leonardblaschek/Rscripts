@@ -1,0 +1,90 @@
+---
+title: "CML Wiesner analysis"
+author: "Leonard Blaschek"
+date: "17 May 2019"
+output: 
+  pdf_document:
+    latex_engine: lualatex
+    fig_caption: yes
+    fig_height: 6
+    includes:
+      in_header: rmd_temp.tex
+sansfont: Cooper Hewitt
+monofont: IBM Plex Mono
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(showtext)
+library(ggthemes)
+library(tidyverse)
+
+#### import CooperHewitt Neue ####
+font_add(
+  "CooperHewitt",
+  regular = "/OFL_fonts/CooperHewitt-OTF-public/CooperHewitt-Book.otf",
+  italic = "/OFL_fonts/CooperHewitt-OTF-public/CooperHewitt-BookItalic.otf",
+  bold = "/OFL_fonts/CooperHewitt-OTF-public/CooperHewitt-Semibold.otf",
+  bolditalic = "/OFL_fonts/CooperHewitt-OTF-public/CooperHewitt-SemiboldItalic.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 14,
+                      base_family = "CooperHewitt"){
+  theme_minimal(base_size = base_size,
+                base_family = base_family) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.25,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(colour = "black", # flipped coords
+                                 margin = margin(1, 1, 1, 1)),
+      axis.text.y = element_text(
+        colour = "black",
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = rel(0.8)),
+      legend.key.height = unit(4, "mm"),
+      complete = TRUE
+    )
+}
+```
+
+## Load measurements
+
+```{r load data, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+cml_data <- read_csv(
+  "/home/leonard/Documents/Uni/Phloroglucinol/29-05_CML_measurements/cml_profiles.csv"
+  ) %>%
+  rowid_to_column(var = "distance") %>%
+  gather(key = "ROI", value = "absorbance", -genotype, -replicate, -technical, -distance) %>%
+  mutate(ROI = str_replace(ROI, "ROI_", ""),
+         absorbance = na_if(absorbance, 0)) %>%
+  group_by(replicate, technical, ROI) %>%
+  drop_na() %>%
+  mutate(distance.scaled = scale(distance, scale = TRUE, center = TRUE),
+         absorbance.scaled = scale(absorbance, scale = TRUE, center = FALSE))
+
+ggplot(data = cml_data, aes(x = distance.scaled, y = absorbance.scaled)) +
+  geom_line(aes(group = interaction(ROI, replicate, genotype)),
+            alpha = 0.25) +
+  geom_smooth(aes(group = genotype),
+              span = 0.2,
+              colour = NA,
+              fill = "blue",
+              alpha = 0.5) +
+  theme_leo() +
+  facet_wrap(~genotype)
+```
