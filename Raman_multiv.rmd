@@ -28,20 +28,21 @@ library(tidyverse)
 library(ggrepel)
 library(gplots)
 library(viridis)
+library(ggridges)
 
-#### import CooperHewitt Neue ####
+#### import CooperHewitt ####
 font_add(
-  "CooperHewitt",
-  regular = "/OFL_fonts/CooperHewitt-OTF-public/CooperHewitt-Book.otf",
-  italic = "/OFL_fonts/CooperHewitt-OTF-public/CooperHewitt-BookItalic.otf",
-  bold = "/OFL_fonts/CooperHewitt-OTF-public/CooperHewitt-Semibold.otf",
-  bolditalic = "/OFL_fonts/CooperHewitt-OTF-public/CooperHewitt-SemiboldItalic.otf"
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
 )
 showtext_auto()
 
 #### generating plot theme ####
 theme_leo <- function(base_size = 14,
-                      base_family = "CooperHewitt"){
+                      base_family = "Helvetica"){
   theme_minimal(base_size = base_size,
                 base_family = base_family) %+replace%
     theme(
@@ -90,6 +91,7 @@ head(rmn_data)
 ```
 
 ## Plot wild type spectra
+
 ```{r plot spectra, out.width = '100%', warning=FALSE, message=FALSE}
 rmn_data_pre <- rmn_data %>%
   group_by(genotype, cell.type, replicate, wavenumber) %>%
@@ -146,7 +148,7 @@ spectra.WT.MX <- ggplot() +
     y = 14500,
     aes(label = plants),
     stat = "identity",
-    family = "CooperHewitt",
+    family = "Helvetica",
     size = 2.5,
     hjust = 1
   ) +
@@ -156,7 +158,7 @@ spectra.WT.MX <- ggplot() +
     y = 13500,
     aes(label = bundles),
     stat = "identity",
-    family = "CooperHewitt",
+    family = "Helvetica",
     size = 2.5,
     hjust = 1
   ) +
@@ -184,6 +186,46 @@ spectra.WT.scaled <- ggplot() +
 ggplotly(spectra.WT.scaled)
 ```
 
+# Spectral variation between cell walls
+
+Above we saw that there are clear hotspots of variation in the spectra between MX and IF of the wild-type. Next, let us have a look at the overall variation across MX and IF in all our genotypes. The spectrum below is shaded according to the standard deviation of the raman intensities at the respective wavenumber. The labels are peak assignments from the literature (see table 1).
+
+```{r plot variation spectra, out.width = '100%', message=FALSE, warning=FALSE}
+rmn_data_var <- rmn_data %>% 
+  group_by(wavenumber) %>%
+  summarise(mean.scaled = mean(scaled, na.rm = TRUE),
+            st.dev = sd(scaled, na.rm = TRUE)) %>%
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
+              unite(lbl, Polymer, Substructure, sep = ", ") %>%
+              mutate(wavenumber = as.numeric(wavenumber),
+                     lbl = str_replace_all(lbl, "\\~", "")))
+
+#### plotting scaled spectra ####
+ggplot(data = rmn_data_var, aes(
+  y = rollmean(mean.scaled, 3, na.pad=TRUE),
+  x = wavenumber
+)) +
+  geom_ridgeline_gradient(aes(
+    height = 1 - rollmean(mean.scaled, 3, na.pad=TRUE),
+    fill = st.dev
+  ),
+  colour = "white"
+  ) +
+  scale_x_continuous(limits = c(300, 2000)) +
+  labs(x = "Wavenumber",
+       y = "Normalised intensity") +
+  scale_fill_viridis_c() +
+  theme_leo() +
+  theme(legend.position = "bottom",
+        legend.key.width = unit(4, "mm")) +
+  guides(fill = guide_legend()) +
+  geom_label_repel(aes(label = lbl), 
+                   nudge_y = 0.25,
+                   family = "Helvetica",
+                   segment.colour = "red",
+                   size = 2) 
+```
+
 # Clustering
 
 ```{r cluster, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
@@ -207,7 +249,7 @@ heatmap.2(rmn_mat,
           symbreaks = FALSE)
 ```
 
-Basic clustering of the range normalised spectra groups the lignin deficient IFs together based on their high relative cellulose content (*ccr1*, *4cl1*, *4cl1/2*), but other patterns are harder todistinguish. Let's move on to methods for reducing dimensionality.
+Looking at all our spectra as a heatmap we see the peaks with high variation confirmed. Basic clustering of the range normalised spectra groups the lignin deficient IFs together based on their high relative cellulose content (*ccr1*, *4cl1*, *4cl1/2*), but other patterns are harder to distinguish. Let's move on to methods for reducing dimensionality.
 
 # Principle component analysis (PCA)
 
@@ -237,7 +279,7 @@ ggplotly(ggplot(rmn_pca_gg, aes(x = PC1, y = PC2)) +
 top <- plot_grid(
   fviz_eig(rmn_pca, 
            main = "", 
-           font.family = "CooperHewitt",
+           font.family = "Helvetica",
            ggtheme = theme_leo(),
            barcolor = NA,
            barfill = "#1d91c0",
@@ -247,7 +289,7 @@ top <- plot_grid(
            font.y = c(20, "plain", "black")
   ),
   labels = c("(a)"),
-  label_fontfamily = "CooperHewitt",
+  label_fontfamily = "Helvetica",
   label_size = 20,
   rel_widths = c(2,1),
   nrow = 1,
@@ -260,7 +302,7 @@ mid <- plot_grid(
                axes = 1, 
                top = 12, 
                title = "", 
-               font.family = "CooperHewitt",
+               font.family = "Helvetica",
                ggtheme = theme_leo(),
                color = NA,
                fill = "#1d91c0",
@@ -273,7 +315,7 @@ mid <- plot_grid(
                axes = 2, 
                top = 12, 
                title = "", 
-               font.family = "CooperHewitt",
+               font.family = "Helvetica",
                ggtheme = theme_leo(),
                color = NA,
                fill = "#1d91c0",
@@ -282,7 +324,7 @@ mid <- plot_grid(
            font.y = c(20, "plain", "black")
   ),
   labels = c("(b)", "(c)"),
-  label_fontfamily = "CooperHewitt",
+  label_fontfamily = "Helvetica",
   label_size = 20,
   nrow = 2
 )
@@ -385,7 +427,7 @@ rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") 
   theme_leo() +
   geom_label_repel(aes(label = lbl), 
                    nudge_y = 0.02,
-                   family = "CooperHewitt",
+                   family = "Helvetica",
                    segment.colour = "red")
 rmn_oplsda_load
 ```
@@ -430,7 +472,7 @@ rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") 
   theme_leo() +
   geom_label_repel(aes(label = lbl), 
                    nudge_y = 0.02,
-                   family = "CooperHewitt",
+                   family = "Helvetica",
                    segment.colour = "red")
 rmn_oplsda_load
 ```
@@ -474,7 +516,7 @@ rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") 
   theme_leo() +
   geom_label_repel(aes(label = lbl), 
                    nudge_y = 0.02,
-                   family = "CooperHewitt",
+                   family = "Helvetica",
                    segment.colour = "red")
 rmn_oplsda_load
 ```
@@ -518,7 +560,7 @@ rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") 
   theme_leo() +
   geom_label_repel(aes(label = lbl), 
                    nudge_y = 0.02,
-                   family = "CooperHewitt",
+                   family = "Helvetica",
                    segment.colour = "red")
 rmn_oplsda_load
 ```
@@ -563,7 +605,7 @@ rmn_plsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %
   theme_leo() +
   geom_label_repel(aes(label = lbl), 
                    nudge_y = 0.02,
-                   family = "CooperHewitt",
+                   family = "Helvetica",
                    segment.colour = "red")
 rmn_plsda_load
 ```
@@ -635,7 +677,7 @@ rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") 
   theme_leo() +
   geom_label_repel(aes(label = lbl), 
                    nudge_y = 0.02,
-                   family = "CooperHewitt",
+                   family = "Helvetica",
                    segment.colour = "red")
 rmn_oplsda_load
 ```
