@@ -10,7 +10,7 @@ output:
     includes:
       in_header: rmd_temp.tex
 sansfont: Helvetica Neue LT Std
-monofont: IBM Plex Mono
+monofont: Inconsolata
 ---
 
 ```{r setup, include = FALSE}
@@ -60,6 +60,9 @@ theme_leo <- function(base_size = 14,
       complete = TRUE
     )
 }
+
+#### functions ####
+scale_range <- function(x){(x-min(x))/(max(x)-min(x))}
 ```
 
 ## Load measurements
@@ -80,41 +83,51 @@ cml_data <- read_csv(
   drop_na() %>%
   group_by(genotype, replicate, technical, ROI) %>%
   mutate(
-    distance.scaled = scale(distance, center = TRUE, scale = TRUE),
-    # distance.scaled = (distance - min(distance)) / (max(distance) - min(distance)),
+    # distance.scaled = scale(distance, center = TRUE, scale = TRUE),
+    distance.scaled = scale_range(distance),
     absorbance.scaled = scale(absorbance, center = FALSE, scale = TRUE),
-    # absorbance.scaled = (absorbance - min(absorbance)) / (max(absorbance) - min(absorbance))
+    # absorbance.scaled = scale_range(absorbance)
     )
 
 head(cml_data)
 ```
 
-```{r scaled line plots, fig.showtext = TRUE, out.width = '100%', message = FALSE}
+```{r scaled line plots, fig.showtext = TRUE, out.width = '100%', fig.height = 8, fig.width = 6, message = FALSE}
 
 ggplot(data = cml_data, aes(x = distance.scaled, y = absorbance.scaled)) +
+  geom_vline(xintercept = 0.5,
+             linetype = 2) +
   geom_line(aes(group = interaction(ROI, replicate, genotype)),
             alpha = 0.25) +
   geom_smooth(aes(group = genotype),
               method = "loess",
-              span = 0.2,
+              span = 0.15,
               colour = NA,
               fill = "blue",
               alpha = 0.5) +
+  scale_x_continuous(breaks = c(0, 0.5, 1), labels = c("Lumen", "Middle lamella", "Lumen")) +
+  labs(y = "Absorbance") +
   theme_leo() +
+  theme(axis.title.x = element_blank()) +
   facet_wrap(~genotype, ncol = 1)
 ```
 
-```{r unscaled line plots, fig.showtext = TRUE, out.width = '100%', message = FALSE}
+```{r unscaled line plots, fig.showtext = TRUE, out.width = '100%', fig.height = 8, fig.width = 6, message = FALSE}
 
 ggplot(data = cml_data, aes(x = distance.scaled, y = absorbance / 255)) +
+  geom_vline(xintercept = 0.5,
+             linetype = 2) +
   geom_line(aes(group = interaction(ROI, replicate, genotype)),
             alpha = 0.25) +
   geom_smooth(aes(group = genotype),
               method = "loess",
-              span = 0.2,
+              span = 0.15,
               colour = NA,
               fill = "blue",
               alpha = 0.5) +
+  scale_x_continuous(breaks = c(0, 0.5, 1), labels = c("Lumen", "Middle lamella", "Lumen")) +
+  labs(y = "Absorbance") +
   theme_leo() +
+  theme(axis.title.x = element_blank()) +
   facet_wrap(~genotype, ncol = 1)
 ```

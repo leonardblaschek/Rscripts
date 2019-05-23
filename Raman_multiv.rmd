@@ -3,20 +3,21 @@ title: "Raman Multivariate Analysis"
 author: "Leonard Blaschek"
 date: "16 May 2019"
 output: 
-    html_document
-#   pdf_document:
-#     latex_engine: lualatex
-#     fig_caption: yes
-#     fig_height: 6
-#     includes:
-#       in_header: rmd_temp.tex
+  html_document
+#  pdf_document:
+#   latex_engine: lualatex
+#   fig_caption: yes
+#   fig_height: 6
+#   includes:
+#    in_header: rmd_temp.tex
 # sansfont: Cooper Hewitt
 # monofont: IBM Plex Mono
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(ropls)
+library(ComplexHeatmap)
 library(factoextra)
 library(cowplot)
 library(showtext)
@@ -29,22 +30,26 @@ library(ggrepel)
 library(gplots)
 library(viridis)
 library(ggridges)
+library(RColorBrewer)
+library(agricolae)
 
 #### import CooperHewitt ####
 font_add(
   "Helvetica",
-  regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
-  italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
-  bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
-  bolditalic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
 )
 showtext_auto()
 
 #### generating plot theme ####
 theme_leo <- function(base_size = 14,
-                      base_family = "Helvetica"){
-  theme_minimal(base_size = base_size,
-                base_family = base_family) %+replace%
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
     theme(
       strip.text = element_text(hjust = 0, face = "italic"),
       axis.ticks = element_line(
@@ -52,8 +57,10 @@ theme_leo <- function(base_size = 14,
         lineend = "square",
         color = "black"
       ),
-      axis.text.x = element_text(colour = "black", # flipped coords
-                                 margin = margin(1, 1, 1, 1)),
+      axis.text.x = element_text(
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
       axis.text.y = element_text(
         colour = "black",
         angle = 0,
@@ -71,11 +78,32 @@ theme_leo <- function(base_size = 14,
       complete = TRUE
     )
 }
+
+tukey <- function(x) {
+  aov1 <- aov(data = x, scaled ~ genotype)
+  groups <- HSD.test(aov1, "genotype", alpha = 0.05)
+  groups$groups[["genotype"]] <- rownames(groups$groups)
+  groups$groups[["scaled"]] <- -0.1
+  return(groups[["groups"]])
+}
+
+scale_range <- function(x){(x-min(x))/(max(x)-min(x))}
+scale_z <- function(x){(x - mean(x, na.rm=TRUE)) / sd(x, na.rm=TRUE)}
+scale_max <- function(x){x / max(x)}
+scale_lig <- function(x){x / max(x[wavenumber > 1590 & wavenumber < 1610])}
+
+FWHM <- function(x, y){
+peak_max <- y[x == max(x)]
+half_left <- y[y < peak_max][which.min(abs(x[y < peak_max] - max(x) / 2))]
+half_right <- y[y > peak_max][which.min(abs(x[y > peak_max] - max(x) / 2))]
+half_right - half_left
+}
+
 ```
 
 ## Raman peaks from the literature
 
-```{r literature, warning=FALSE, message=FALSE}
+```{r literature, warning = FALSE, message = FALSE}
 rmn_tab <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/raman_peak_assignments.csv")
 kable(rmn_tab, caption = "Table 1: Peaks previously identified as diagnostic for lignin and cellulose.") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
@@ -83,7 +111,7 @@ kable(rmn_tab, caption = "Table 1: Peaks previously identified as diagnostic for
 
 ## Read and tidy the Raman data
 
-```{r load data, warning=FALSE, message=FALSE}
+```{r load data, warning = FALSE, message = FALSE}
 rmn_data <- read_csv("Raman_corrected_and_filtered.csv")
 rmn_data$replicate <- as.factor(rmn_data$replicate)
 rmn_data$technical <- as.factor(rmn_data$technical)
@@ -92,7 +120,7 @@ head(rmn_data)
 
 ## Plot wild type spectra
 
-```{r plot spectra, out.width = '100%', warning=FALSE, message=FALSE}
+```{r plot spectra, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_data_pre <- rmn_data %>%
   group_by(genotype, cell.type, replicate, wavenumber) %>%
   summarise(
@@ -100,7 +128,7 @@ rmn_data_pre <- rmn_data %>%
     sd.intensity.pre = sd(corrected.intensity, na.rm = TRUE),
     samples.pre = length(corrected.intensity),
     mean.scaled = mean(scaled, na.rm = TRUE)
-  ) 
+  )
 
 rmn_data_avg <- rmn_data_pre %>%
   group_by(genotype, cell.type, wavenumber) %>%
@@ -108,9 +136,10 @@ rmn_data_avg <- rmn_data_pre %>%
     mean.intensity = mean(mean.intensity.pre, na.rm = TRUE),
     sd.intensity = sd(mean.intensity.pre, na.rm = TRUE),
     plants = paste("plants: ", length(mean.intensity.pre)),
-    bundles = ifelse(length(mean.intensity.pre) > 1, 
-                     paste("cells/plant: ", min(samples.pre), "—", max(samples.pre), sep = ""),
-                     paste("cells/plant: ", min(samples.pre))),
+    bundles = ifelse(length(mean.intensity.pre) > 1,
+      paste("cells/plant: ", min(samples.pre), "—", max(samples.pre), sep = ""),
+      paste("cells/plant: ", min(samples.pre))
+    ),
     mean.scaled = mean(mean.scaled, na.rm = TRUE)
   )
 
@@ -122,25 +151,30 @@ rmn_data_WT <- rmn_data_WT %>%
 
 #### plotting unscaled spectra ####
 spectra.WT.MX <- ggplot() +
-  geom_line(data = rmn_data_WT,
-            aes(
-              x = wavenumber, 
-              y = rollmean(corrected.intensity, 3, na.pad=TRUE),
-              colour = replicate,
-              group = grouptech
-              ),
-            size = 0.2,
-            alpha = 0.25
-            ) +
-  geom_line(data = rmn_data_avg_WT,
-            aes(x = wavenumber, y = rollmean(mean.intensity, 3, na.pad=TRUE)),
-            size = 0.1) +
+  geom_line(
+    data = rmn_data_WT,
+    aes(
+      x = wavenumber,
+      y = rollmean(corrected.intensity, 3, na.pad = TRUE),
+      colour = replicate,
+      group = grouptech
+    ),
+    size = 0.2,
+    alpha = 0.25
+  ) +
+  geom_line(
+    data = rmn_data_avg_WT,
+    aes(x = wavenumber, y = rollmean(mean.intensity, 3, na.pad = TRUE)),
+    size = 0.1
+  ) +
   scale_x_continuous(limits = c(300, 2000)) +
   scale_y_continuous(limits = c(-1000, 14500)) +
   scale_fill_viridis_d() +
   scale_colour_few() +
-  labs(x = "Wavenumber",
-       y = "Corrected intensity") +
+  labs(
+    x = "Wavenumber",
+    y = "Corrected intensity"
+  ) +
   theme_leo() +
   geom_text(
     data = subset(rmn_data_avg_WT, wavenumber == 1430),
@@ -162,27 +196,30 @@ spectra.WT.MX <- ggplot() +
     size = 2.5,
     hjust = 1
   ) +
-  facet_grid(cell.type ~ genotype) 
+  facet_grid(cell.type ~ genotype)
 ggplotly(spectra.WT.MX)
 
 #### plotting scaled spectra ####
 spectra.WT.scaled <- ggplot() +
-  geom_line(data = rmn_data_avg_WT,
-            aes(
-              x = wavenumber, 
-              y = rollmean(mean.scaled, 3, na.pad=TRUE),
-              colour = cell.type
-            ),
-            size = 1,
-            alpha = 1
+  geom_line(
+    data = rmn_data_avg_WT,
+    aes(
+      x = wavenumber,
+      y = rollmean(mean.scaled, 3, na.pad = TRUE),
+      colour = cell.type
+    ),
+    size = 1,
+    alpha = 1
   ) +
   scale_x_continuous(limits = c(300, 2000)) +
   scale_y_continuous(limits = c(-0.1, 1)) +
   scale_fill_viridis_d() +
   scale_colour_few() +
   theme_leo() +
-  labs(x = "Wavenumber",
-       y = "Normalised intensity")
+  labs(
+    x = "Wavenumber",
+    y = "Normalised intensity"
+  )
 ggplotly(spectra.WT.scaled)
 ```
 
@@ -190,45 +227,54 @@ ggplotly(spectra.WT.scaled)
 
 Above we saw that there are clear hotspots of variation in the spectra between MX and IF of the wild-type. Next, let us have a look at the overall variation across MX and IF in all our genotypes. The spectrum below is shaded according to the standard deviation of the raman intensities at the respective wavenumber. The labels are peak assignments from the literature (see table 1).
 
-```{r plot variation spectra, out.width = '100%', message=FALSE, warning=FALSE}
-rmn_data_var <- rmn_data %>% 
+```{r plot variation spectra, out.width = '100%', message = FALSE, warning = FALSE}
+rmn_data_var <- rmn_data %>%
   group_by(wavenumber) %>%
-  summarise(mean.scaled = mean(scaled, na.rm = TRUE),
-            st.dev = sd(scaled, na.rm = TRUE)) %>%
-  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
-              unite(lbl, Polymer, Substructure, sep = ", ") %>%
-              mutate(wavenumber = as.numeric(wavenumber),
-                     lbl = str_replace_all(lbl, "\\~", "")))
+  summarise(
+    mean.scaled = mean(scaled, na.rm = TRUE),
+    st.dev = sd(scaled, na.rm = TRUE)
+  ) %>%
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>%
+    unite(lbl, Polymer, Substructure, sep = ", ") %>%
+    mutate(
+      wavenumber = as.numeric(wavenumber),
+      lbl = str_replace_all(lbl, "\\~", "")
+    ))
 
 #### plotting scaled spectra ####
 ggplot(data = rmn_data_var, aes(
-  y = rollmean(mean.scaled, 3, na.pad=TRUE),
+  y = rollmean(mean.scaled, 3, na.pad = TRUE),
   x = wavenumber
 )) +
   geom_ridgeline_gradient(aes(
-    height = 1 - rollmean(mean.scaled, 3, na.pad=TRUE),
+    height = 1 - rollmean(mean.scaled, 3, na.pad = TRUE),
     fill = st.dev
   ),
   colour = "white"
   ) +
   scale_x_continuous(limits = c(300, 2000)) +
-  labs(x = "Wavenumber",
-       y = "Normalised intensity") +
+  labs(
+    x = "Wavenumber",
+    y = "Normalised intensity"
+  ) +
   scale_fill_viridis_c() +
   theme_leo() +
-  theme(legend.position = "bottom",
-        legend.key.width = unit(4, "mm")) +
+  theme(
+    legend.position = "bottom",
+    legend.key.width = unit(4, "mm")
+  ) +
   guides(fill = guide_legend()) +
-  geom_label_repel(aes(label = lbl), 
-                   nudge_y = 0.25,
-                   family = "Helvetica",
-                   segment.colour = "red",
-                   size = 2) 
+  geom_label_repel(aes(label = lbl),
+    nudge_y = 0.25,
+    family = "Helvetica",
+    segment.colour = "red",
+    size = 2
+  )
 ```
 
 # Clustering
 
-```{r cluster, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r cluster, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_data_spread <- rmn_data %>%
   filter(cell.type %in% c("PMX", "IF")) %>%
   select(-intensity, -corrected.intensity) %>%
@@ -240,88 +286,97 @@ rmn_data_mat <- rmn_data_spread %>%
   summarise_all(list(mean)) %>%
   ungroup()
 rmn_mat <- as.matrix(select(rmn_data_mat, -genotype, -cell.type))
-rwnms <- unite(rmn_data_mat,"ID", genotype, cell.type, sep = "_")
+rwnms <- unite(rmn_data_mat, "ID", genotype, cell.type, sep = "_")
 rownames(rmn_mat) <- rwnms$ID
 heatmap.2(rmn_mat,
-          Colv = FALSE,
-          col = viridis,
-          trace = "none",
-          symbreaks = FALSE)
+  Colv = FALSE,
+  col = viridis,
+  trace = "none",
+  symbreaks = FALSE
+)
 ```
 
 Looking at all our spectra as a heatmap we see the peaks with high variation confirmed. Basic clustering of the range normalised spectra groups the lignin deficient IFs together based on their high relative cellulose content (*ccr1*, *4cl1*, *4cl1/2*), but other patterns are harder to distinguish. Let's move on to methods for reducing dimensionality.
 
 # Principle component analysis (PCA)
 
-```{r PCA, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r PCA, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_pca <- prcomp(select(rmn_data_spread, -genotype, -cell.type, -replicate, -technical), center = TRUE, scale. = TRUE)
 rmn_pca_gg <- data.frame(rmn_pca$x, genotype = rmn_data_spread$genotype, cell.type = rmn_data_spread$cell.type)
 
-shapes = c("IF" = 21,
-           "PMX" = 22)
+shapes <- c(
+  "IF" = 21,
+  "PMX" = 22
+)
 
 ggplotly(ggplot(rmn_pca_gg, aes(x = PC1, y = PC2)) +
   geom_hline(yintercept = 0, linetype = 1) +
   geom_vline(xintercept = 0, linetype = 1) +
-  stat_ellipse(aes(fill = genotype, 
-                   group = interaction(genotype, cell.type)),
-               geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
+  stat_ellipse(aes(
+    fill = genotype,
+    group = interaction(genotype, cell.type)
+  ),
+  geom = "polygon", alpha = 0.5, type = "t", level = 0.4
+  ) +
   stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2) +
-  geom_point(aes(shape = cell.type,
-                 fill = genotype),
-             size = 4,
-             stroke = 0.5,
-             alpha = 1) +
+  geom_point(aes(
+    shape = cell.type,
+    fill = genotype
+  ),
+  size = 4,
+  stroke = 0.5,
+  alpha = 1
+  ) +
   scale_shape_manual(values = shapes) +
   scale_colour_viridis_d() +
   theme_leo())
 
 top <- plot_grid(
-  fviz_eig(rmn_pca, 
-           main = "", 
-           font.family = "Helvetica",
-           ggtheme = theme_leo(),
-           barcolor = NA,
-           barfill = "#1d91c0",
-           font.xtickslab = c(20, "plain", "black"), 
-           font.ytickslab = c(20, "plain", "black"),
-           font.x = c(20, "plain", "black"),
-           font.y = c(20, "plain", "black")
+  fviz_eig(rmn_pca,
+    main = "",
+    font.family = "Helvetica",
+    ggtheme = theme_leo(),
+    barcolor = NA,
+    barfill = "#1d91c0",
+    font.xtickslab = c(20, "plain", "black"),
+    font.ytickslab = c(20, "plain", "black"),
+    font.x = c(20, "plain", "black"),
+    font.y = c(20, "plain", "black")
   ),
   labels = c("(a)"),
   label_fontfamily = "Helvetica",
   label_size = 20,
-  rel_widths = c(2,1),
+  rel_widths = c(2, 1),
   nrow = 1,
   align = "h"
 )
 
 mid <- plot_grid(
-  fviz_contrib(rmn_pca, 
-               choice = "var", 
-               axes = 1, 
-               top = 12, 
-               title = "", 
-               font.family = "Helvetica",
-               ggtheme = theme_leo(),
-               color = NA,
-               fill = "#1d91c0",
-           font.xtickslab = c(20, "plain", "black"), 
-           font.ytickslab = c(20, "plain", "black"),
-           font.y = c(20, "plain", "black")
+  fviz_contrib(rmn_pca,
+    choice = "var",
+    axes = 1,
+    top = 12,
+    title = "",
+    font.family = "Helvetica",
+    ggtheme = theme_leo(),
+    color = NA,
+    fill = "#1d91c0",
+    font.xtickslab = c(20, "plain", "black"),
+    font.ytickslab = c(20, "plain", "black"),
+    font.y = c(20, "plain", "black")
   ),
-  fviz_contrib(rmn_pca, 
-               choice = "var", 
-               axes = 2, 
-               top = 12, 
-               title = "", 
-               font.family = "Helvetica",
-               ggtheme = theme_leo(),
-               color = NA,
-               fill = "#1d91c0",
-           font.xtickslab = c(20, "plain", "black"), 
-           font.ytickslab = c(20, "plain", "black"),
-           font.y = c(20, "plain", "black")
+  fviz_contrib(rmn_pca,
+    choice = "var",
+    axes = 2,
+    top = 12,
+    title = "",
+    font.family = "Helvetica",
+    ggtheme = theme_leo(),
+    color = NA,
+    fill = "#1d91c0",
+    font.xtickslab = c(20, "plain", "black"),
+    font.ytickslab = c(20, "plain", "black"),
+    font.y = c(20, "plain", "black")
   ),
   labels = c("(b)", "(c)"),
   label_fontfamily = "Helvetica",
@@ -330,9 +385,9 @@ mid <- plot_grid(
 )
 
 plot_grid(
-top,
-mid,
-nrow = 1
+  top,
+  mid,
+  nrow = 1
 )
 ```
 **(b)** represents PC1, **(c)** represents PC2.
@@ -343,24 +398,25 @@ nrow = 1
 
 First, let's look at rough PCA and OPLS-DA differentiating IF (S-unit rich), from PMX (G-unit rich).
 
-```{r opls-da, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r opls-da, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_mat <- data.matrix(select(rmn_data_spread, -genotype, -cell.type, -replicate, -technical))
-rwnms <- unite(rmn_data_spread,"ID", genotype, cell.type, replicate, technical, sep = "_")
+rwnms <- unite(rmn_data_spread, "ID", genotype, cell.type, replicate, technical, sep = "_")
 rownames(rmn_mat) <- rwnms$ID
 rmn_meta <- as.matrix(select(rmn_data_spread, genotype, cell.type, replicate, technical))
 
 rmn_pca <- opls(rmn_mat)
 cell.type <- rmn_meta[, "cell.type"]
 plot(rmn_pca,
-     typeVc = "x-score",
-     parAsColFcVn = cell.type)
+  typeVc = "x-score",
+  parAsColFcVn = cell.type
+)
 
 rmn_oplsda <- opls(rmn_mat, cell.type, predI = 1, orthoI = NA)
 ```
 
 Next, let's have a look at the normalised spectra of the IF in the WT (S-units), *omt1* (5-OH-G-units), and *fah1* (only G-units).
 
-```{r S/G/5-OH-G spectra, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r S/G/5-OH-G spectra, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_data_avg_SG <- filter(rmn_data_avg, genotype %in% c("Col-0", "fah1", "omt1") & cell.type == "IF")
 rmn_data_pre_SG <- filter(rmn_data_pre, genotype %in% c("Col-0", "fah1", "omt1") & cell.type == "IF")
 rmn_data_SG <- filter(rmn_data, genotype %in% c("Col-0", "fah1", "omt1") & cell.type == "IF")
@@ -369,41 +425,43 @@ rmn_data_SG <- rmn_data_SG %>%
 
 #### plotting scaled spectra ####
 spectra.SG.scaled <- ggplot() +
-  geom_line(data = rmn_data_avg_SG,
-            aes(
-              x = wavenumber, 
-              y = rollmean(mean.scaled, 3, na.pad=TRUE),
-              colour = genotype
-            ),
-            size = 1,
-            alpha = 1
+  geom_line(
+    data = rmn_data_avg_SG,
+    aes(
+      x = wavenumber,
+      y = rollmean(mean.scaled, 3, na.pad = TRUE),
+      colour = genotype
+    ),
+    size = 1,
+    alpha = 1
   ) +
   scale_x_continuous(limits = c(300, 2000)) +
   scale_y_continuous(limits = c(-0.1, 1)) +
   scale_fill_viridis_d() +
   scale_colour_few() +
   theme_leo() +
-  labs(x = "Wavenumber",
-       y = "Normalised intensity")
+  labs(
+    x = "Wavenumber",
+    y = "Normalised intensity"
+  )
 ggplotly(spectra.SG.scaled)
-
 ```
 
 ### OPLS-DA of PMX vs. IF in the wild type
 To see how the IF/PMX differentiation is affected by *fah1* and *omt1* mutants, here are OPLS-DA plots for only the WT spectra.
 
-```{r opls-da WT, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r opls-da WT, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_mat <- data.matrix(rmn_data_spread %>%
-                         filter(genotype == "Col-0") %>%
-                         select(-genotype, -cell.type, -replicate, -technical))
+  filter(genotype == "Col-0") %>%
+  select(-genotype, -cell.type, -replicate, -technical))
 rwnms <- rmn_data_spread %>%
   filter(genotype == "Col-0") %>%
   select(genotype, cell.type, replicate, technical) %>%
   unite("ID", genotype, cell.type, replicate, technical, sep = "_")
 rownames(rmn_mat) <- rwnms$ID
 rmn_meta <- as.matrix(rmn_data_spread %>%
-                         filter(genotype == "Col-0") %>%
-                         select(genotype, cell.type, replicate, technical))
+  filter(genotype == "Col-0") %>%
+  select(genotype, cell.type, replicate, technical))
 
 cell.type <- rmn_meta[, "cell.type"]
 rmn_oplsda <- opls(rmn_mat, cell.type, predI = 1, orthoI = NA)
@@ -411,44 +469,49 @@ rmn_oplsda <- opls(rmn_mat, cell.type, predI = 1, orthoI = NA)
 
 Much clearer! So now let's have a look at the loadings.
 
-```{r opls-da WT loadings, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r opls-da WT loadings, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
   rename(loading = p1) %>%
   mutate(wavenumber = as.numeric(wavenumber)) %>%
-  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
-              unite(lbl, Polymer, Substructure, sep = ", ") %>%
-              mutate(wavenumber = as.numeric(wavenumber),
-                     lbl = str_replace_all(lbl, "\\~", ""))) %>%
-  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad=TRUE))) +
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>%
+    unite(lbl, Polymer, Substructure, sep = ", ") %>%
+    mutate(
+      wavenumber = as.numeric(wavenumber),
+      lbl = str_replace_all(lbl, "\\~", "")
+    )) %>%
+  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad = TRUE))) +
   geom_line() +
-  geom_hline(yintercept = 0, linetype =2) +
-  labs(x = "Wavenumber",
-       y = "Loading") +
+  geom_hline(yintercept = 0, linetype = 2) +
+  labs(
+    x = "Wavenumber",
+    y = "Loading"
+  ) +
   theme_leo() +
-  geom_label_repel(aes(label = lbl), 
-                   nudge_y = 0.02,
-                   family = "Helvetica",
-                   segment.colour = "red")
+  geom_label_repel(aes(label = lbl),
+    nudge_y = 0.02,
+    family = "Helvetica",
+    segment.colour = "red"
+  )
 rmn_oplsda_load
 ```
 
-Cellulose peaks are quite important in the OPLS-DA model for differentiating between IF and PMX. The most important lignin peaks are the ones assigned to G-OH and G-CHO unit C=C and C=O stretches at 1662, and the aryl-OH/OCH~3~ at 1336. Those two are arguably the ones most related to the S/G ratio, so that's no surprise.
+Cellulose peaks are quite important in the OPLS-DA model for differentiating between IF and PMX. The most important lignin peaks are the ones assigned to G-OH and G-CHO unit C = C and C = O stretches at 1662, and the aryl-OH/OCH~3~ at 1336. Those two are arguably the ones most related to the S/G ratio, so that's no surprise.
 
 ### OPLS-DA of PMX vs. IF in *fah1* and *omt1*
 In the converse, that should mean that S-units are crucial for distinction of PMX/IF spectra, and *fah1* and *omt1* should overlap closer.
 
-```{r opls-da noS, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r opls-da noS, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_mat <- data.matrix(rmn_data_spread %>%
-                         filter(genotype %in% c("fah1", "omt1")) %>%
-                         select(-genotype, -cell.type, -replicate, -technical))
+  filter(genotype %in% c("fah1", "omt1")) %>%
+  select(-genotype, -cell.type, -replicate, -technical))
 rwnms <- rmn_data_spread %>%
   filter(genotype %in% c("fah1", "omt1")) %>%
   select(genotype, cell.type, replicate, technical) %>%
   unite("ID", genotype, cell.type, replicate, technical, sep = "_")
 rownames(rmn_mat) <- rwnms$ID
 rmn_meta <- as.matrix(rmn_data_spread %>%
-                         filter(genotype %in% c("fah1", "omt1")) %>%
-                         select(genotype, cell.type, replicate, technical))
+  filter(genotype %in% c("fah1", "omt1")) %>%
+  select(genotype, cell.type, replicate, technical))
 
 cell.type <- rmn_meta[, "cell.type"]
 rmn_oplsda <- opls(rmn_mat, cell.type, predI = 1, orthoI = NA)
@@ -456,24 +519,29 @@ rmn_oplsda <- opls(rmn_mat, cell.type, predI = 1, orthoI = NA)
 
 A little less clear of a divide between PMX and IF, but still there, meaning that we have more that just S/G to differentiate between those to lignins. So let's look at the loadings again.
 
-```{r opls-da noS loadings, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r opls-da noS loadings, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
   rename(loading = p1) %>%
   mutate(wavenumber = as.numeric(wavenumber)) %>%
-  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
-              unite(lbl, Polymer, Substructure, sep = ", ") %>%
-              mutate(wavenumber = as.numeric(wavenumber),
-                     lbl = str_replace_all(lbl, "\\~", ""))) %>%
-  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad=TRUE))) +
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>%
+    unite(lbl, Polymer, Substructure, sep = ", ") %>%
+    mutate(
+      wavenumber = as.numeric(wavenumber),
+      lbl = str_replace_all(lbl, "\\~", "")
+    )) %>%
+  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad = TRUE))) +
   geom_line() +
-  geom_hline(yintercept = 0, linetype =2) +
-  labs(x = "Wavenumber",
-       y = "Loading") +
+  geom_hline(yintercept = 0, linetype = 2) +
+  labs(
+    x = "Wavenumber",
+    y = "Loading"
+  ) +
   theme_leo() +
-  geom_label_repel(aes(label = lbl), 
-                   nudge_y = 0.02,
-                   family = "Helvetica",
-                   segment.colour = "red")
+  geom_label_repel(aes(label = lbl),
+    nudge_y = 0.02,
+    family = "Helvetica",
+    segment.colour = "red"
+  )
 rmn_oplsda_load
 ```
 
@@ -481,18 +549,18 @@ The loadings look rather similar, with cellulose as the strongest predictor foll
 
 ### OPLS-DA of *fah1* vs. *omt1* in the IF
 
-```{r opls-da G to 5-OH-G, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r opls-da G to 5-OH-G, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_mat <- data.matrix(rmn_data_spread %>%
-                         filter(genotype %in% c("fah1", "omt1") & cell.type == "IF") %>%
-                         select(-genotype, -cell.type, -replicate, -technical))
+  filter(genotype %in% c("fah1", "omt1") & cell.type == "IF") %>%
+  select(-genotype, -cell.type, -replicate, -technical))
 rwnms <- rmn_data_spread %>%
   filter(genotype %in% c("fah1", "omt1") & cell.type == "IF") %>%
   select(genotype, cell.type, replicate, technical) %>%
   unite("ID", genotype, cell.type, replicate, technical, sep = "_")
 rownames(rmn_mat) <- rwnms$ID
 rmn_meta <- as.matrix(rmn_data_spread %>%
-                         filter(genotype %in% c("fah1", "omt1") & cell.type == "IF") %>%
-                         select(genotype, cell.type, replicate, technical))
+  filter(genotype %in% c("fah1", "omt1") & cell.type == "IF") %>%
+  select(genotype, cell.type, replicate, technical))
 
 genotype <- rmn_meta[, "genotype"]
 rmn_oplsda <- opls(rmn_mat, genotype, predI = 1, orthoI = NA)
@@ -500,24 +568,29 @@ rmn_oplsda <- opls(rmn_mat, genotype, predI = 1, orthoI = NA)
 
 Still a good, predictive (Q2Y = 0.65), separation. Let's look at the loadings again.
 
-```{r opls-da G to 5-OH-G loadings, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r opls-da G to 5-OH-G loadings, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
   rename(loading = p1) %>%
   mutate(wavenumber = as.numeric(wavenumber)) %>%
-  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
-              unite(lbl, Polymer, Substructure, sep = ", ") %>%
-              mutate(wavenumber = as.numeric(wavenumber),
-                     lbl = str_replace_all(lbl, "\\~", ""))) %>%
-  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad=TRUE))) +
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>%
+    unite(lbl, Polymer, Substructure, sep = ", ") %>%
+    mutate(
+      wavenumber = as.numeric(wavenumber),
+      lbl = str_replace_all(lbl, "\\~", "")
+    )) %>%
+  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad = TRUE))) +
   geom_line() +
-  geom_hline(yintercept = 0, linetype =2) +
-  labs(x = "Wavenumber",
-       y = "Loading") +
+  geom_hline(yintercept = 0, linetype = 2) +
+  labs(
+    x = "Wavenumber",
+    y = "Loading"
+  ) +
   theme_leo() +
-  geom_label_repel(aes(label = lbl), 
-                   nudge_y = 0.02,
-                   family = "Helvetica",
-                   segment.colour = "red")
+  geom_label_repel(aes(label = lbl),
+    nudge_y = 0.02,
+    family = "Helvetica",
+    segment.colour = "red"
+  )
 rmn_oplsda_load
 ```
 
@@ -525,18 +598,18 @@ So the peak at 1662 is in fact specific to G units and not S or 5-OH-G units. So
 
 ### OPLS-DA of Col-0 vs. *omt1* in the IF
 
-```{r opls-da S to 5-OH-G, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r opls-da S to 5-OH-G, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_mat <- data.matrix(rmn_data_spread %>%
-                         filter(genotype %in% c("Col-0", "omt1") & cell.type == "IF") %>%
-                         select(-genotype, -cell.type, -replicate, -technical))
+  filter(genotype %in% c("Col-0", "omt1") & cell.type == "IF") %>%
+  select(-genotype, -cell.type, -replicate, -technical))
 rwnms <- rmn_data_spread %>%
   filter(genotype %in% c("Col-0", "omt1") & cell.type == "IF") %>%
   select(genotype, cell.type, replicate, technical) %>%
   unite("ID", genotype, cell.type, replicate, technical, sep = "_")
 rownames(rmn_mat) <- rwnms$ID
 rmn_meta <- as.matrix(rmn_data_spread %>%
-                         filter(genotype %in% c("Col-0", "omt1") & cell.type == "IF") %>%
-                         select(genotype, cell.type, replicate, technical))
+  filter(genotype %in% c("Col-0", "omt1") & cell.type == "IF") %>%
+  select(genotype, cell.type, replicate, technical))
 
 genotype <- rmn_meta[, "genotype"]
 rmn_oplsda <- opls(rmn_mat, genotype, predI = 1, orthoI = NA)
@@ -544,69 +617,58 @@ rmn_oplsda <- opls(rmn_mat, genotype, predI = 1, orthoI = NA)
 
 It works, let's see how.
 
-```{r opls-da S to 5-OH-G loadings, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r opls-da S to 5-OH-G loadings, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
   rename(loading = p1) %>%
   mutate(wavenumber = as.numeric(wavenumber)) %>%
-  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
-              unite(lbl, Polymer, Substructure, sep = ", ") %>%
-              mutate(wavenumber = as.numeric(wavenumber),
-                     lbl = str_replace_all(lbl, "\\~", ""))) %>%
-  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad=TRUE))) +
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>%
+    unite(lbl, Polymer, Substructure, sep = ", ") %>%
+    mutate(
+      wavenumber = as.numeric(wavenumber),
+      lbl = str_replace_all(lbl, "\\~", "")
+    )) %>%
+  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad = TRUE))) +
   geom_line() +
-  geom_hline(yintercept = 0, linetype =2) +
-  labs(x = "Wavenumber",
-       y = "Loading") +
+  geom_hline(yintercept = 0, linetype = 2) +
+  labs(
+    x = "Wavenumber",
+    y = "Loading"
+  ) +
   theme_leo() +
-  geom_label_repel(aes(label = lbl), 
-                   nudge_y = 0.02,
-                   family = "Helvetica",
-                   segment.colour = "red")
+  geom_label_repel(aes(label = lbl),
+    nudge_y = 0.02,
+    family = "Helvetica",
+    segment.colour = "red"
+  )
 rmn_oplsda_load
 ```
 
 So it looks like the peak at 1336 is specific to aryl-O-CH~3~, and does not actually respond to aryl-OH bonds. This could also be due to different concentrations of S-units in WT IF vs. 5-OH-G units in *omt1* IF, however.
 
-### Three-way PLS-DA of Col-0 vs. *fah1* vs. *omt1* in the IF
 
-In his FT-IR OPLS-DA paper, Andras' writes that he used OPLS-DA with three classes (fibres, vessels, rays). As far as I can make out however, having more than 2 classes somewhat defeats the purpose of OPLS-DA, which, to my understanding, is to compress the differentiating variation into one axis, while all variation that is not relevant to the discrimination between the two groups is expressed in the orthogonal axis. More than 2 classes would therefore remove the O(rthogonal) aspect, making it a PLS-DA. Accordingly, I did not find a way to perform a OPLS-DA with three classes in R. I could however perform a PLS-DA. 
-
-```{r opls-da S/G/5-OH-G, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
-rmn_mat <- data.matrix(rmn_data_spread %>%
-                         filter(genotype %in% c("Col-0", "fah1", "omt1") & cell.type == "IF") %>%
-                         select(-genotype, -cell.type, -replicate, -technical))
-rwnms <- rmn_data_spread %>%
-  filter(genotype %in% c("Col-0", "fah1", "omt1") & cell.type == "IF") %>%
-  select(genotype, cell.type, replicate, technical) %>%
-  unite("ID", genotype, cell.type, replicate, technical, sep = "_")
-rownames(rmn_mat) <- rwnms$ID
-rmn_meta <- as.matrix(rmn_data_spread %>%
-                         filter(genotype %in% c("Col-0", "fah1", "omt1") & cell.type == "IF") %>%
-                         select(genotype, cell.type, replicate, technical))
-
-genotype <- rmn_meta[, "genotype"]
-rmn_plsda <- opls(rmn_mat, genotype)
-```
-
-
-```{r opls-da S/G/5-OH-G loadings, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r opls-da S/G/5-OH-G loadings, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_plsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
   rename(loading = p1) %>%
   mutate(wavenumber = as.numeric(wavenumber)) %>%
-  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
-              unite(lbl, Polymer, Substructure, sep = ", ") %>%
-              mutate(wavenumber = as.numeric(wavenumber),
-                     lbl = str_replace_all(lbl, "\\~", ""))) %>%
-  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad=TRUE))) +
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>%
+    unite(lbl, Polymer, Substructure, sep = ", ") %>%
+    mutate(
+      wavenumber = as.numeric(wavenumber),
+      lbl = str_replace_all(lbl, "\\~", "")
+    )) %>%
+  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad = TRUE))) +
   geom_line() +
-  geom_hline(yintercept = 0, linetype =2) +
-  labs(x = "Wavenumber",
-       y = "Loading") +
+  geom_hline(yintercept = 0, linetype = 2) +
+  labs(
+    x = "Wavenumber",
+    y = "Loading"
+  ) +
   theme_leo() +
-  geom_label_repel(aes(label = lbl), 
-                   nudge_y = 0.02,
-                   family = "Helvetica",
-                   segment.colour = "red")
+  geom_label_repel(aes(label = lbl),
+    nudge_y = 0.02,
+    family = "Helvetica",
+    segment.colour = "red"
+  )
 rmn_plsda_load
 ```
 
@@ -614,7 +676,7 @@ rmn_plsda_load
 
 ### OPLS-DA of Col-0 vs. *cad4*x*cad5* in the IF
 
-```{r CHO spectra, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r CHO spectra, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_data_avg_CHO <- filter(rmn_data_avg, genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF")
 rmn_data_pre_CHO <- filter(rmn_data_pre, genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF")
 rmn_data_CHO <- filter(rmn_data, genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF")
@@ -623,61 +685,690 @@ rmn_data_CHO <- rmn_data_CHO %>%
 
 #### plotting scaled spectra ####
 spectra.CHO.scaled <- ggplot() +
-  geom_line(data = rmn_data_avg_CHO,
-            aes(
-              x = wavenumber, 
-              y = rollmean(mean.scaled, 3, na.pad=TRUE),
-              colour = genotype
-            ),
-            size = 1,
-            alpha = 1
+  geom_line(
+    data = rmn_data_avg_CHO,
+    aes(
+      x = wavenumber,
+      y = rollmean(mean.scaled, 3, na.pad = TRUE),
+      colour = genotype
+    ),
+    size = 1,
+    alpha = 1
   ) +
   scale_x_continuous(limits = c(300, 2000)) +
   scale_y_continuous(limits = c(-0.1, 1)) +
   scale_fill_viridis_d() +
   scale_colour_few() +
   theme_leo() +
-  labs(x = "Wavenumber",
-       y = "Normalised intensity")
+  labs(
+    x = "Wavenumber",
+    y = "Normalised intensity"
+  )
 ggplotly(spectra.CHO.scaled)
-
 ```
 
-```{r opls-da CHO, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r opls-da CHO, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_mat <- data.matrix(rmn_data_spread %>%
-                         filter(genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF") %>%
-                         select(-genotype, -cell.type, -replicate, -technical))
+  filter(genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF") %>%
+  select(-genotype, -cell.type, -replicate, -technical))
 rwnms <- rmn_data_spread %>%
   filter(genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF") %>%
   select(genotype, cell.type, replicate, technical) %>%
   unite("ID", genotype, cell.type, replicate, technical, sep = "_")
 rownames(rmn_mat) <- rwnms$ID
 rmn_meta <- as.matrix(rmn_data_spread %>%
-                         filter(genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF") %>%
-                         select(genotype, cell.type, replicate, technical))
+  filter(genotype %in% c("Col-0", "cad4xcad5") & cell.type == "IF") %>%
+  select(genotype, cell.type, replicate, technical))
 
 genotype <- rmn_meta[, "genotype"]
 rmn_oplsda <- opls(rmn_mat, genotype, predI = 1, orthoI = NA)
 ```
 
 
-```{r opls-da CHO loadings, fig.showtext=TRUE, out.width = '100%', warning=FALSE, message=FALSE}
+```{r opls-da CHO loadings, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 rmn_oplsda_load <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
   rename(loading = p1) %>%
   mutate(wavenumber = as.numeric(wavenumber)) %>%
-  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>% 
-              unite(lbl, Polymer, Substructure, sep = ", ") %>%
-              mutate(wavenumber = as.numeric(wavenumber),
-                     lbl = str_replace_all(lbl, "\\~", ""))) %>%
-  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad=TRUE))) +
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>%
+    unite(lbl, Polymer, Substructure, sep = ", ") %>%
+    mutate(
+      wavenumber = as.numeric(wavenumber),
+      lbl = str_replace_all(lbl, "\\~", "")
+    )) %>%
+  ggplot(aes(x = wavenumber, y = rollmean(loading, 5, na.pad = TRUE))) +
   geom_line() +
-  geom_hline(yintercept = 0, linetype =2) +
-  labs(x = "Wavenumber",
-       y = "Loading") +
+  geom_hline(yintercept = 0, linetype = 2) +
+  labs(
+    x = "Wavenumber",
+    y = "Loading"
+  ) +
   theme_leo() +
-  geom_label_repel(aes(label = lbl), 
-                   nudge_y = 0.02,
-                   family = "Helvetica",
-                   segment.colour = "red")
+  geom_label_repel(aes(label = lbl),
+    nudge_y = 0.02,
+    family = "Helvetica",
+    segment.colour = "red"
+  )
 rmn_oplsda_load
+```
+
+```{r spectrum IF, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
+rmn_data_var <- rmn_data %>%
+  filter(cell.type == "IF") %>%
+  group_by(wavenumber) %>%
+  summarise(
+    mean.scaled = mean(scaled, na.rm = TRUE),
+    st.dev = sd(scaled, na.rm = TRUE)
+  ) %>%
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>%
+    unite(lbl, Polymer, Substructure, sep = ", ") %>%
+    mutate(
+      wavenumber = as.numeric(wavenumber),
+      lbl = str_replace_all(lbl, "\\~", "")
+    ))
+
+#### plotting scaled spectra ####
+spectra_IF <- ggplot(data = rmn_data_var, aes(
+  y = rollmean(mean.scaled, 3, na.pad = TRUE),
+  x = wavenumber
+)) +
+  geom_ridgeline_gradient(aes(
+    height = 1 - rollmean(mean.scaled, 3, na.pad = TRUE),
+    fill = st.dev
+  ),
+  colour = "white"
+  ) +
+  # scale_x_continuous(limits = c(300, 2000)) +
+  labs(
+    x = "Wavenumber",
+    y = "Normalised intensity"
+  ) +
+  scale_fill_viridis_c() +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    legend.key.width = unit(4, "mm")
+  ) +
+  guides(fill = guide_legend()) +
+  geom_label_repel(aes(label = lbl),
+    nudge_y = 0.25,
+    family = "Helvetica",
+    segment.colour = "red",
+    size = 2
+  )
+```
+
+```{r opls-da IF, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
+rmn_data_spread$genotype <- ordered(rmn_data_spread$genotype, levels = c(
+  "Col-0",
+  "4cl1",
+  "4cl2",
+  "4cl1x4cl2",
+  "ccoaomt1",
+  "fah1",
+  "omt1",
+  "ccr1-3",
+  "cad4",
+  "cad5",
+  "cad4xcad5"
+))
+
+oplsda_if <- function(x, y) {
+  rmn_mat <- data.matrix(x %>%
+    filter(genotype %in% c("Col-0", y) & cell.type == "IF") %>%
+    select(-genotype, -cell.type, -replicate, -technical))
+  rwnms <- x %>%
+    filter(genotype %in% c("Col-0", y) & cell.type == "IF") %>%
+    select(genotype, cell.type, replicate, technical) %>%
+    unite("ID", genotype, cell.type, replicate, technical, sep = "_")
+  rownames(rmn_mat) <- rwnms$ID
+  rmn_meta <- as.matrix(x %>%
+    filter(genotype %in% c("Col-0", y) & cell.type == "IF") %>%
+    select(genotype, cell.type, replicate, technical))
+
+  genotype <- rmn_meta[, "genotype"]
+  rmn_oplsda <- opls(rmn_mat, genotype, predI = 1, orthoI = NA)
+  
+  loading <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
+  rename(loading = p1) %>%
+  mutate(wavenumber = as.numeric(wavenumber))
+  return(loading)
+}
+
+geno_list <- list(
+  "4cl1",
+  "4cl2",
+  "4cl1x4cl2",
+  "ccoaomt1",
+  "fah1",
+  "omt1",
+  "ccr1-3",
+  "cad4",
+  "cad5",
+  "cad4xcad5"
+)
+
+loadings <- vector("list", 10)
+for(i in geno_list){loadings[[i]] <- oplsda_if(rmn_data_spread, i)}
+loadings_df <- loadings[-c(1:10)] %>% 
+  kimisc::list_to_df() %>% 
+  unnest() %>%
+  mutate(loading = case_when(name %in% c("fah1", "omt1") ~ -loading,
+                             TRUE ~ loading)) %>%
+  # filter(loading > 0.05 | loading < -0.05) %>%
+  spread(key = wavenumber, value = loading)
+
+loadings_mat <- as.matrix(select(loadings_df, -name))
+rownames(loadings_mat) <- loadings_df$name
+
+color.fun <- colorRampPalette(brewer.pal(11, "RdBu"))
+
+# spectra_IF
+heatmap.2(loadings_mat,
+  Colv = FALSE,
+  col = color.fun(15),
+  trace = "none",
+  symbreaks = FALSE
+)
+```
+
+![](/home/leonard/Documents/Uni/PhD/Raman/loading_heatmap.png)
+```{r opls-da MX, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
+oplsda_mx <- function(x, y) {
+  rmn_mat <- data.matrix(x %>%
+    filter(genotype %in% c("Col-0", y) & cell.type == "PMX") %>%
+    select(-genotype, -cell.type, -replicate, -technical))
+  rwnms <- x %>%
+    filter(genotype %in% c("Col-0", y) & cell.type == "PMX") %>%
+    select(genotype, cell.type, replicate, technical) %>%
+    unite("ID", genotype, cell.type, replicate, technical, sep = "_")
+  rownames(rmn_mat) <- rwnms$ID
+  rmn_meta <- as.matrix(x %>%
+    filter(genotype %in% c("Col-0", y) & cell.type == "PMX") %>%
+    select(genotype, cell.type, replicate, technical))
+
+  genotype <- rmn_meta[, "genotype"]
+  rmn_oplsda <- opls(rmn_mat, genotype, predI = 1, orthoI = NA)
+  
+  loading <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
+  rename(loading = p1) %>%
+  mutate(wavenumber = as.numeric(wavenumber))
+  return(loading)
+}
+
+geno_list <- list(
+  "4cl1",
+  "4cl2",
+  "4cl1x4cl2",
+  "ccoaomt1",
+  "fah1",
+  "omt1",
+  "ccr1-3",
+  "cad4",
+  "cad5",
+  "cad4xcad5"
+)
+
+loadings <- vector("list", 10)
+for(i in geno_list){loadings[[i]] <- oplsda_mx(rmn_data_spread, i)}
+loadings_df <- loadings[-c(1:10)] %>% 
+  kimisc::list_to_df() %>% 
+  unnest() %>%
+  mutate(loading = case_when(name %in% c("fah1", "omt1") ~ -loading,
+                             TRUE ~ loading)) %>%
+  # filter(loading > 0.05 | loading < -0.05) %>%
+  spread(key = wavenumber, value = loading)
+
+loadings_mat <- as.matrix(select(loadings_df, -name))
+rownames(loadings_mat) <- loadings_df$name
+
+heatmap.2(loadings_mat,
+  Colv = FALSE,
+  col = color.fun(15),
+  trace = "none",
+  symbreaks = FALSE
+)
+Heatmap(loadings_mat,
+        cluster_columns = FALSE,
+        show_column_names = FALSE)
+```
+
+```{r opls-da iterate, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
+oplsda_iter <- function(x, b, y, z) {
+  rmn_mat <- data.matrix(x %>%
+    filter(genotype %in% c(y, z) & cell.type == b) %>%
+    select(-genotype, -cell.type, -replicate, -technical))
+  rwnms <- x %>%
+    filter(genotype %in% c(y, z) & cell.type == b) %>%
+    select(genotype, cell.type, replicate, technical) %>%
+    unite("ID", genotype, cell.type, replicate, technical, sep = "_")
+  rownames(rmn_mat) <- rwnms$ID
+  rmn_meta <- as.matrix(x %>%
+    filter(genotype %in% c(y, z) & cell.type == b) %>%
+    select(genotype, cell.type, replicate, technical))
+
+  genotype <- rmn_meta[, "genotype"]
+  rmn_oplsda <- opls(rmn_mat, genotype, predI = 1, orthoI = 1, crossvalI = 5)
+  
+  loading <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
+  rename(loading = p1) %>%
+  mutate(wavenumber = as.numeric(wavenumber))
+  return(loading)
+}
+
+celltype_list <- list(
+  "IF",
+  "PMX"
+)
+geno_list <- list(
+  "Col-0",
+  "4cl1",
+  "4cl2",
+  "4cl1x4cl2",
+  "ccoaomt1",
+  "fah1",
+  "omt1",
+  "ccr1-3",
+  "cad4",
+  "cad5",
+  "cad4xcad5"
+)
+
+loadings <- vector("list", 1)
+for (h in celltype_list){
+  for(i in geno_list){
+    for(j in geno_list){
+      if(i == j) next
+      loadings[[paste(h, i, j, sep = "_")]] <- oplsda_iter(rmn_data_spread, h, i, j)
+    }
+  }
+}
+
+loadings_df <- loadings[-1] %>% 
+  kimisc::list_to_df() %>% 
+  unnest() %>%
+  spread(key = wavenumber, value = loading) %>%
+  separate(name, sep = "_", into = c("cell.type", "genotype_1", "genotype_2"))
+
+loadings_df <- loadings_df[!duplicated(t(apply(loadings_df[c("cell.type","genotype_1", "genotype_2")], 1, sort))), ]
+
+loadings_df_mean <- loadings_df %>%
+  gather(key = "wavenumber", value = "loading", - cell.type, - genotype_1, - genotype_2) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  group_by(wavenumber) %>%
+  summarise(loading.mean = mean(abs(loading)))
+
+rmn_data_loading <- rmn_data %>%
+  group_by(wavenumber) %>%
+  summarise(
+    mean.scaled = mean(scaled, na.rm = TRUE)
+  ) %>%
+  left_join(loadings_df_mean) %>%
+  left_join(select(rmn_tab, wavenumber, Polymer, Substructure) %>%
+    unite(lbl, Polymer, Substructure, sep = ", ") %>%
+    mutate(
+      wavenumber = as.numeric(wavenumber),
+      lbl = str_replace_all(lbl, "\\~", "")
+    ))
+
+# pdf("overall_loadings.pdf")
+ggplot(data = rmn_data_loading, aes(
+  y = rollmean(mean.scaled, 3, na.pad = TRUE),
+  x = wavenumber
+)) +
+  geom_ridgeline_gradient(aes(
+    height = 1 - rollmean(mean.scaled, 3, na.pad = TRUE),
+    fill = loading.mean
+  ),
+  colour = "white"
+  ) +
+  scale_x_continuous(limits = c(300, 2000)) +
+  labs(
+    x = "Wavenumber",
+    y = "Normalised intensity"
+  ) +
+  scale_fill_viridis_c() +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    legend.key.width = unit(4, "mm")
+  ) +
+  guides(fill = guide_legend()) +
+  geom_label_repel(aes(label = lbl),
+    nudge_y = 0.25,
+    family = "Helvetica",
+    segment.colour = "red",
+    size = 2
+  )
+# dev.off()
+```
+```{r summary, fig.height = 15, fig.width = 15, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
+rmn_data$genotype <- ordered(rmn_data$genotype, levels = c(
+  "Col-0",
+  "4cl1",
+  "4cl2",
+  "4cl1x4cl2",
+  "ccoaomt1",
+  "fah1",
+  "omt1",
+  "ccr1-3",
+  "ccr1xfah1",
+  "cad4",
+  "cad5",
+  "cad4xcad5"
+))
+
+rmn_data_wavenumbers <- rmn_data %>%
+  select(-intensity, -corrected.intensity) %>%
+  filter(cell.type %in% c("IF", "PMX") & genotype != "ccr1xfah1") %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  filter(wavenumber %in% c(
+    379,
+    501,
+    522,
+    904,
+    1047,
+    1099,
+    1129,
+    1152,
+    1170,
+    1280,
+    1340,
+    1383,
+    1461,
+    1625,
+    1664
+  ))
+
+raman.letters <- rmn_data_wavenumbers %>%
+  group_by(cell.type, wavenumber) %>%
+  do(data.frame(tukey(.)))
+
+# raman.letters$value <- ifelse(raman.letters$variable == "lig.peak.pos", 1585, raman.letters$value)
+
+pdf("raman_peaks.pdf", width = 7, height = 20)
+ggplot(data = rmn_data_wavenumbers, aes(x = genotype, y = scaled)) +
+  geom_jitter(
+    aes(fill = scaled),
+    shape = 21,
+    width = 0.1,
+    alpha = 0.9,
+    size = 2,
+    stroke = 0.25
+  ) +
+  # geom_violin(draw_quantiles = 0.5, adjust = 1.5, fill = rgb(1,1,1,0.5)) +
+  geom_boxplot(fill = rgb(1,1,1,0.5), outlier.alpha = 0) +
+  geom_text(data = raman.letters,
+            aes(label = groups),
+            angle = 0,
+            hjust = 0,
+            vjust = 0.5,
+            family = "Helvetica") +
+  scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow") +
+  # scale_y_continuous(expand = expand_scale(mult = c(0.2,0.05))) +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  theme_leo() +
+  facet_grid(wavenumber ~ cell.type,
+             scales = "free_y") +
+  coord_flip()
+dev.off()
+
+```
+
+```{r peak clusters, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
+
+selected_peaks <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/raman_peak_detection.csv")
+
+kable(selected_peaks,
+  caption = "Table 2: Peaks crucial for mutat distinction.",
+  col.names = c(
+    "Peak",
+    "Wavenumber",
+    "Closest reported peak",
+    "Assigned bond",
+    "Assigned polymer",
+    "Assigned structure"
+  )
+) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+rmn_data_loading <- rmn_data %>%
+  group_by(wavenumber) %>%
+  summarise(
+    mean.scaled = mean(scaled, na.rm = TRUE)
+  ) %>%
+  left_join(loadings_df_mean) %>%
+  left_join(select(selected_peaks, peak, wavenumber) %>%
+    mutate(wavenumber = as.numeric(wavenumber)))
+
+pdf("overall_loadings_sel_peaks.pdf")
+ggplot(data = rmn_data_loading, aes(
+  y = rollmean(mean.scaled, 3, na.pad = TRUE),
+  x = wavenumber
+)) +
+  geom_ridgeline_gradient(aes(
+    height = 1 - rollmean(mean.scaled, 3, na.pad = TRUE),
+    fill = loading.mean
+  ),
+  colour = "white"
+  ) +
+  scale_x_continuous(limits = c(300, 2000)) +
+  labs(
+    x = "Wavenumber",
+    y = "Normalised intensity"
+  ) +
+  scale_fill_viridis_c() +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    legend.key.width = unit(4, "mm")
+  ) +
+  guides(fill = guide_legend()) +
+  geom_label_repel(aes(label = peak),
+    nudge_y = 0.25,
+    family = "Helvetica",
+    segment.colour = "red",
+    size = 4
+  )
+dev.off()
+
+rmn_peak_clust <- rmn_data_wavenumbers %>%
+  ungroup() %>%
+  group_by(wavenumber) %>%
+  mutate(scaled.z = scale_z(scaled)) %>%
+  select(-scaled) %>%
+  ungroup() %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  spread(key = wavenumber, value = scaled.z)
+
+peaks_mat <- as.matrix(select(selected_peaks, assigned.polymer))
+
+rmn_peak_mat <- as.matrix(rmn_peak_clust[, -c(1:4)])
+
+col_fun = circlize::colorRamp2(c(-2, -1, 0, 1, 2), brewer.pal(5, "YlGnBu"))
+
+pdf("peak.heatmap.pdf")
+Heatmap(rmn_peak_mat,
+        col = col_fun,
+        row_split = rmn_peak_clust$genotype,
+        left_annotation = rowAnnotation("Cell type" = rmn_peak_clust$cell.type, 
+                                        col = list("Cell type" = c("IF" = "#8c510a", "PMX" = "#01665e"))),
+        # right_annotation = rowAnnotation("genotype" = rmn_peak_clust$genotype),
+        bottom_annotation = HeatmapAnnotation(df = peaks_mat, 
+                                           which = "col",
+                                           name = "Polymer",
+                                           col = list("assigned.polymer" = c("Lignin" = "#d73027", 
+                                                                    "Unassigned" = "#ffffbf",
+                                                                    "Cellulose" = "#4575b4")
+                                                      )
+                                           )
+)
+dev.off()
+```
+
+![](/home/leonard/Documents/Uni/PhD/Raman/peak_heatmap.png)
+
+```{r change correlations, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
+
+rmn_data_corr <- rmn_data_wavenumbers %>%
+  ungroup() %>%
+  group_by(wavenumber) %>%
+  mutate(scaled.z = scale_z(scaled)) %>%
+  select(-scaled) %>%
+  ungroup() %>%
+  group_by(genotype, cell.type, wavenumber) %>%
+  summarise(mean.scaled = mean(scaled.z))
+
+rmn_data_corr <- rmn_data_corr %>%
+  left_join(filter(rmn_data_corr, genotype == "Col-0") %>%
+    ungroup() %>%
+    select(wavenumber, cell.type, mean.scaled) %>%
+    rename(scaled.WT = mean.scaled), by = c("wavenumber", "cell.type")) %>%
+  mutate(diff = mean.scaled - scaled.WT) %>%
+  select(-mean.scaled, -scaled.WT) %>%
+  spread(key = cell.type, value = diff)
+
+pdf("IF_MX_corr.pdf")
+ggplot(data = rmn_data_corr) +
+  geom_point(aes(
+    x = PMX,
+    y = IF
+  )) +
+  geom_abline(slope = 1, intercept = 0) +
+  geom_label_repel(data = filter(rmn_data_corr,
+                                 IF - PMX > 1 | IF -PMX < -1),
+                   aes(x = PMX,
+                       y = IF,
+                       label = paste(genotype, wavenumber)),
+    nudge_y = 0.25,
+    family = "Helvetica",
+    segment.colour = "red",
+    size = 4
+  ) +
+  theme_leo() +
+  scale_x_continuous(limits = c(-3, 3)) +
+  scale_y_continuous(limits = c(-3, 3)) +
+  coord_fixed()
+dev.off()
+```
+```{r change correlations, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
+
+rmn_data_FWHM <- rmn_data %>%
+  filter(wavenumber > 1550 & 
+           wavenumber < 1650 & 
+           genotype != "ccr1xfah1" &
+           cell.type %in% c("IF", "PMX")) %>%
+  ungroup() %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  summarise(lignin_FWHM = FWHM(scaled, wavenumber)) %>%
+  ungroup %>%
+  mutate(genotype = ordered(genotype, levels = c(
+  "Col-0",
+  "4cl1",
+  "4cl2",
+  "4cl1x4cl2",
+  "ccoaomt1",
+  "fah1",
+  "omt1",
+  "ccr1-3",
+  "ccr1xfah1",
+  "cad4",
+  "cad5",
+  "cad4xcad5"
+)))
+
+ggplot(data = rmn_data_FWHM, aes(x = genotype, y = lignin_FWHM)) +
+  geom_jitter(
+    aes(fill = lignin_FWHM),
+    shape = 21,
+    width = 0.1,
+    alpha = 0.9,
+    size = 2,
+    stroke = 0.25
+  ) +
+  # geom_violin(draw_quantiles = 0.5, adjust = 1.5, fill = rgb(1,1,1,0.5)) +
+  geom_boxplot(fill = rgb(1,1,1,0.5), outlier.alpha = 0) +
+  # geom_text(data = raman.letters,
+  #           aes(label = groups),
+  #           angle = 0,
+  #           hjust = 0,
+  #           vjust = 0.5,
+  #           family = "Helvetica") +
+  scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow") +
+  # scale_y_continuous(expand = expand_scale(mult = c(0.2,0.05))) +
+  theme_leo() +
+  facet_wrap(~ cell.type, ncol = 2)
+
+rmn_data_ridge <- rmn_data %>%
+  filter(
+    wavenumber > 1550 & 
+           wavenumber < 1650 & 
+           genotype != "ccr1xfah1" &
+           cell.type %in% c("IF", "PMX")) %>%
+  ungroup() %>%
+  mutate(genotype = ordered(genotype, levels = c(
+  "Col-0",
+  "4cl1",
+  "4cl2",
+  "4cl1x4cl2",
+  "ccoaomt1",
+  "fah1",
+  "omt1",
+  "ccr1-3",
+  "ccr1xfah1",
+  "cad4",
+  "cad5",
+  "cad4xcad5"
+)))
+
+pdf("peak1600_ridge.pdf")
+ggplot(data = rmn_data_ridge) + 
+  geom_ridgeline(aes(
+    x = wavenumber, 
+    y = genotype, 
+    height = rollmean(scaled, 10, na.pad = TRUE), 
+    fill = genotype, 
+    group = interaction(genotype, replicate, technical)
+    ),
+    alpha = 0.25,
+    size = 0.2,
+    # colour = NA,
+    scale = 1.5
+    ) +
+  scale_fill_viridis_d() +
+  scale_y_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  theme_leo() +
+  theme(panel.spacing = unit(5, "mm"),
+        axis.title.y = element_blank()) +
+  geom_vline(xintercept = 1603, colour = "grey", alpha = 0.75, size = 2) +
+  facet_wrap(~ cell.type, ncol = 2)
+dev.off()
+
 ```
