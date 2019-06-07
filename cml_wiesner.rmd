@@ -2,22 +2,28 @@
 title: "CML Wiesner analysis"
 author: "Leonard Blaschek"
 date: "17 May 2019"
-output: 
-  pdf_document:
-    latex_engine: lualatex
-    fig_caption: yes
-    fig_height: 6
-    includes:
-      in_header: rmd_temp.tex
-sansfont: Helvetica Neue LT Std
-monofont: Inconsolata
+output: html_document
+# output: 
+#   pdf_document:
+#     latex_engine: lualatex
+#     fig_caption: yes
+#     fig_height: 6
+#     includes:
+#       in_header: rmd_temp.tex
+# sansfont: Helvetica Neue LT Std
+# monofont: Inconsolata
 ---
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(showtext)
+library(lazyeval)
+library(agricolae)
+library(plotly)
 library(ggthemes)
+library(ggbeeswarm)
 library(tidyverse)
+library(gghighlight)
 
 #### import Helvetica Neue ####
 font_add(
@@ -31,9 +37,11 @@ showtext_auto()
 
 #### generating plot theme ####
 theme_leo <- function(base_size = 14,
-                      base_family = "Helvetica"){
-  theme_minimal(base_size = base_size,
-                base_family = base_family) %+replace%
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
     theme(
       strip.text = element_text(hjust = 0, face = "italic"),
       axis.ticks = element_line(
@@ -41,8 +49,10 @@ theme_leo <- function(base_size = 14,
         lineend = "square",
         color = "black"
       ),
-      axis.text.x = element_text(colour = "black", # flipped coords
-                                 margin = margin(1, 1, 1, 1)),
+      axis.text.x = element_text(
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
       axis.text.y = element_text(
         colour = "black",
         angle = 0,
@@ -62,72 +72,693 @@ theme_leo <- function(base_size = 14,
 }
 
 #### functions ####
-scale_range <- function(x){(x-min(x))/(max(x)-min(x))}
+scale_range <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+tukey <- function(x) {
+  aov1 <- aov(data = x, absorbance ~ genotype)
+  groups <- HSD.test(aov1, "genotype", alpha = 0.001)
+  groups$groups[["genotype"]] <- rownames(groups$groups)
+  groups$groups[["absorbance"]] <- -0.05
+  return(groups[["groups"]])
+}
 ```
 
 ## Load measurements
 
 ```{r load data, fig.showtext = TRUE, out.width = '100%', message = FALSE}
 cml_data <- read_csv(
-  "/home/leonard/Documents/Uni/Phloroglucinol/29-05_CML_measurements/cml_profiles.csv"
-  ) %>%
+  "/home/leonard/Documents/Uni/Phloroglucinol/19-05_CML_measurements/CML_profiles_warp.csv"
+) %>%
   rowid_to_column(var = "distance") %>%
-  gather(key = "ROI", 
-         value = "absorbance", 
-         -genotype, 
-         -replicate, 
-         -technical, 
-         -distance) %>%
-  mutate(ROI = str_replace(ROI, "ROI_", ""),
-         absorbance = na_if(absorbance, 0)) %>%
+  gather(
+    key = "ROI",
+    value = "absorbance",
+    -genotype,
+    -replicate,
+    -technical,
+    -distance
+  ) %>%
+  mutate(
+    ROI = str_replace(ROI, "ROI_", ""),
+    absorbance = na_if(absorbance, 0) / 255,
+    replicate = as.character(replicate),
+    genotype = ordered(genotype, levels = c(
+      "Col-0",
+      "4cl1",
+      "4cl2",
+      "4cl1x4cl2",
+      "ccoaomt1",
+      "fah1",
+      "omt1",
+      "ccr1-3",
+      "cad4",
+      "cad5",
+      "cad4xcad5"
+    ))
+  ) %>%
   drop_na() %>%
   group_by(genotype, replicate, technical, ROI) %>%
   mutate(
+    distance = 1:n(),
     # distance.scaled = scale(distance, center = TRUE, scale = TRUE),
     distance.scaled = scale_range(distance),
     absorbance.scaled = scale(absorbance, center = FALSE, scale = TRUE),
     # absorbance.scaled = scale_range(absorbance)
-    )
+  )
+
+cml_data_avg <- cml_data %>%
+  ungroup() %>%
+  group_by(genotype) %>%
+  summarise(a.median = median(absorbance))
+
+cml_data <- cml_data %>%
+  left_join(cml_data_avg, by = "genotype") %>%
+  mutate(
+    a.median.wt = filter(cml_data_avg, genotype == "Col-0")$a.median,
+    absorbance.rescaled = absorbance.scaled * (a.median / a.median.wt)
+  )
 
 head(cml_data)
 ```
 
-```{r scaled line plots, fig.showtext = TRUE, out.width = '100%', fig.height = 8, fig.width = 6, message = FALSE}
+```{r boxplot data, fig.showtext = TRUE, out.width = '100%', message = FALSE}
 
-ggplot(data = cml_data, aes(x = distance.scaled, y = absorbance.scaled)) +
-  geom_vline(xintercept = 0.5,
-             linetype = 2) +
+cml_data_length <- cml_data %>%
+  group_by(genotype, replicate, technical, ROI) %>%
+  summarise(length = max(distance))
+
+aov1 <- aov(data = cml_data_length, length ~ genotype)
+length_letters <- HSD.test(aov1, "genotype", alpha = 0.05)
+length_letters$groups[["genotype"]] <- rownames(length_letters$groups)
+length_letters$groups[["length"]] <- 10
+length_letters <- length_letters[["groups"]]
+
+ggplot(
+  data = cml_data_length,
+  aes(
+    x = genotype,
+    y = length
+  )
+) +
+  geom_jitter(
+    width = 0.2,
+    shape = 19,
+    size = 2,
+    stroke = 0,
+    alpha = 0.25
+  ) +
+  geom_boxplot(
+    fill = rgb(1, 1, 1, 0.5),
+    outlier.alpha = 0
+  ) +
+  geom_text(
+    data = length_letters,
+    aes(label = groups),
+    family = "Helvetica",
+    size = 4.5
+  ) +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  labs(y = "Cell wall thickness") +
+  theme_leo()
+```
+
+```{r boxplots 2, fig.showtext = TRUE, out.width = '100%', message = FALSE}
+
+cml_data_box <- cml_data %>%
+  group_by(genotype, replicate, technical, ROI) %>%
+  mutate(
+    length = n(),
+    position = ifelse(distance > (length(distance) / 2 - 2) & distance < (length(distance) / 2 + 2), "CML",
+      ifelse(distance > (length(distance) / 2 - 5) & distance < (length(distance) / 2 - 1), "S1",
+        ifelse(distance > (length(distance) / 2 + 1) & distance < (length(distance) / 2 + 5), "S1",
+          ifelse(distance.scaled > 0.1 & distance.scaled < 0.35, "S2",
+            ifelse(distance.scaled > 0.65 & distance.scaled < 0.9, "S2",
+              ifelse(distance.scaled > 0.9 & distance.scaled < 0.98, "S3",
+                ifelse(distance.scaled > 0.02 & distance.scaled < 0.1, "S3",
+                  NA
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  ) %>%
+  drop_na() %>%
+  mutate(position = ordered(position, levels = c("CML", "S1", "S2", "S3")))
+
+box_letters <- cml_data_box %>%
+  group_by(position) %>%
+  do(data.frame(tukey(.)))
+
+ggplot(
+  data = cml_data_box,
+  aes(
+    x = genotype,
+    y = absorbance
+  )
+) +
+  geom_rect(
+    data = tibble(position = c("CML", "S1", "S2", "S3")),
+    aes(x = NULL, y = NULL, fill = position),
+    xmin = -Inf,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf,
+    alpha = 0.5
+  ) +
+  scale_fill_brewer(palette = "YlGnBu") +
+  geom_quasirandom(
+    width = 0.2,
+    shape = 19,
+    size = 1.5,
+    stroke = 0,
+    alpha = 0.25,
+    # aes(colour = replicate)
+  ) +
+  geom_boxplot(
+    fill = rgb(1, 1, 1, 0.75),
+    outlier.alpha = 0
+  ) +
+  # geom_violin(
+  #   fill = rgb(1, 1, 1, 0.5),
+  #   draw_quantiles = 0.5
+  # ) +
+  geom_text(
+    data = box_letters,
+    aes(label = groups),
+    family = "Helvetica",
+    size = 4.5
+  ) +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  theme_leo() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,
+      vjust = 0.5,
+      hjust = 1
+    ),
+    axis.title.x = element_blank()
+  ) +
+  facet_wrap(~position, nrow = 1)
+```
+
+## Unscaled profiles
+```{r unscaled line plots, echo = FALSE, fig.showtext = TRUE, out.width = '100%', fig.height = 8, fig.width = 6, message = FALSE}
+
+ggplot(data = cml_data, aes(x = distance.scaled, y = absorbance)) +
+  # geom_vline(
+  #   xintercept = 0.55,
+  #   linetype = 2
+  # ) +
+  # geom_vline(
+  #   xintercept = 0.45,
+  #   linetype = 2
+  # ) +
+  #   geom_vline(
+  #   xintercept = 0.35,
+  #   linetype = 2
+  # ) +
+  #   geom_vline(
+  #   xintercept = 0.65,
+  #   linetype = 2
+  # ) +
+  #     geom_vline(
+  #   xintercept = 0.9,
+  #   linetype = 2
+  # ) +
+  #     geom_vline(
+  #   xintercept = 0.1,
+  #   linetype = 2
+  # ) +
+  #     geom_vline(
+  #   xintercept = 0.98,
+  #   linetype = 2
+  # ) +
+  #     geom_vline(
+  #   xintercept = 0.02,
+  #   linetype = 2
+  # ) +
+  geom_vline(
+    xintercept = 0.5,
+    colour = "#ffffcc",
+    alpha = 0.75,
+    size = 16
+  ) +
+  geom_vline(
+    xintercept = 0.4,
+    colour = "#a1dab4",
+    alpha = 0.75,
+    size = 16
+  ) +
+  geom_vline(
+    xintercept = 0.6,
+    colour = "#a1dab4",
+    alpha = 0.75,
+    size = 16
+  ) +
+  geom_vline(
+    xintercept = 0.225,
+    colour = "#41b6c4",
+    alpha = 0.75,
+    size = 41
+  ) +
+  geom_vline(
+    xintercept = 0.775,
+    colour = "#41b6c4",
+    alpha = 0.75,
+    size = 41
+  ) +
+  geom_vline(
+    xintercept = 0.06,
+    colour = "#225ea8",
+    alpha = 0.75,
+    size = 13
+  ) +
+  geom_vline(
+    xintercept = 0.94,
+    colour = "#225ea8",
+    alpha = 0.75,
+    size = 13
+  ) +
   geom_line(aes(group = interaction(ROI, replicate, genotype)),
-            alpha = 0.25) +
+    alpha = 0.25
+  ) +
   geom_smooth(aes(group = genotype),
-              method = "loess",
-              span = 0.15,
-              colour = NA,
-              fill = "blue",
-              alpha = 0.5) +
-  scale_x_continuous(breaks = c(0, 0.5, 1), labels = c("Lumen", "Middle lamella", "Lumen")) +
+    method = "loess",
+    span = 0.15,
+    colour = NA,
+    fill = "red",
+    alpha = 0.75
+  ) +
+  scale_x_continuous(
+    breaks = c(0.06, 0.225, 0.4, 0.5, 0.6, 0.775, 0.94),
+    labels = c("S3", "S2", "S1", "CML", "S1", "S2", "S3")
+  ) +
   labs(y = "Absorbance") +
   theme_leo() +
   theme(axis.title.x = element_blank()) +
   facet_wrap(~genotype, ncol = 1)
 ```
 
-```{r unscaled line plots, fig.showtext = TRUE, out.width = '100%', fig.height = 8, fig.width = 6, message = FALSE}
+## Profiles scaled by RMS normalisation
+```{r scaled line plots, echo = FALSE, fig.showtext = TRUE, out.width = '100%', fig.height = 8, fig.width = 6, message = FALSE}
 
-ggplot(data = cml_data, aes(x = distance.scaled, y = absorbance / 255)) +
-  geom_vline(xintercept = 0.5,
-             linetype = 2) +
+ggplot(data = cml_data, aes(x = distance.scaled, y = absorbance.scaled)) +
+  # geom_vline(
+  #   xintercept = 0.55,
+  #   linetype = 2
+  # ) +
+  # geom_vline(
+  #   xintercept = 0.45,
+  #   linetype = 2
+  # ) +
+  #   geom_vline(
+  #   xintercept = 0.35,
+  #   linetype = 2
+  # ) +
+  #   geom_vline(
+  #   xintercept = 0.65,
+  #   linetype = 2
+  # ) +
+  #     geom_vline(
+  #   xintercept = 0.9,
+  #   linetype = 2
+  # ) +
+  #     geom_vline(
+  #   xintercept = 0.1,
+  #   linetype = 2
+  # ) +
+  #     geom_vline(
+  #   xintercept = 0.98,
+  #   linetype = 2
+  # ) +
+  #     geom_vline(
+  #   xintercept = 0.02,
+  #   linetype = 2
+  # ) +
+  geom_vline(
+    xintercept = 0.5,
+    colour = "#ffffcc",
+    alpha = 0.75,
+    size = 16
+  ) +
+  geom_vline(
+    xintercept = 0.4,
+    colour = "#a1dab4",
+    alpha = 0.75,
+    size = 16
+  ) +
+  geom_vline(
+    xintercept = 0.6,
+    colour = "#a1dab4",
+    alpha = 0.75,
+    size = 16
+  ) +
+  geom_vline(
+    xintercept = 0.225,
+    colour = "#41b6c4",
+    alpha = 0.75,
+    size = 41
+  ) +
+  geom_vline(
+    xintercept = 0.775,
+    colour = "#41b6c4",
+    alpha = 0.75,
+    size = 41
+  ) +
+  geom_vline(
+    xintercept = 0.06,
+    colour = "#225ea8",
+    alpha = 0.75,
+    size = 13
+  ) +
+  geom_vline(
+    xintercept = 0.94,
+    colour = "#225ea8",
+    alpha = 0.75,
+    size = 13
+  ) +
   geom_line(aes(group = interaction(ROI, replicate, genotype)),
-            alpha = 0.25) +
+    alpha = 0.25
+  ) +
   geom_smooth(aes(group = genotype),
-              method = "loess",
-              span = 0.15,
-              colour = NA,
-              fill = "blue",
-              alpha = 0.5) +
-  scale_x_continuous(breaks = c(0, 0.5, 1), labels = c("Lumen", "Middle lamella", "Lumen")) +
-  labs(y = "Absorbance") +
+    method = "loess",
+    span = 0.15,
+    colour = NA,
+    fill = "red",
+    alpha = 0.75
+  ) +
+  scale_x_continuous(
+    breaks = c(0.06, 0.225, 0.4, 0.5, 0.6, 0.775, 0.94),
+    labels = c("S3", "S2", "S1", "CML", "S1", "S2", "S3")
+  ) +
+  labs(y = "Scaled absorbance") +
   theme_leo() +
   theme(axis.title.x = element_blank()) +
   facet_wrap(~genotype, ncol = 1)
+```
+
+## Scaled profiles adjusted by the median - median difference from the WT
+```{r rescaled line plots, echo = FALSE, fig.showtext = TRUE, out.width = '100%', fig.height = 8, fig.width = 6, message = FALSE}
+
+ggplot(data = cml_data, aes(x = distance.scaled, y = absorbance.rescaled)) +
+  # geom_vline(
+  #   xintercept = 0.55,
+  #   linetype = 2
+  # ) +
+  # geom_vline(
+  #   xintercept = 0.45,
+  #   linetype = 2
+  # ) +
+  #   geom_vline(
+  #   xintercept = 0.35,
+  #   linetype = 2
+  # ) +
+  #   geom_vline(
+  #   xintercept = 0.65,
+  #   linetype = 2
+  # ) +
+  #     geom_vline(
+  #   xintercept = 0.9,
+  #   linetype = 2
+  # ) +
+  #     geom_vline(
+  #   xintercept = 0.1,
+  #   linetype = 2
+  # ) +
+  #     geom_vline(
+  #   xintercept = 0.98,
+  #   linetype = 2
+  # ) +
+  #     geom_vline(
+  #   xintercept = 0.02,
+  #   linetype = 2
+  # ) +
+  geom_vline(
+    xintercept = 0.5,
+    colour = "#ffffcc",
+    alpha = 0.75,
+    size = 16
+  ) +
+  geom_vline(
+    xintercept = 0.4,
+    colour = "#a1dab4",
+    alpha = 0.75,
+    size = 16
+  ) +
+  geom_vline(
+    xintercept = 0.6,
+    colour = "#a1dab4",
+    alpha = 0.75,
+    size = 16
+  ) +
+  geom_vline(
+    xintercept = 0.225,
+    colour = "#41b6c4",
+    alpha = 0.75,
+    size = 41
+  ) +
+  geom_vline(
+    xintercept = 0.775,
+    colour = "#41b6c4",
+    alpha = 0.75,
+    size = 41
+  ) +
+  geom_vline(
+    xintercept = 0.06,
+    colour = "#225ea8",
+    alpha = 0.75,
+    size = 13
+  ) +
+  geom_vline(
+    xintercept = 0.94,
+    colour = "#225ea8",
+    alpha = 0.75,
+    size = 13
+  ) +
+  geom_line(aes(group = interaction(ROI, replicate, genotype)),
+    alpha = 0.25
+  ) +
+  geom_smooth(aes(group = genotype),
+    method = "loess",
+    span = 0.15,
+    colour = NA,
+    fill = "red",
+    alpha = 0.75
+  ) +
+  scale_x_continuous(
+    breaks = c(0.06, 0.225, 0.4, 0.5, 0.6, 0.775, 0.94),
+    labels = c("S3", "S2", "S1", "CML", "S1", "S2", "S3")
+  ) +
+  labs(y = "Rescaled absorbance") +
+  theme_leo() +
+  theme(axis.title.x = element_blank()) +
+  facet_wrap(~genotype, ncol = 1)
+```
+
+## Publication figure
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, warning = FALSE}
+
+box_letters <- cml_data_box %>%
+  group_by(position) %>%
+  do(data.frame(tukey(.)))
+
+layer_boxes <- ggplot(
+  data = cml_data_box,
+  aes(
+    x = genotype,
+    y = absorbance
+  )
+) +
+  geom_rect(
+    data = tibble(position = c("CML", "S1", "S2", "S3")),
+    aes(x = NULL, y = NULL, fill = position),
+    xmin = -Inf,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf,
+    alpha = 0.5
+  ) +
+  scale_fill_brewer(palette = "YlGnBu") +
+  geom_quasirandom(
+    width = 0.2,
+    shape = 19,
+    size = 1.5,
+    stroke = 0,
+    alpha = 0.25,
+    # aes(colour = replicate)
+  ) +
+  geom_boxplot(
+    fill = rgb(1, 1, 1, 0.75),
+    outlier.alpha = 0
+  ) +
+  # geom_violin(
+  #   fill = rgb(1, 1, 1, 0.5),
+  #   draw_quantiles = 0.5
+  # ) +
+  geom_text(
+    data = box_letters,
+    aes(label = groups),
+    family = "Helvetica",
+    size = 4.5
+  ) +
+  labs(y = "Absorbance") +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  theme_leo() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,
+      vjust = 0.5,
+      hjust = 1
+    ),
+    axis.title.x = element_blank()
+  ) +
+  facet_wrap(~position, nrow = 1)
+
+pdf("cml_box.pdf", width = 14)
+layer_boxes
+dev.off()
+
+prfl <- function(x, y, z) {
+  ggplot(data = filter(cml_data, genotype == x), aes(x = distance.scaled, y = absorbance)) +
+    geom_rect(data = cml_data[1,],
+      aes(
+        xmin = 0.45,
+        xmax = 0.55,
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      fill = "#ffffcc",
+      alpha = 0.5
+    ) +
+    geom_rect(data = cml_data[1,],
+      aes(
+        xmin = 0.35,
+        xmax = 0.45,
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      fill = "#a1dab4",
+      alpha = 0.5
+    ) +
+    geom_rect(data = cml_data[1,],
+      aes(
+        xmin = 0.55,
+        xmax = 0.65,
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      fill = "#a1dab4",
+      alpha = 0.5
+    ) +
+    geom_rect(data = cml_data[1,],
+      aes(
+        xmin = 0.1,
+        xmax = 0.35,
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      fill = "#41b6c4",
+      alpha = 0.5
+    ) +
+    geom_rect(data = cml_data[1,],
+      aes(
+        xmin = 0.65,
+        xmax = 0.9,
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      fill = "#41b6c4",
+      alpha = 0.5
+    ) +
+    geom_rect(data = cml_data[1,],
+      aes(
+        xmin = 0.02,
+        xmax = 0.1,
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      fill = "#225ea8",
+      alpha = 0.5
+    ) +
+    geom_rect(data = cml_data[1,],
+      aes(
+        xmin = 0.9,
+        xmax = 0.98,
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      fill = "#225ea8",
+      alpha = 0.5
+    ) +
+    geom_line(aes(group = interaction(ROI, replicate, genotype)),
+      alpha = 0.25
+    ) +
+    geom_line(
+      data = filter(cml_data, genotype == x & ROI == y & replicate == z),
+      colour = "red",
+      size = 1,
+      alpha = 0.85
+    ) +
+
+    scale_x_continuous(
+      breaks = c(0.06, 0.225, 0.4, 0.5, 0.6, 0.775, 0.94),
+      labels = c("S3", "S2", "S1", "CML", "S1", "S2", "S3")
+    ) +
+    scale_y_continuous(limits = c(0, 1)) +
+    labs(y = "Absorbance") +
+    theme_leo() +
+    theme(axis.title.x = element_blank())
+}
+
+pdf("profiles.pdf", height = 2, width = 4.5)
+prfl("Col-0", "12", "1")
+prfl("cad4xcad5", "9", "1")
+prfl("4cl1x4cl2", "8", "1")
+dev.off()
 ```

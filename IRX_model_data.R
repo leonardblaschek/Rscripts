@@ -287,21 +287,20 @@ raman.data.corrected$genotype <- ordered(raman.data.corrected$genotype,
 #### average Raman data, calculate integrals and detect peaks ####
 raman.data.plot <- raman.data.corrected %>%
   group_by(genotype, cell.type, replicate, technical) %>%
-  mutate("1599" = corrected.intensity[wavenumber == 1599],
+  mutate("1603" = corrected.intensity[wavenumber == 1603],
          "1662" = corrected.intensity[wavenumber == 1662],
          "1119" = corrected.intensity[wavenumber == 1119],
-         "1599/1119" = corrected.intensity[wavenumber == 1599] / corrected.intensity[wavenumber == 1119],
-         "1621/1599" = corrected.intensity[wavenumber == 1621] / corrected.intensity[wavenumber == 1599],
+         "1603/1119" = corrected.intensity[wavenumber == 1603] / corrected.intensity[wavenumber == 1119],
+         "1621/1603" = corrected.intensity[wavenumber == 1621] / corrected.intensity[wavenumber == 1603],
+         "1340/1603" = corrected.intensity[wavenumber == 1340] / corrected.intensity[wavenumber == 1603],
          "lig.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1550, to = 1640),
-         "cellu.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1110, to = 1130)) %>%
-  mutate("1599/1119" = ifelse(`1599/1119` > 30, NA, ifelse(`1599/1119` < -10, NA, `1599/1119`))
-  )
+         "cellu.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1110, to = 1130))
 
 raman.data.peaks <- distinct(raman.data.corrected) %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   filter(wavenumber > 1500 & wavenumber < 2000) %>%
   mutate("lig.peak.pos" = wavenumber[which.max(corrected.intensity)]) %>%
-  filter(wavenumber == 1599)
+  filter(wavenumber == 1603)
 
 raman.data.plot <- inner_join(raman.data.plot, raman.data.peaks) %>%
   ungroup() %>%
@@ -546,14 +545,14 @@ spectra.comp
 dev.off()
 
 # raman data overview
-raman.letters <- filter(raman.data.plot, variable %in% c("1599", "1119", "1599/1119", "1621/1599")) %>%
+raman.letters <- filter(raman.data.plot, variable %in% c("1603", "1119", "1603/1119", "1340/1603")) %>%
   group_by(cell.type, variable) %>%
   do(data.frame(tukey(.)))
 
 raman.letters$value <- ifelse(raman.letters$variable == "lig.peak.pos", 1585, raman.letters$value)
 
 
-raman.summary <- ggplot(data = filter(raman.data.plot, variable %in% c("1599", "1119", "1599/1119", "1621/1599")), aes(x = genotype, y = value)) +
+raman.summary <- ggplot(data = filter(raman.data.plot, variable %in% c("1603", "1119", "1603/1119", "1340/1603")), aes(x = genotype, y = value)) +
   geom_jitter(
     aes(fill = value.scaled),
     shape = 21,

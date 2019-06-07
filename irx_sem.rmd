@@ -107,7 +107,7 @@ ggplot(sem.data, aes(x = lig.peak, y = Circ., fill = cell.type)) +
   stat_smooth(method="loess", linetype = 2, se = FALSE, aes(colour = cell.type)) +
   theme_leo()
 
-ggplot(sem.data, aes(x = X1599.1119, y = Circ., fill = cell.type)) +
+ggplot(sem.data, aes(x = X1603.1119, y = Circ., fill = cell.type)) +
   scale_fill_viridis_d() +
   scale_colour_viridis_d() +
   geom_point(shape = 21, alpha = 0.75, size = 3) +
@@ -272,8 +272,8 @@ TM.multigroup <- function(x) {
           # n_f +
           mean.OD1 +
           Perim. +
-          # X1599.1119,
-          cellu.peak +
+          X1340.1603 +
+          # cellu.peak +
           # lig.peak.pos +
           lig.peak,
         random = ~1|replicate,
