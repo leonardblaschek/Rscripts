@@ -1,10 +1,8 @@
-library(reshape2)
-library(ggplot2)
 library(ggthemes)
 library(showtext)
-library(dplyr)
 library(cowplot)
 library(agricolae)
+library(tidyverse)
 
 font_add(
   "Helvetica",
@@ -64,7 +62,7 @@ tukey <- function(x) {
   aov1 <- aov(data = x, value ~ genotype)
   groups <- HSD.test(aov1, "genotype", alpha = 0.05)
   groups$groups[["genotype"]] <- rownames(groups$groups)
-  groups$groups[["value"]] <- 0
+  groups$groups[["value"]] <- 0.1
   return(groups[["groups"]])
 }
 
@@ -289,7 +287,7 @@ write_csv(irx.data, "Wiesner_IRX_data.csv")
 ###############################
 # Tukey-HSD test 
 ###############################
-irx.letters <- filter(irx.melt, variable %in% c("HeightByWidth")) %>%
+irx.letters <- filter(irx.melt, variable %in% c("Circ.")) %>%
   group_by(object, variable) %>%
   do(data.frame(tukey(.)))
 
@@ -297,7 +295,7 @@ irx.letters <- filter(irx.melt, variable %in% c("HeightByWidth")) %>%
 # shape and position overview plot
 ###############################
 irx.overview <-
-  ggplot(data = filter(irx.melt, variable %in% c("HeightByWidth")), aes(x = genotype, y = value)) +
+  ggplot(data = filter(irx.melt, variable %in% c("Circ.")), aes(x = genotype, y = value)) +
   geom_jitter(
     aes(fill = value.scaled),
     shape = 21,
@@ -317,11 +315,11 @@ irx.overview <-
   #            family = "Helvetica") +
   geom_text(data = irx.letters, 
              aes(label = groups), 
-             angle = 90,
-             hjust = 1, 
+             angle = 0,
+             # hjust = 1, 
              family = "Helvetica") +
   scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow") +
-  scale_y_continuous(expand = expand_scale(mult = c(0.28,0.05))) +
+  # scale_y_continuous(expand = expand_scale(mult = c(0.28,0.05))) +
   scale_x_discrete(
     labels = c(
       "Col-0",
@@ -337,10 +335,12 @@ irx.overview <-
     )
   ) +
   theme_leo() +
-  theme(legend.position = "none") +
-  facet_grid(variable ~ object, scales = "free_y") 
-  # coord_flip()
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 0, hjust = 0.5),
+        axis.text.y = element_text(hjust = 1)) +
+  facet_grid(object ~ variable, scales = "free_y") +
+  coord_flip()
 
-pdf("irx_overview_4.pdf", width = 10, height = 6)
+pdf("irx_overview_4.pdf", width = 4, height = 8)
 irx.overview
 dev.off()

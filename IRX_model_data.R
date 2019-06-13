@@ -1,16 +1,10 @@
 library(baseline)
 library(agricolae)
-library(dplyr)
-library(readr)
-library(stringr)
-library(tidyr)
-library(ggplot2)
 library(ggthemes)
 library(showtext)
-library(purrr)
-library(tibble)
 library(zoo)
 library(cowplot)
+library(tidyverse)
 
 
 #### import Helvetica Neue ####
@@ -96,7 +90,7 @@ wiesner.data.SMX <- read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/
                           skip = 2)
 wiesner.data.SMX$replicate <- as.factor(wiesner.data.SMX$replicate)
 
-wiesner.data <- full_join(select(wiesner.data, -technical), select(wiesner.data.SMX, -technical))
+wiesner.data <- rbind(select(wiesner.data, -technical), select(wiesner.data.SMX, -technical))
 
 wiesner.data$genotype <-
   ordered(
@@ -126,15 +120,17 @@ wiesner.data$replicate <-
 # calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. for the unlignified phloem
 wiesner.data$diff <-
   wiesner.data$OD.stained - wiesner.data$OD.unstained
+summary(wiesner.data)
+
 wiesner.data.bg <- wiesner.data %>%
   filter(cell.type == "PH") %>%
-  select(1:3, 9) %>%
+  select(1:2, 9) %>%
+  ungroup() %>%
   group_by(genotype, replicate) %>%
   summarise(OD.bg = mean(diff, na.rm = TRUE))
 
-wiesner.data.bg$cell.type <- NULL
 wiesner.data <-
-  merge(
+  full_join(
     wiesner.data,
     wiesner.data.bg,
     all = TRUE,
@@ -167,6 +163,7 @@ raman.nb <- read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/raman_IRX.csv")
 raman.irx <- left_join(raman.irx, raman.nb)
 raman.irx$replicate <- as.character(raman.irx$replicate)
 raman.irx$technical <- as.character(raman.irx$technical)
+write_csv(raman.irx, "raman_irx_shape.csv")
 
 #### import and tidy plant height data ####
 raman.heights <- read.csv("file:///home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
@@ -283,6 +280,7 @@ raman.data.corrected$genotype <- ordered(raman.data.corrected$genotype,
                                            "cad5",
                                            "cad4xcad5"
                                          ))
+write_csv(raman.data.corrected, "raman_spectra_corrected.csv")
 
 #### average Raman data, calculate integrals and detect peaks ####
 raman.data.plot <- raman.data.corrected %>%

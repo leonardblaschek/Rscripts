@@ -587,7 +587,7 @@ ggplot(data = cml_data, aes(x = distance.scaled, y = absorbance.rescaled)) +
   facet_wrap(~genotype, ncol = 1)
 ```
 
-## Publication figure
+## Publication figures
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, warning = FALSE}
 
 box_letters <- cml_data_box %>%
@@ -660,9 +660,9 @@ layer_boxes <- ggplot(
   ) +
   facet_wrap(~position, nrow = 1)
 
-pdf("cml_box.pdf", width = 14)
+# pdf("cml_box.pdf", width = 14)
 layer_boxes
-dev.off()
+# dev.off()
 
 prfl <- function(x, y, z) {
   ggplot(data = filter(cml_data, genotype == x), aes(x = distance.scaled, y = absorbance)) +
@@ -756,9 +756,98 @@ prfl <- function(x, y, z) {
     theme(axis.title.x = element_blank())
 }
 
-pdf("profiles.pdf", height = 2, width = 4.5)
+# pdf("profiles.pdf", height = 2, width = 4.5)
 prfl("Col-0", "12", "1")
 prfl("cad4xcad5", "9", "1")
 prfl("4cl1x4cl2", "8", "1")
-dev.off()
+# dev.off()
+```
+## Boxplot with mean absorbances per ROI
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, warning = FALSE}
+
+cml_data_box_avg <- cml_data_box %>%
+  group_by(genotype, replicate, technical, ROI, position) %>%
+  summarise(absorbance.mean = mean(absorbance, na.rm = TRUE))
+
+tukey <- function(x) {
+  aov1 <- aov(data = x, absorbance.mean ~ genotype)
+  groups <- HSD.test(aov1, "genotype", alpha = 0.001)
+  groups$groups[["genotype"]] <- rownames(groups$groups)
+  groups$groups[["absorbance.mean"]] <- -0.05
+  return(groups[["groups"]])
+}
+
+box_letters <- cml_data_box_avg %>%
+  group_by(position) %>%
+  do(data.frame(tukey(.)))
+
+layer_boxes_avg <- ggplot(
+  data = cml_data_box_avg,
+  aes(
+    x = genotype,
+    y = absorbance.mean
+  )
+) +
+  geom_rect(
+    data = tibble(position = c("CML", "S1", "S2", "S3")),
+    aes(x = NULL, y = NULL, fill = position),
+    xmin = -Inf,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf,
+    alpha = 0.5
+  ) +
+  scale_fill_brewer(palette = "YlGnBu") +
+  geom_quasirandom(
+    width = 0.2,
+    shape = 19,
+    size = 3,
+    stroke = 0,
+    alpha = 0.25,
+    # aes(colour = replicate)
+  ) +
+  geom_boxplot(
+    fill = rgb(1, 1, 1, 0.75),
+    outlier.alpha = 0
+  ) +
+  # geom_violin(
+  #   fill = rgb(1, 1, 1, 0.5),
+  #   draw_quantiles = 0.5
+  # ) +
+  geom_text(
+    data = box_letters,
+    aes(label = groups),
+    family = "Helvetica",
+    size = 4.5
+  ) +
+  labs(y = "Absorbance") +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  theme_leo() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,
+      vjust = 0.5,
+      hjust = 1
+    ),
+    axis.title.x = element_blank()
+  ) +
+  facet_wrap(~position, nrow = 1)
+
+# pdf("cml_box_avg.pdf", width = 14)
+layer_boxes_avg
+# dev.off()
 ```

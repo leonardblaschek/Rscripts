@@ -1154,7 +1154,7 @@ rmn_data_loading <- rmn_data %>%
   left_join(select(selected_peaks, peak, wavenumber) %>%
     mutate(wavenumber = as.numeric(wavenumber)))
 
-# pdf("overall_loadings_sel_peaks.pdf")
+pdf("overall_loadings_sel_peaks.pdf")
 ggplot(data = rmn_data_loading, aes(
   y = rollmean(mean.scaled, 3, na.pad = TRUE),
   x = wavenumber
@@ -1183,7 +1183,7 @@ ggplot(data = rmn_data_loading, aes(
     segment.colour = "red",
     size = 4
   )
-# dev.off()
+dev.off()
 
 rmn_peak_clust <- rmn_data_wavenumbers %>%
   ungroup() %>%

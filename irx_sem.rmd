@@ -9,11 +9,14 @@ always_allow_html: yes
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-library(ggplot2)
 library(ggthemes)
 library(nlme)
 library(piecewiseSEM)
-library(dplyr)
+library(Hmisc)
+library(zoo)
+library(ggridges)
+library(ggrepel)
+library(tidyverse)
 
 #### generating plot theme ####
 theme_leo <- function(base_size = 12,
@@ -107,7 +110,7 @@ ggplot(sem.data, aes(x = lig.peak, y = Circ., fill = cell.type)) +
   stat_smooth(method="loess", linetype = 2, se = FALSE, aes(colour = cell.type)) +
   theme_leo()
 
-ggplot(sem.data, aes(x = X1603.1119, y = Circ., fill = cell.type)) +
+ggplot(sem.data, aes(x = Circ., y = HeightByWidth, fill = cell.type)) +
   scale_fill_viridis_d() +
   scale_colour_viridis_d() +
   geom_point(shape = 21, alpha = 0.75, size = 3) +
@@ -216,15 +219,13 @@ plot(second.model, digits = 2)
 This third model is a multigroup model contrasting the IRX responses and their causes between vessel types. Lignin content is only a significant predictor for circularity in the PMX. However, lignin content of both PMX and SMX directly impacts plant height.
 
 ```{r multigroup}
-
-
-
 third.model <-   psem(
   lme(Circ. ~
-        n_v +
-        # n_f +
+        n_p +
+        n_f +
         mean.OD1 +
         Perim. +
+        X1340.1603 +
         # cellu.peak +
         # lig.peak.pos +
         lig.peak,
@@ -311,6 +312,19 @@ summary(TM.multigroup("PMX"), .progressBar = FALSE)
 plot(TM.multigroup("PMX"))
 summary(TM.multigroup("SMX"), .progressBar = FALSE)
 plot(TM.multigroup("SMX"))
+
+summary(lme(Circ. ~
+          n_v +
+          # n_f +
+          mean.OD1 +
+          Perim. +
+          X1340.1603 +
+          # cellu.peak +
+          # lig.peak.pos +
+          lig.peak,
+        random = ~1|replicate,
+        data = filter(drop_na(sem.data), cell.type == "PMX")
+    ))
 ```
 
 ```{r average data}
@@ -355,5 +369,167 @@ third.model <-   psem(
 summary(third.model, .progressBar = FALSE)
 
 plot(third.model, digits = 2)
+```
 
+```{r, corrplots, warning=FALSE}
+#### calculate linear regressions ####
+raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd") 
+raman_irx <- read_csv("raman_irx_shape.csv", col_types = "ccccddddddddddd")
+raman_corr <- right_join(raman_spectra, select(raman_irx, genotype:cell.type, Circ.))
+raman_corr_switch <- left_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
+                                       col_types = "cccc"), raman_corr) %>%
+  mutate(technical = str_c(technical, "switched", sep = "_"),
+         cell.type = "SMX")
+raman_corr <- raman_corr %>%
+  anti_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
+                     col_types = "cccc")) %>%
+  bind_rows(raman_corr_switch)
+
+lin.reg <- function(x) {
+  corr.mat <- as.matrix(x[, c("corrected.intensity", "Circ.")])
+  corr <- data.frame(rcorr(corr.mat)$r)
+  corr$p <- data.frame(rcorr(corr.mat)$P)
+  corr["wavenumber"] <- unique(as.numeric(x$wavenumber))
+  reg <- lm(Circ. ~ corrected.intensity, data = x)
+  mod <- summary(reg)["adj.r.squared"]
+  return(c(corr, mod))
+}
+
+irx_raman_corr <- drop_na(raman_corr) %>%
+  group_by(wavenumber, cell.type) %>%
+  do(data.frame(lin.reg(.))) %>%
+  select(-Circ., -p.Circ.) %>%
+  rename(r = corrected.intensity,
+         p = p.corrected.intensity) %>%
+  drop_na() %>%
+  full_join(raman_corr %>% 
+              ungroup() %>% 
+              group_by(cell.type, wavenumber) %>% 
+              summarise(intensity.mean = mean(corrected.intensity, na.rm = TRUE))) %>%
+  filter(wavenumber > 300 & wavenumber < 2000)
+
+plot_correlations <- function(x, y, z) {
+ggplot(data = filter(x, cell.type == y)) +
+  geom_ridgeline_gradient(aes(
+    height = max(intensity.mean) - rollmean(intensity.mean, 3, na.pad = TRUE),
+    fill = r,
+    y = rollmean(intensity.mean, 3, na.pad = TRUE),
+    x = wavenumber
+  ),
+  colour = "white"
+  ) +
+  scale_x_reverse(limits = c(2000, 300)) +
+  labs(
+    x = "Wavenumber",
+    y = "Absolute intensity"
+  ) +
+  scale_fill_distiller(palette = z) +
+  scale_colour_distiller(palette = z) +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    legend.key.width = unit(4, "mm")
+  ) +
+  guides(fill = guide_legend(), colour = "none") +
+  geom_label_repel(data = filter(x, 
+                                 cell.type == y & 
+                                   (r > (max(x$r[x$cell.type == y]) - 0.02) | 
+                                      r < (min(x$r[x$cell.type == y]) + 0.02))),
+                   aes(x = wavenumber,
+                       y = intensity.mean,
+                       label = wavenumber,
+                       colour = r),
+    nudge_y = 750,
+    family = "Helvetica",
+    segment.colour = "black",
+    size = 2
+  ) +
+  annotate("text", label = y, y = max(x$intensity.mean[x$cell.type == y]), x = 2000)
+}
+
+plot_correlations(irx_raman_corr, "PX", "PiYG")
+plot_correlations(irx_raman_corr, "PMX", "PuOr")
+plot_correlations(irx_raman_corr, "SMX", "RdBu")
+```
+
+```{r}
+raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd") 
+raman_irx <- read_csv("raman_irx_shape.csv", col_types = "ccccddddddddddd")
+raman_corr <- right_join(raman_spectra, select(raman_irx, genotype:cell.type, Circ.))
+raman_corr_switch <- left_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
+                                       col_types = "cccc"), raman_corr) %>%
+  mutate(technical = str_c(technical, "switched", sep = "_"),
+         cell.type = "SMX")
+raman_corr <- raman_corr %>%
+  anti_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
+                     col_types = "cccc")) %>%
+  bind_rows(raman_corr_switch) %>%
+  group_by(cell.type) %>%
+  mutate(intensity.norm = corrected.intensity / corrected.intensity[wavenumber == 1603])
+
+lin.reg <- function(x) {
+  corr.mat <- as.matrix(x[, c("intensity.norm", "Circ.")])
+  corr <- data.frame(rcorr(corr.mat)$r)
+  corr$p <- data.frame(rcorr(corr.mat)$P)
+  corr["wavenumber"] <- unique(as.numeric(x$wavenumber))
+  reg <- lm(Circ. ~ intensity.norm, data = x)
+  mod <- summary(reg)["adj.r.squared"]
+  return(c(corr, mod))
+}
+
+irx_raman_corr <- drop_na(raman_corr) %>%
+  group_by(wavenumber, cell.type) %>%
+  do(data.frame(lin.reg(.))) %>%
+  select(-Circ., -p.Circ.) %>%
+  rename(r = intensity.norm,
+         p = p.intensity.norm) %>%
+  drop_na() %>%
+  full_join(raman_corr %>% 
+              ungroup() %>% 
+              group_by(cell.type, wavenumber) %>% 
+              summarise(intensity.mean = mean(intensity.norm, na.rm = TRUE))) %>%
+  filter(wavenumber > 300 & wavenumber < 2000)
+
+plot_correlations <- function(x, y, z) {
+ggplot(data = filter(x, cell.type == y)) +
+  geom_ridgeline_gradient(aes(
+    height = max(intensity.mean) - rollmean(intensity.mean, 3, na.pad = TRUE),
+    fill = r,
+    y = rollmean(intensity.mean, 3, na.pad = TRUE),
+    x = wavenumber
+  ),
+  colour = "white"
+  ) +
+  scale_x_reverse(limits = c(2000, 300)) +
+  labs(
+    x = "Wavenumber",
+    y = "Intensity normalised to 1603"
+  ) +
+  scale_fill_distiller(palette = z) +
+  scale_colour_distiller(palette = z) +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    legend.key.width = unit(4, "mm")
+  ) +
+  guides(fill = guide_legend(), colour = "none") +
+  geom_label_repel(data = filter(x, 
+                                 cell.type == y & 
+                                   (r > (max(x$r[x$cell.type == y]) - 0.04) | 
+                                      r < (min(x$r[x$cell.type == y]) + 0.04))),
+                   aes(x = wavenumber,
+                       y = intensity.mean,
+                       label = wavenumber,
+                       colour = r),
+    nudge_y = 0.25,
+    family = "Helvetica",
+    segment.colour = "black",
+    size = 2
+  ) +
+  annotate("text", label = y, y = max(x$intensity.mean[x$cell.type == y]), x = 2000)
+}
+
+plot_correlations(irx_raman_corr, "PX", "PiYG")
+plot_correlations(irx_raman_corr, "PMX", "PuOr")
+plot_correlations(irx_raman_corr, "SMX", "RdBu")
 ```
