@@ -9,6 +9,7 @@ always_allow_html: yes
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
+library(showtext)
 library(ggthemes)
 library(nlme)
 library(piecewiseSEM)
@@ -17,6 +18,15 @@ library(zoo)
 library(ggridges)
 library(ggrepel)
 library(tidyverse)
+
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+showtext_auto()
 
 #### generating plot theme ####
 theme_leo <- function(base_size = 12,
@@ -226,6 +236,7 @@ third.model <-   psem(
         mean.OD1 +
         Perim. +
         X1340.1603 +
+        X1670.1603 +
         # cellu.peak +
         # lig.peak.pos +
         lig.peak,
@@ -273,6 +284,7 @@ TM.multigroup <- function(x) {
           # n_f +
           mean.OD1 +
           Perim. +
+          X1670.1603 +
           X1340.1603 +
           # cellu.peak +
           # lig.peak.pos +
@@ -371,7 +383,7 @@ summary(third.model, .progressBar = FALSE)
 plot(third.model, digits = 2)
 ```
 
-```{r, corrplots, warning=FALSE}
+```{r, corrplots, warning=FALSE, fig.showtext = TRUE, out.width = '100%', message = FALSE}
 #### calculate linear regressions ####
 raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd") 
 raman_irx <- read_csv("raman_irx_shape.csv", col_types = "ccccddddddddddd")
@@ -420,6 +432,7 @@ ggplot(data = filter(x, cell.type == y)) +
   ) +
   scale_x_reverse(limits = c(2000, 300)) +
   labs(
+    title = y,
     x = "Wavenumber",
     y = "Absolute intensity"
   ) +
@@ -443,16 +456,15 @@ ggplot(data = filter(x, cell.type == y)) +
     family = "Helvetica",
     segment.colour = "black",
     size = 2
-  ) +
-  annotate("text", label = y, y = max(x$intensity.mean[x$cell.type == y]), x = 2000)
+  )
 }
 
-plot_correlations(irx_raman_corr, "PX", "PiYG")
+plot_correlations(irx_raman_corr, "PX", "PuOr")
 plot_correlations(irx_raman_corr, "PMX", "PuOr")
-plot_correlations(irx_raman_corr, "SMX", "RdBu")
+plot_correlations(irx_raman_corr, "SMX", "PuOr")
 ```
 
-```{r}
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE}
 raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd") 
 raman_irx <- read_csv("raman_irx_shape.csv", col_types = "ccccddddddddddd")
 raman_corr <- right_join(raman_spectra, select(raman_irx, genotype:cell.type, Circ.))
@@ -464,7 +476,7 @@ raman_corr <- raman_corr %>%
   anti_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
                      col_types = "cccc")) %>%
   bind_rows(raman_corr_switch) %>%
-  group_by(cell.type) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
   mutate(intensity.norm = corrected.intensity / corrected.intensity[wavenumber == 1603])
 
 lin.reg <- function(x) {
@@ -488,7 +500,8 @@ irx_raman_corr <- drop_na(raman_corr) %>%
               ungroup() %>% 
               group_by(cell.type, wavenumber) %>% 
               summarise(intensity.mean = mean(intensity.norm, na.rm = TRUE))) %>%
-  filter(wavenumber > 300 & wavenumber < 2000)
+  filter(wavenumber > 300 & wavenumber < 2000) %>%
+  drop_na()
 
 plot_correlations <- function(x, y, z) {
 ggplot(data = filter(x, cell.type == y)) +
@@ -502,6 +515,7 @@ ggplot(data = filter(x, cell.type == y)) +
   ) +
   scale_x_reverse(limits = c(2000, 300)) +
   labs(
+    title = y,
     x = "Wavenumber",
     y = "Intensity normalised to 1603"
   ) +
@@ -525,11 +539,10 @@ ggplot(data = filter(x, cell.type == y)) +
     family = "Helvetica",
     segment.colour = "black",
     size = 2
-  ) +
-  annotate("text", label = y, y = max(x$intensity.mean[x$cell.type == y]), x = 2000)
+  )
 }
 
-plot_correlations(irx_raman_corr, "PX", "PiYG")
+plot_correlations(irx_raman_corr, "PX", "PuOr")
 plot_correlations(irx_raman_corr, "PMX", "PuOr")
-plot_correlations(irx_raman_corr, "SMX", "RdBu")
+plot_correlations(irx_raman_corr, "SMX", "PuOr")
 ```

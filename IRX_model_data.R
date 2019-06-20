@@ -291,6 +291,7 @@ raman.data.plot <- raman.data.corrected %>%
          "1603/1119" = corrected.intensity[wavenumber == 1603] / corrected.intensity[wavenumber == 1119],
          "1621/1603" = corrected.intensity[wavenumber == 1621] / corrected.intensity[wavenumber == 1603],
          "1340/1603" = corrected.intensity[wavenumber == 1340] / corrected.intensity[wavenumber == 1603],
+         "1670/1603" = corrected.intensity[wavenumber == 1670] / corrected.intensity[wavenumber == 1603],
          "lig.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1550, to = 1640),
          "cellu.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1110, to = 1130))
 
