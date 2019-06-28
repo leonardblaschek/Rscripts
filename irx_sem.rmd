@@ -236,7 +236,7 @@ third.model <-   psem(
         mean.OD1 +
         Perim. +
         X1340.1603 +
-        X1670.1603 +
+        X1664.1603 +
         # cellu.peak +
         # lig.peak.pos +
         lig.peak,
@@ -284,11 +284,16 @@ TM.multigroup <- function(x) {
           # n_f +
           mean.OD1 +
           Perim. +
-          X1670.1603 +
+          X1664.1603 +
           X1340.1603 +
+          # X1147.1603 +
+          # X1131.1603 +
+          X1457.1340 +
+          X1147.1603 +
           # cellu.peak +
           # lig.peak.pos +
-          lig.peak,
+          X1603.1099,
+          # lig.peak,
         random = ~1|replicate,
         data = filter(drop_na(sem.data), cell.type == x)
     ),
@@ -302,19 +307,31 @@ TM.multigroup <- function(x) {
     #     random = ~1|replicate,
     #     data = filter(drop_na(sem.data), cell.type == x)
     # ),
-    lme(HeightByWidth ~
-          # mean.OD1 +
-          # lig.peak +
-          # n_v +
-          Circ.,
-        random = ~1|replicate,
-        data = filter(drop_na(sem.data), cell.type == x)
-    ),
-    # lme(rel.Height ~
+    # lme(HeightByWidth ~
+    #       # mean.OD1 +
+    #       # lig.peak +
+    #       # n_v +
     #       Circ.,
     #     random = ~1|replicate,
     #     data = filter(drop_na(sem.data), cell.type == x)
     # ),
+    lme(X1147.1603 ~
+          Perim.,
+        random = ~1|replicate,
+        data = filter(drop_na(sem.data), cell.type == x)
+    ),
+    lme(X1603.1099 ~
+          Perim.,
+        random = ~1|replicate,
+        data = filter(drop_na(sem.data), cell.type == x)
+    ),
+    lme(mean.OD1 ~
+          X1664.1603 +
+          X1603.1099 +
+          X1621.1603,
+        random = ~1|replicate,
+        data = filter(drop_na(sem.data), cell.type == x)
+    ),
     data = filter(drop_na(sem.data), cell.type == x)
   )
 }
@@ -339,51 +356,7 @@ summary(lme(Circ. ~
     ))
 ```
 
-```{r average data}
-avg.data <- read.csv("SEM_data_avg.csv")
-third.model <-   psem(
-  lme(Circ. ~
-        n_v +
-        # n_f +
-        mean.OD1 +
-        Perim. +
-        # cellu.peak +
-        # lig.peak.pos +
-        lig.peak,
-      random = ~1|replicate/cell.type,
-      data = drop_na(avg.data)
-  ),
-  # lme(Perim. ~
-  #       # n_v,
-  #       # n_f +
-  #       mean.OD1 +
-  #       # cellu.peak +
-  #       # lig.peak.pos +
-  #       lig.peak,
-  #     random = ~1|replicate/cell.type,
-  #     data = drop_na(sem.data)
-  # ),
-  # lme(HeightByWidth ~
-  #       # mean.OD1 +
-  #       # lig.peak +
-  #       Circ.,
-  #     random = ~1|replicate/cell.type,
-  #     data = drop_na(avg.data)
-  # ),
-  # lme(rel.Height ~
-  #       Circ.,
-  #     random = ~1|replicate/cell.type,
-  #     data = drop_na(sem.data)
-  # ),
-  data = drop_na(avg.data)
-)
-
-summary(third.model, .progressBar = FALSE)
-
-plot(third.model, digits = 2)
-```
-
-```{r, corrplots, warning=FALSE, fig.showtext = TRUE, out.width = '100%', message = FALSE}
+```{r, corrplots, warning=FALSE, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = FALSE}
 #### calculate linear regressions ####
 raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd") 
 raman_irx <- read_csv("raman_irx_shape.csv", col_types = "ccccddddddddddd")
@@ -464,7 +437,7 @@ plot_correlations(irx_raman_corr, "PMX", "PuOr")
 plot_correlations(irx_raman_corr, "SMX", "PuOr")
 ```
 
-```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE}
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = FALSE}
 raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd") 
 raman_irx <- read_csv("raman_irx_shape.csv", col_types = "ccccddddddddddd")
 raman_corr <- right_join(raman_spectra, select(raman_irx, genotype:cell.type, Circ.))
@@ -493,6 +466,89 @@ irx_raman_corr <- drop_na(raman_corr) %>%
   group_by(wavenumber, cell.type) %>%
   do(data.frame(lin.reg(.))) %>%
   select(-Circ., -p.Circ.) %>%
+  rename(r = intensity.norm,
+         p = p.intensity.norm) %>%
+  drop_na() %>%
+  full_join(raman_corr %>% 
+              ungroup() %>% 
+              group_by(cell.type, wavenumber) %>% 
+              summarise(intensity.mean = mean(intensity.norm, na.rm = TRUE))) %>%
+  filter(wavenumber > 300 & wavenumber < 2000) %>%
+  drop_na()
+
+plot_correlations <- function(x, y, z) {
+ggplot(data = filter(x, cell.type == y)) +
+  geom_ridgeline_gradient(aes(
+    height = max(intensity.mean) - rollmean(intensity.mean, 3, na.pad = TRUE),
+    fill = r,
+    y = rollmean(intensity.mean, 3, na.pad = TRUE),
+    x = wavenumber
+  ),
+  colour = "white"
+  ) +
+  scale_x_reverse(limits = c(2000, 300)) +
+  labs(
+    title = y,
+    x = "Wavenumber",
+    y = "Intensity normalised to 1603"
+  ) +
+  scale_fill_distiller(palette = z) +
+  scale_colour_distiller(palette = z) +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    legend.key.width = unit(4, "mm")
+  ) +
+  guides(fill = guide_legend(), colour = "none") +
+  geom_label_repel(data = filter(x, 
+                                 cell.type == y & 
+                                   (r > (max(x$r[x$cell.type == y]) - 0.04) | 
+                                      r < (min(x$r[x$cell.type == y]) + 0.04))),
+                   aes(x = wavenumber,
+                       y = intensity.mean,
+                       label = wavenumber,
+                       colour = r),
+    nudge_y = 0.25,
+    family = "Helvetica",
+    segment.colour = "black",
+    size = 2
+  )
+}
+
+plot_correlations(irx_raman_corr, "PX", "PuOr")
+plot_correlations(irx_raman_corr, "PMX", "PuOr")
+plot_correlations(irx_raman_corr, "SMX", "PuOr")
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = FALSE}
+raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd") 
+raman_irx <- read_csv("raman_irx_shape.csv", col_types = "ccccddddddddddd")
+raman_corr <- right_join(raman_spectra, select(raman_irx, genotype:cell.type, Perim.))
+raman_corr_switch <- left_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
+                                       col_types = "cccc"), raman_corr) %>%
+  mutate(technical = str_c(technical, "switched", sep = "_"),
+         cell.type = "SMX")
+raman_corr <- raman_corr %>%
+  anti_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
+                     col_types = "cccc")) %>%
+  bind_rows(raman_corr_switch) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(intensity.norm = corrected.intensity / corrected.intensity[wavenumber == 1603])
+
+lin.reg <- function(x) {
+  corr.mat <- as.matrix(x[, c("intensity.norm", "Perim.")])
+  corr <- data.frame(rcorr(corr.mat)$r)
+  corr$p <- data.frame(rcorr(corr.mat)$P)
+  corr["wavenumber"] <- unique(as.numeric(x$wavenumber))
+  reg <- lm(Perim. ~ intensity.norm, data = x)
+  mod <- summary(reg)["adj.r.squared"]
+  return(c(corr, mod))
+}
+
+irx_raman_corr <- drop_na(raman_corr) %>%
+  group_by(wavenumber, cell.type) %>%
+  do(data.frame(lin.reg(.))) %>%
+  select(-Perim., -p.Perim.) %>%
   rename(r = intensity.norm,
          p = p.intensity.norm) %>%
   drop_na() %>%

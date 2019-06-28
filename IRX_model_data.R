@@ -288,10 +288,14 @@ raman.data.plot <- raman.data.corrected %>%
   mutate("1603" = corrected.intensity[wavenumber == 1603],
          "1662" = corrected.intensity[wavenumber == 1662],
          "1119" = corrected.intensity[wavenumber == 1119],
-         "1603/1119" = corrected.intensity[wavenumber == 1603] / corrected.intensity[wavenumber == 1119],
+         "1603/1099" = corrected.intensity[wavenumber == 1603] / corrected.intensity[wavenumber == 1099],
          "1621/1603" = corrected.intensity[wavenumber == 1621] / corrected.intensity[wavenumber == 1603],
          "1340/1603" = corrected.intensity[wavenumber == 1340] / corrected.intensity[wavenumber == 1603],
-         "1670/1603" = corrected.intensity[wavenumber == 1670] / corrected.intensity[wavenumber == 1603],
+         "1664/1603" = corrected.intensity[wavenumber == 1664] / corrected.intensity[wavenumber == 1603],
+         "1147/1603" = corrected.intensity[wavenumber == 1147] / corrected.intensity[wavenumber == 1603],
+         "1457/1603" = corrected.intensity[wavenumber == 1457] / corrected.intensity[wavenumber == 1603],
+         "1457/1340" = corrected.intensity[wavenumber == 1457] / corrected.intensity[wavenumber == 1340],
+         "1131/1603" = corrected.intensity[wavenumber == 1131] / corrected.intensity[wavenumber == 1603],
          "lig.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1550, to = 1640),
          "cellu.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1110, to = 1130))
 
