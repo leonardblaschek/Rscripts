@@ -1395,10 +1395,9 @@ rmn_data_filled <- rmn_data %>%
                             fill = NA, 
                             align = "center"))
 
-peak_df <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/all_lit_peaks.csv") 
-# %>%
-#   mutate("assigned bond" = replace_na(`assigned bond`, "unassigned"),
-#          "assigned subunit" = replace_na(`assigned subunit`, "unassigned"))
+peak_df <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/all_lit_peaks.csv") %>%
+  mutate("assigned bond" = replace_na(`assigned bond`, "unassigned"),
+         "assigned subunit" = replace_na(`assigned subunit`, "unassigned"))
 rmn_mat <- rmn_data_filled %>%
   unite(ID, genotype, cell.type, replicate, technical, sep = "_") %>%
   select(ID, wavenumber, filled) %>%
@@ -1408,12 +1407,12 @@ rmn_mat <- rmn_data_filled %>%
 
 rmn_cor <- cor(as.matrix(rmn_mat))
 
-# heatmaply_cor(rmn_cor,
-#               k_row = 3,
-#               k_col = 8,
-#               # colors = viridis,
-#               row_side_colors = peak_df$`assigned polymer`,
-#               col_side_colors = peak_df$`assigned subunit`)
+heatmaply_cor(rmn_cor,
+              k_row = 3,
+              k_col = 8,
+              # colors = viridis,
+              row_side_colors = peak_df$`assigned polymer`,
+              col_side_colors = peak_df$`assigned subunit`)
 
 col4 <- brewer.pal(4, "YlGnBu")
 col6 <- brewer.pal(6, "Dark2")
@@ -1423,7 +1422,7 @@ aheatmap(rmn_cor,
          annColors = list(`assigned subunit` = col6, `assigned polymer` = col4))
 ```
 
-```{r S-peaks}
+```{r S-peaks, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
 library(tukeygrps)
 rmn_data_wavenumbers <- rmn_data %>%
   select(-intensity, -corrected.intensity) %>%
@@ -1441,7 +1440,17 @@ rmn_data_wavenumbers <- rmn_data %>%
   mutate(cluster = case_when(
     wavenumber %in% c(1149, 1338, 1396) ~ "1",
     wavenumber %in% c(1461, 1129, 1367, 1384) ~ "2"
+  ),
+  wavenumber = ordered(wavenumber, levels = c(
+    "1149",
+    "1338",
+    "1396",
+    "1461",
+    "1129",
+    "1367",
+    "1384"
   ))
+  )
 
 raman.letters <- letter_groups(rmn_data_wavenumbers, scaled, genotype, "tukey", cell.type, wavenumber)
 
@@ -1485,6 +1494,7 @@ ggplot(data = rmn_data_wavenumbers, aes(x = genotype, y = scaled)) +
     )
   ) +
   theme_leo() +
+  theme(axis.title = element_blank()) +
   facet_grid(wavenumber ~ cell.type,
     scales = "free_y"
   ) +

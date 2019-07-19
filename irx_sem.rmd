@@ -286,14 +286,13 @@ TM.multigroup <- function(x) {
           Perim. +
           X1664.1603 +
           X1340.1603 +
-          # X1147.1603 +
           # X1131.1603 +
-          X1457.1340 +
+          # X1457.1340 +
           X1147.1603 +
           # cellu.peak +
           # lig.peak.pos +
-          X1603.1099,
-          # lig.peak,
+          # X1603.1099,
+          lig.peak,
         random = ~1|replicate,
         data = filter(drop_na(sem.data), cell.type == x)
     ),
@@ -315,23 +314,23 @@ TM.multigroup <- function(x) {
     #     random = ~1|replicate,
     #     data = filter(drop_na(sem.data), cell.type == x)
     # ),
-    lme(X1147.1603 ~
-          Perim.,
-        random = ~1|replicate,
-        data = filter(drop_na(sem.data), cell.type == x)
-    ),
-    lme(X1603.1099 ~
-          Perim.,
-        random = ~1|replicate,
-        data = filter(drop_na(sem.data), cell.type == x)
-    ),
-    lme(mean.OD1 ~
-          X1664.1603 +
-          X1603.1099 +
-          X1621.1603,
-        random = ~1|replicate,
-        data = filter(drop_na(sem.data), cell.type == x)
-    ),
+    # lme(X1147.1603 ~
+    #       Perim.,
+    #     random = ~1|replicate,
+    #     data = filter(drop_na(sem.data), cell.type == x)
+    # ),
+    # lme(X1603.1099 ~
+    #       Perim.,
+    #     random = ~1|replicate,
+    #     data = filter(drop_na(sem.data), cell.type == x)
+    # ),
+    # lme(mean.OD1 ~
+    #       X1664.1603 +
+    #       X1603.1099 +
+    #       X1621.1603,
+    #     random = ~1|replicate,
+    #     data = filter(drop_na(sem.data), cell.type == x)
+    # ),
     data = filter(drop_na(sem.data), cell.type == x)
   )
 }
@@ -356,7 +355,7 @@ summary(lme(Circ. ~
     ))
 ```
 
-```{r, corrplots, warning=FALSE, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = FALSE}
+```{r, corrplots, warning=FALSE, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
 #### calculate linear regressions ####
 raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd") 
 raman_irx <- read_csv("raman_irx_shape.csv", col_types = "ccccddddddddddd")
@@ -437,7 +436,7 @@ plot_correlations(irx_raman_corr, "PMX", "PuOr")
 plot_correlations(irx_raman_corr, "SMX", "PuOr")
 ```
 
-```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = FALSE}
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
 raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd") 
 raman_irx <- read_csv("raman_irx_shape.csv", col_types = "ccccddddddddddd")
 raman_corr <- right_join(raman_spectra, select(raman_irx, genotype:cell.type, Circ.))
@@ -520,7 +519,7 @@ plot_correlations(irx_raman_corr, "PMX", "PuOr")
 plot_correlations(irx_raman_corr, "SMX", "PuOr")
 ```
 
-```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = FALSE}
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
 raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd") 
 raman_irx <- read_csv("raman_irx_shape.csv", col_types = "ccccddddddddddd")
 raman_corr <- right_join(raman_spectra, select(raman_irx, genotype:cell.type, Perim.))
