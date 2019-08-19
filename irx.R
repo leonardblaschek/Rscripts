@@ -3,6 +3,7 @@ library(showtext)
 library(cowplot)
 library(agricolae)
 library(tidyverse)
+library(reshape2)
 
 font_add(
   "Helvetica",
@@ -285,17 +286,45 @@ irx.melt <- subset(irx.melt, variable != "number")
 write_csv(irx.data, "Wiesner_IRX_data.csv")
 
 ###############################
+# calculate averages
+###############################
+irx.avg <- irx.data %>%
+  group_by(object) %>%
+  summarise(mean.dist = mean(Distance),
+            sd.dist = sd(Distance),
+            mean.area = mean(Area),
+            sd.area = sd(Area))
+
+write_csv(irx.avg, "irx_avg.csv")
+
+###############################
 # Tukey-HSD test 
 ###############################
-irx.letters <- filter(irx.melt, variable %in% c("Circ.")) %>%
-  group_by(object, variable) %>%
-  do(data.frame(tukey(.)))
+irx.melt <- irx.melt %>%
+  filter(variable %in% c("Area", "Perim.", "Circ."))
+
+irx.melt.avg <- irx.melt %>%
+  group_by(genotype, variable, object) %>%
+  summarise(mean.value = mean(value),
+            sd.value = sd(value))
+
+write_csv(irx.melt.avg, "irx_averages.csv")
+library(tukeygrps)
+irx.letters <- letter_groups(
+  irx.melt, 
+  value, 
+  genotype, 
+  "tukey", 
+  variable, 
+  object, 
+  # print_position = "above"
+  )
 
 ###############################
 # shape and position overview plot
 ###############################
 irx.overview <-
-  ggplot(data = filter(irx.melt, variable %in% c("Circ.")), aes(x = genotype, y = value)) +
+  ggplot(data = irx.melt, aes(x = genotype, y = value)) +
   geom_jitter(
     aes(fill = value.scaled),
     shape = 21,
@@ -316,8 +345,11 @@ irx.overview <-
   geom_text(data = irx.letters, 
              aes(label = groups), 
              angle = 0,
-             # hjust = 1, 
-             family = "Helvetica") +
+             hjust = 1,
+             vjust = 0.5,
+             family = "Helvetica",
+             size = 4
+            ) +
   scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow") +
   # scale_y_continuous(expand = expand_scale(mult = c(0.28,0.05))) +
   scale_x_discrete(
@@ -334,13 +366,14 @@ irx.overview <-
       expression(paste(italic("cad4"), "x", italic("cad5")))
     )
   ) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.2,0.05))) +
   theme_leo() +
   theme(legend.position = "none",
         axis.text.x = element_text(angle = 0, hjust = 0.5),
         axis.text.y = element_text(hjust = 1)) +
-  facet_grid(object ~ variable, scales = "free_y") +
+  facet_grid(object ~ variable, scales = "free") +
   coord_flip()
 
-pdf("irx_overview_4.pdf", width = 4, height = 8)
+pdf("irx_overview.pdf", width = 10, height = 10)
 irx.overview
 dev.off()

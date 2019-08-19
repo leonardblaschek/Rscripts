@@ -289,6 +289,8 @@ raman.data.plot <- raman.data.corrected %>%
          "1662" = corrected.intensity[wavenumber == 1662],
          "1119" = corrected.intensity[wavenumber == 1119],
          "1603/1099" = corrected.intensity[wavenumber == 1603] / corrected.intensity[wavenumber == 1099],
+         "1099/1603" = corrected.intensity[wavenumber == 1099] / corrected.intensity[wavenumber == 1603],
+         "1119/1603" = corrected.intensity[wavenumber == 1119] / corrected.intensity[wavenumber == 1603],
          "1621/1603" = corrected.intensity[wavenumber == 1621] / corrected.intensity[wavenumber == 1603],
          "1340/1603" = corrected.intensity[wavenumber == 1340] / corrected.intensity[wavenumber == 1603],
          "1664/1603" = corrected.intensity[wavenumber == 1664] / corrected.intensity[wavenumber == 1603],
@@ -296,6 +298,7 @@ raman.data.plot <- raman.data.corrected %>%
          "1457/1603" = corrected.intensity[wavenumber == 1457] / corrected.intensity[wavenumber == 1603],
          "1457/1340" = corrected.intensity[wavenumber == 1457] / corrected.intensity[wavenumber == 1340],
          "1131/1603" = corrected.intensity[wavenumber == 1131] / corrected.intensity[wavenumber == 1603],
+         "381/1099" = corrected.intensity[wavenumber == 381] / corrected.intensity[wavenumber == 1099],
          "lig.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1550, to = 1640),
          "cellu.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1110, to = 1130))
 
@@ -712,3 +715,38 @@ irx.neighbours <-
 pdf("irx_overview_5.pdf", width = 10, height = 6)
 irx.neighbours
 dev.off()
+
+#### averages ####
+irx_export <- irx.avg %>%
+  filter(genotype == "Col-0") %>%
+  group_by(cell.type) %>%
+  summarise(S.mean = mean(`1340/1603`),
+            G.mean = mean(`1664/1603`),
+            lig_1603.mean = mean(`1603/1099`),
+            cellu_cryst.mean = mean(`381/1099`),
+            cellu_1099.mean = mean(`1099/1603`),
+            cellu_1119.mean = mean(`1119/1603`),
+            ald.mean = mean(`1621/1603`),
+            S.sd = sd(`1340/1603`),
+            G.sd = sd(`1664/1603`),
+            lig_1603.sd = sd(`1603/1099`),
+            cellu_cryst.sd = sd(`381/1099`),
+            cellu_1099.sd = sd(`1099/1603`),
+            cellu_1119.sd = sd(`1119/1603`),
+            ald.sd = sd(`1621/1603`)) %>%
+  select(sort(current_vars()))
+
+irx_neighbour_exp <- raman.irx %>%
+  filter(genotype == "Col-0") %>%
+  group_by(cell.type) %>%
+  summarise(mean_vessel = mean(n_v),
+            mean_fibre = mean(n_f),
+            mean_parenchyma = mean(n_p),
+            sd_vessel = sd(n_v),
+            sd_fibre = sd(n_f),
+            sd_parenchyma = sd(n_p),
+            n = n())
+
+write_csv(irx_neighbour_exp, "neighbours.csv")
+
+write_csv(irx_export, "irx_averages.csv")
