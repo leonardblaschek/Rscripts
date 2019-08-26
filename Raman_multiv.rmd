@@ -1416,10 +1416,13 @@ heatmaply_cor(rmn_cor,
 
 col4 <- brewer.pal(4, "YlGnBu")
 col6 <- brewer.pal(6, "Dark2")
+pdf("correlation_heatmap.pdf")
 aheatmap(rmn_cor, 
          annCol = peak_df[, c(3, 4)],
          Rowv = FALSE,
-         annColors = list(`assigned subunit` = col6, `assigned polymer` = col4))
+         annColors = list(`assigned subunit` = col6, `assigned polymer` = col4),
+         fontsize = 5)
+dev.off()
 ```
 
 ```{r S-peaks, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE}
@@ -1456,7 +1459,7 @@ raman.letters <- letter_groups(rmn_data_wavenumbers, scaled, genotype, "tukey", 
 
 # raman.letters$value <- ifelse(raman.letters$variable == "lig.peak.pos", 1585, raman.letters$value)
 
-# pdf("raman_peaks.pdf", width = 7, height = 20)
+# pdf("raman_peaks.pdf", width = 7, height = 7)
 ggplot(data = rmn_data_wavenumbers, aes(x = genotype, y = scaled)) +
   geom_rect(aes(y = NULL,
                 x = NULL,

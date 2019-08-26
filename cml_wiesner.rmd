@@ -17,13 +17,13 @@ output: html_document
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(showtext)
-library(lazyeval)
+# library(lazyeval)
 library(agricolae)
 library(plotly)
 library(ggthemes)
 library(ggbeeswarm)
 library(tidyverse)
-library(gghighlight)
+# library(gghighlight)
 
 #### import Helvetica Neue ####
 font_add(
@@ -590,9 +590,33 @@ ggplot(data = cml_data, aes(x = distance.scaled, y = absorbance.rescaled)) +
 ## Publication figures
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, warning = FALSE}
 
-box_letters <- cml_data_box %>%
-  group_by(position) %>%
-  do(data.frame(tukey(.)))
+library(tukeygrps)
+
+cml_data_box <- cml_data_box %>%
+  unite("genotype_position", genotype, position, sep = "_")
+
+box_letters <- letter_groups(cml_data_box, absorbance, genotype_position, "kruskal") %>%
+  separate(genotype_position, into = c("genotype", "position"), sep = "_")
+
+cml_data_box <- cml_data_box %>%
+  separate(genotype_position, into = c("genotype", "position"), sep = "_")
+
+# tukey <- function(x) {
+#   aov1 <- aov(data = x, absorbance ~ interaction(genotype, position))
+#   groups <- HSD.test(aov1, "interaction(genotype, position)", alpha = 0.001)
+#   groups$groups[["genotype"]] <- rownames(groups$groups)
+#   groups$groups[["absorbance"]] <- -0.05
+#   return(groups[["groups"]])
+# }
+# 
+# box_letters <- cml_data_box[, -c(1, 3, 4, 5)] %>%
+#   # group_by(position) %>%
+#   do(data.frame(tukey(.))) %>% 
+#   separate(genotype, into = c("genotype", "position"), sep = "\\.")
+
+# box_letters <- cml_data_box %>%
+#   group_by(position) %>%
+#   do(data.frame(tukey(.)))
 
 layer_boxes <- ggplot(
   data = cml_data_box,
@@ -660,9 +684,9 @@ layer_boxes <- ggplot(
   ) +
   facet_wrap(~position, nrow = 1)
 
-# pdf("cml_box.pdf", width = 14)
+pdf("cml_box_across.pdf", width = 14)
 layer_boxes
-# dev.off()
+dev.off()
 
 prfl <- function(x, y, z) {
   ggplot(data = filter(cml_data, genotype == x), aes(x = distance.scaled, y = absorbance)) +
