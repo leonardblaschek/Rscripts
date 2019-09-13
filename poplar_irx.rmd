@@ -1,0 +1,225 @@
+---
+title: "Poplar irx"
+author: "Leonard Blaschek"
+date: "09/09/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(showtext)
+library(tidyverse)
+library(ggthemes)
+library(nlme)
+library(piecewiseSEM)
+library(cowplot)
+
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 16,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.25,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      legend.text = element_text(size = rel(0.8)),
+      legend.key.height = unit(4, "mm"),
+      legend.key.width = unit(30, "mm"),
+      # plot.margin = unit(c(0, 0, 0, 0), "cm"),
+
+      complete = TRUE
+    )
+}
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+
+pop_irx <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Poplar/poplar_irx.csv")
+
+#### create reference at the heigth of the cambium for distance calculation ####
+pop_irx_ref <- pop_irx %>%
+  filter(object == "ref") %>%
+  select(c(
+    "genotype",
+    "replicate",
+    "X",
+    "Y",
+    "Length"
+  ))
+pop_irx_ref$ref.y1 <- pop_irx_ref$Y
+pop_irx_ref$ref.y2 <- pop_irx_ref$Y
+pop_irx_ref$ref.x1 <- pop_irx_ref$X - (pop_irx_ref$Length / 2)
+pop_irx_ref$ref.x2 <- pop_irx_ref$X + (pop_irx_ref$Length / 2)
+
+#### merge reference into data frame ####
+pop_irx <- pop_irx %>%
+  filter(object != "ref") %>%
+  full_join(select(pop_irx_ref, -X, -Y, -Length),
+    by = c("genotype", "replicate")
+  )
+
+#### calculate difference of the centre of each vessel to the cambium ####
+pop_irx$Distance <-
+  apply(
+    pop_irx[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
+    1,
+    function(x) {
+      a <- c(x[1], x[2])
+      b <- c(x[3], x[5])
+      c <- c(x[4], x[6])
+      v1 <- b - c
+      v2 <- a - b
+      m <- cbind(v1, v2)
+      d <- abs(det(m)) / sqrt(sum(v1 * v1))
+      d
+    }
+  )
+
+summary(lm(Circ. ~ n_v +
+  n_f +
+  Distance +
+  Perim. +
+  Mean,
+data = pop_irx
+))
+
+model <- lm(Circ. ~ n_v +
+  n_f +
+  Distance +
+  Perim. +
+  Mean,
+data = pop_irx
+)
+
+summary(model)
+reghelper::beta(model)
+
+cor.test(pop_irx$Circ., pop_irx$n_v)
+
+ggplot(pop_irx, aes(x = n_v, y = Circ.)) +
+  geom_point(aes(fill = genotype),
+    shape = 21,
+    size = 2,
+    alpha = 0.75,
+    stroke = 0.2
+  ) +
+  scale_fill_few() +
+  theme_leo() +
+  geom_smooth(
+    method = "lm",
+    span = 1,
+    colour = "black",
+    linetype = 2
+  ) +
+  facet_wrap(~genotype, ncol = 3)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+
+pop_irx <- pop_irx %>%
+  mutate(concavity = 1 - (Area / ConvexArea))
+
+left <- ggplot(data = pop_irx, aes(x = genotype, y = concavity)) +
+  geom_jitter() +
+  geom_boxplot()
+
+right <- ggplot(data = pop_irx, aes(x = genotype, y = Circ.)) +
+  geom_jitter() +
+  geom_boxplot()
+
+plot_grid(left, right, ncol = 2)
+
+ggplot(pop_irx, aes(Circ., concavity)) +
+  geom_point(
+    aes(fill = genotype),
+    shape = 21,
+    width = 0.1,
+    alpha = 0.9,
+    size = 2,
+    stroke = 0.25
+  ) +
+  geom_smooth(
+    span = 2,
+    colour = "red",
+    linetype = 2
+  ) +
+  scale_fill_viridis_d() +
+  theme_leo()
+
+ggplot(pop_irx, aes(x = n_v, y = concavity)) +
+  geom_point(aes(fill = genotype),
+    shape = 21,
+    size = 2,
+    alpha = 0.75,
+    stroke = 0.2
+  ) +
+  scale_fill_few() +
+  theme_leo() +
+  geom_smooth(
+    method = "lm",
+    span = 1,
+    colour = "black",
+    linetype = 2
+  ) +
+  facet_wrap(~genotype, ncol = 3)
+
+```
+
+```{r}
+pop_irx <- as.data.frame(pop_irx)
+poplar_psem <- psem(
+    lme(Circ. ~
+    n_v +
+      # n_p +
+      concavity,
+    random = ~ 1 | replicate,
+    data = pop_irx
+    ),
+    lme(concavity ~
+    n_v +
+      # n_p +
+      Mean +
+      Perim.,
+    random = ~ 1 | replicate,
+    data = pop_irx
+    ),
+    data = pop_irx
+  )
+
+summary(poplar_psem)
+plot(poplar_psem)
+```
+

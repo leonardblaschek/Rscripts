@@ -1,0 +1,340 @@
+---
+title: "IRX multiple regression"
+author: "Leonard Blaschek"
+date: "02/09/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(showtext)
+library(ggthemes)
+library(nlme)
+library(piecewiseSEM)
+library(Hmisc)
+library(zoo)
+library(ggridges)
+library(ggrepel)
+library(tidyverse)
+library(PerformanceAnalytics)
+
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 12,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.25,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      legend.text = element_text(size = rel(0.8)),
+      legend.key.height = unit(4, "mm"),
+      legend.key.width = unit(30, "mm"),
+      # plot.margin = unit(c(0, 0, 0, 0), "cm"),
+
+      complete = TRUE
+    )
+}
+```
+
+```{r load data, message = FALSE, include=TRUE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+sem.data <- read.csv("file:///home/leonard/R/Output/PhD/SEM_data.csv")
+
+
+sem.data <- sem.data %>%
+  mutate(concavity = 1 - (Area / ConvexArea))
+
+# calculate height and width relative to perimeter
+# sem.data <- sem.data %>%
+#   mutate(rel.Height = Height/Perim.,
+#          rel.Width = Width/Perim.,
+#          HeightByWidth = Height/Width)
+summary(sem.data)
+```
+
+# Cell type specific models
+
+## PX
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+sem.data.PX <- filter(sem.data, cell.type == "PX") %>%
+  select(-c(1:5, X, Y, value.scaled, Area, Round, Plant.height, Width, Height)) %>%
+  drop_na()
+
+library(PerformanceAnalytics)
+chart.Correlation(sem.data.PX, 
+                  histogram=TRUE, pch=21)
+
+model.null <- lm(Circ. ~ 1,
+  data = sem.data.PX
+)
+model.full <- lm(Circ. ~ .,
+  data = sem.data.PX
+)
+
+step(model.null,
+  scope = list(upper = model.full),
+  direction = "both",
+  data = sem.data.PX
+)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+model.final <- lm(formula = Circ. ~ Perim. + X1664.1603 + lig.peak, data = sem.data.PX)
+
+summary(model.final)
+reghelper::beta(model.final)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+library(car)
+Anova(model.final,
+  Type = "II"
+)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+sem.data.PX$predy <- predict(model.final)
+
+plot(predy ~ Circ.,
+  data = sem.data.PX,
+  pch = 16,
+  xlab = "Actual response value",
+  ylab = "Predicted response value"
+)
+
+abline(0, 1, col = "blue", lwd = 2)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+hist(residuals(model.final),
+  col = "darkgray"
+)
+
+plot(
+  fitted(model.final),
+  residuals(model.final)
+)
+```
+
+## PMX
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+sem.data.PMX <- filter(sem.data, cell.type == "PMX") %>%
+  select(-c(1:5, X, Y, value.scaled, Area, Round, Plant.height, Width, Height)) %>%
+  drop_na()
+
+
+chart.Correlation(sem.data.PMX, 
+                  histogram=TRUE, pch=21)
+
+model.null <- lm(Circ. ~ 1,
+  data = sem.data.PMX
+)
+model.full <- lm(Circ. ~ .,
+  data = sem.data.PMX
+)
+
+step(model.null,
+  scope = list(upper = model.full),
+  direction = "both",
+  data = sem.data.PMX
+)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+model.final <- lm(formula = Circ. ~ mean.OD1 + n_v + X1340.1603 + X1625.1603 + 
+                    X1664.1603 + cellu.peak, data = sem.data.PMX)
+summary(model.final)
+reghelper::beta(model.final)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+library(car)
+Anova(model.final,
+  Type = "II"
+)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+sem.data.PMX$predy <- predict(model.final)
+
+plot(predy ~ Circ.,
+  data = sem.data.PMX,
+  pch = 16,
+  xlab = "Actual response value",
+  ylab = "Predicted response value"
+)
+
+abline(0, 1, col = "blue", lwd = 2)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+hist(residuals(model.final),
+  col = "darkgray"
+)
+
+plot(
+  fitted(model.final),
+  residuals(model.final)
+)
+```
+
+## SMX 
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+sem.data.SMX <- filter(sem.data, cell.type == "SMX") %>%
+  select(-c(1:5, X, Y, value.scaled, Area, Round, Plant.height, Width, Height)) %>%
+  drop_na()
+
+
+chart.Correlation(sem.data.SMX, 
+                  histogram=TRUE, pch=21)
+
+model.null <- lm(Circ. ~ 1,
+  data = sem.data.SMX
+)
+model.full <- lm(Circ. ~ .,
+  data = sem.data.SMX
+)
+
+step(model.null,
+  scope = list(upper = model.full),
+  direction = "both",
+  data = sem.data.SMX
+)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+model.final <- lm(formula = Circ. ~ Perim. + X1099.1603 + cellu.peak + X1340.1603, 
+   data = sem.data.SMX)
+
+summary(model.final)
+reghelper::beta(model.final)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+library(car)
+Anova(model.final,
+  Type = "II"
+)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+sem.data.SMX$predy <- predict(model.final)
+
+plot(predy ~ Circ.,
+  data = sem.data.SMX,
+  pch = 16,
+  xlab = "Actual response value",
+  ylab = "Predicted response value"
+)
+
+abline(0, 1, col = "blue", lwd = 2)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+hist(residuals(model.final),
+  col = "darkgray"
+)
+
+plot(
+  fitted(model.final),
+  residuals(model.final)
+)
+```
+
+# With cell.type in the model
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+sem.data.PMX <- filter(sem.data) %>%
+  select(-c(1:4, X, Y, value.scaled, Area, Round, Plant.height, Width, Height)) %>%
+  drop_na()
+model.null <- lm(Circ. ~ 1,
+  data = sem.data.PMX
+)
+model.full <- lm(Circ. ~ .,
+  data = sem.data.PMX
+)
+
+step(model.null,
+  scope = list(upper = model.full),
+  direction = "both",
+  data = sem.data.PMX
+)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+model.final <- lm(formula = Circ. ~ X1664.1603 + cell.type + mean.OD1 + cellu.peak + 
+                     Perim. + n_v + X1383.1603, data = sem.data.PMX)
+
+summary(model.final)
+MuMIn::r.squaredGLMM(model.final)
+reghelper::beta(model.final)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+library(car)
+Anova(model.final,
+  Type = "II"
+)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+sem.data.PMX$predy <- predict(model.final)
+
+plot(predy ~ Circ.,
+  data = sem.data.PMX,
+  pch = 16,
+  xlab = "Actual response value",
+  ylab = "Predicted response value"
+)
+
+abline(0, 1, col = "blue", lwd = 2)
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+hist(residuals(model.final),
+  col = "darkgray"
+)
+
+plot(
+  fitted(model.final),
+  residuals(model.final)
+)
+```

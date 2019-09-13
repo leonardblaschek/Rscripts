@@ -4,6 +4,11 @@ author: "Leonard Blaschek"
 date: "05-08-2019"
 output:
     html_document
+bibliography: /home/leonard/Documents/Bibliographics/zotero_lib.bib
+link-citations: true
+linkcolor: black
+urlcolor: blue
+citecolor: blue
 #   pdf_document:
 #     latex_engine: lualatex
 #     fig_caption: yes
@@ -16,21 +21,24 @@ output:
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(ropls)
+library(baseline)
+library(corrplot)
 library(factoextra)
-library(cowplot)
 library(showtext)
 library(ggthemes)
 library(plotly)
 library(zoo)
 library(kableExtra)
 library(tidyverse)
+library(broom)
 library(ggrepel)
 library(gplots)
 library(viridis)
 library(ggridges)
 library(RColorBrewer)
 library(tukeygrps)
+library(cowplot)
+library(ggbeeswarm)
 
 #### import CooperHewitt ####
 font_add(
@@ -78,10 +86,18 @@ theme_leo <- function(base_size = 18,
     )
 }
 
-scale_range <- function(x){(x-min(x))/(max(x)-min(x))}
-scale_z <- function(x){(x - mean(x, na.rm=TRUE)) / sd(x, na.rm=TRUE)}
-scale_max <- function(x){x / max(x)}
-scale_lig <- function(x){x / max(x[wavenumber > 1590 & wavenumber < 1610])}
+scale_range <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+scale_z <- function(x) {
+  (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
+}
+scale_max <- function(x) {
+  x / max(x)
+}
+scale_lig <- function(x) {
+  x / max(x[wavenumber > 1590 & wavenumber < 1610])
+}
 ```
 
 ## Raman peaks from the literature
@@ -99,9 +115,29 @@ kable(rmn_tab, caption = "Table 1: Peaks previously identified as diagnostic for
 Here are our wild type spectra in absolute Raman intensity. The black line shows the average, the other lines are individual spectra, coloured by sampled plant.
 
 ```{r load data, warning = FALSE, message = FALSE, echo = FALSE}
-rmn_data <- read_csv("Raman_corrected_and_filtered.csv")
-rmn_data$replicate <- as.factor(rmn_data$replicate)
-rmn_data$technical <- as.factor(rmn_data$technical)
+rmn_data <- read_csv("Raman_corrected_and_filtered.csv") %>%
+  filter(wavenumber %in% c(300:2000)) %>%
+  mutate(
+    replicate = as.factor(replicate),
+    technical = as.factor(technical)
+  ) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate("total_auc" = MESS::auc(wavenumber, corrected.intensity, from = 300, to = 2000) / 10000) %>%
+  ungroup() %>%
+  mutate(genotype = ordered(genotype, levels = c(
+    "Col-0",
+    "4cl1",
+    "4cl2",
+    "4cl1x4cl2",
+    "ccoaomt1",
+    "fah1",
+    "omt1",
+    "ccr1-3",
+    "ccr1xfah1",
+    "cad4",
+    "cad5",
+    "cad4xcad5"
+  )))
 ```
 
 ```{r plot spectra, out.width = '100%', fig.showtext = TRUE, warning = FALSE, message = FALSE, echo = FALSE}
@@ -229,7 +265,7 @@ rmn_data_mat <- rmn_data_spread %>%
   group_by(genotype, cell.type) %>%
   summarise_all(list(mean)) %>%
   ungroup()
-rmn_mat <- as.matrix(select(rmn_data_mat, -genotype, -cell.type))
+rmn_mat <- as.matrix(select(rmn_data_mat, -genotype, -cell.type, -total_auc))
 rwnms <- unite(rmn_data_mat, "ID", genotype, cell.type, sep = "_")
 rownames(rmn_mat) <- rwnms$ID
 heatmap.2(rmn_mat,
@@ -303,16 +339,16 @@ ggplot(data = rmn_data_var, aes(
 #   rmn_meta <- as.matrix(x %>%
 #     filter(genotype %in% c(y, z) & cell.type == b) %>%
 #     select(genotype, cell.type, replicate, technical))
-# 
+#
 #   genotype <- rmn_meta[, "genotype"]
 #   rmn_oplsda <- opls(rmn_mat, genotype, predI = 1, orthoI = 1, crossvalI = 5)
-#   
+#
 #   loading <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
 #   rename(loading = p1) %>%
 #   mutate(wavenumber = as.numeric(wavenumber))
 #   return(loading)
 # }
-# 
+#
 # celltype_list <- list(
 #   "IF",
 #   "PMX"
@@ -330,7 +366,7 @@ ggplot(data = rmn_data_var, aes(
 #   "cad5",
 #   "cad4xcad5"
 # )
-# 
+#
 # loadings <- vector("list", 1)
 # for (h in celltype_list){
 #   for(i in geno_list){
@@ -340,23 +376,23 @@ ggplot(data = rmn_data_var, aes(
 #     }
 #   }
 # }
-# 
-# loadings_df <- loadings[-1] %>% 
-#   kimisc::list_to_df() %>% 
+#
+# loadings_df <- loadings[-1] %>%
+#   kimisc::list_to_df() %>%
 #   unnest() %>%
 #   spread(key = wavenumber, value = loading) %>%
 #   separate(name, sep = "_", into = c("cell.type", "genotype_1", "genotype_2"))
-# 
+#
 # loadings_df <- loadings_df[!duplicated(t(apply(loadings_df[c("cell.type","genotype_1", "genotype_2")], 1, sort))), ]
-# 
+#
 # loadings_df_mean <- loadings_df %>%
 #   gather(key = "wavenumber", value = "loading", - cell.type, - genotype_1, - genotype_2) %>%
 #   mutate(wavenumber = as.numeric(wavenumber)) %>%
 #   group_by(wavenumber) %>%
 #   summarise(loading.mean = mean(abs(loading)))
-# 
+#
 # write_csv(loadings_df_mean, "loadings_df_mean.csv")
-# 
+#
 # rmn_data_loading <- rmn_data %>%
 #   group_by(wavenumber) %>%
 #   summarise(
@@ -369,7 +405,7 @@ ggplot(data = rmn_data_var, aes(
 #       wavenumber = as.numeric(wavenumber),
 #       lbl = str_replace_all(lbl, "\\~", "")
 #     ))
-# 
+#
 # write_csv(rmn_data_loading, "rmn_data_loading.csv")
 
 #### read in OPLS-DA iterations if previously computed ####
@@ -417,12 +453,12 @@ ggplot(data = rmn_data_loading, aes(
 Based on the average loading (above), annotations from the literature, and whether a peak at that position is distinguishable in our spectra, I then identified a number of peaks that are likely of primary interest to us. The peak assignments are according to the literature. For our own assignments, I would want to wait for the respective monomer/DHP spectra.
 
 ```{r peak clusters, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
-options(knitr.kable.NA = '')
+options(knitr.kable.NA = "")
 
 selected_peaks <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/raman_peak_detection.csv")
 
 kable(selected_peaks,
-  caption = "Table 2: Peaks crucial for mutat distinction.",
+  caption = "Table 2: Peaks crucial for mutant distinction.",
   col.names = c(
     "Peak",
     "Wavenumber",
@@ -482,40 +518,41 @@ Here is a close up of the main lignin peak around 1600 cm^-1^, clearly indicatin
 
 rmn_data_ridge <- rmn_data %>%
   filter(
-    wavenumber > 1550 & 
-           wavenumber < 1650 & 
-           genotype != "ccr1xfah1" &
-           cell.type %in% c("IF", "PMX")) %>%
+    wavenumber > 1550 &
+      wavenumber < 1650 &
+      genotype != "ccr1xfah1" &
+      cell.type %in% c("IF", "PMX")
+  ) %>%
   ungroup() %>%
   mutate(genotype = ordered(genotype, levels = c(
-  "Col-0",
-  "4cl1",
-  "4cl2",
-  "4cl1x4cl2",
-  "ccoaomt1",
-  "fah1",
-  "omt1",
-  "ccr1-3",
-  "ccr1xfah1",
-  "cad4",
-  "cad5",
-  "cad4xcad5"
-)))
+    "Col-0",
+    "4cl1",
+    "4cl2",
+    "4cl1x4cl2",
+    "ccoaomt1",
+    "fah1",
+    "omt1",
+    "ccr1-3",
+    "ccr1xfah1",
+    "cad4",
+    "cad5",
+    "cad4xcad5"
+  )))
 
 # pdf("peak1600_ridge.pdf")
-ggplot(data = rmn_data_ridge) + 
+ggplot(data = rmn_data_ridge) +
   geom_ridgeline(aes(
-    x = wavenumber, 
-    y = genotype, 
-    height = rollmean(scaled, 10, na.pad = TRUE), 
-    fill = genotype, 
+    x = wavenumber,
+    y = genotype,
+    height = rollmean(scaled, 10, na.pad = TRUE),
+    fill = genotype,
     group = interaction(genotype, replicate, technical)
-    ),
-    alpha = 0.25,
-    size = 0.2,
-    # colour = NA,
-    scale = 1.5
-    ) +
+  ),
+  alpha = 0.25,
+  size = 0.2,
+  # colour = NA,
+  scale = 1.5
+  ) +
   scale_fill_viridis_d() +
   scale_y_discrete(
     labels = c(
@@ -532,13 +569,15 @@ ggplot(data = rmn_data_ridge) +
       expression(paste(italic("cad4"), "x", italic("cad5")))
     )
   ) +
+  scale_x_reverse() +
   theme_leo() +
-  theme(panel.spacing = unit(5, "mm"),
-        axis.title.y = element_blank()) +
+  theme(
+    panel.spacing = unit(5, "mm"),
+    axis.title.y = element_blank()
+  ) +
   geom_vline(xintercept = 1603, colour = "grey", alpha = 0.75, size = 2) +
-  facet_wrap(~ cell.type, ncol = 2)
+  facet_wrap(~cell.type, ncol = 2)
 # dev.off()
-
 ```
 
 ## Validating multiple peaks per unit/monomer
@@ -552,18 +591,21 @@ rmn_data_filled <- rmn_data %>%
   ungroup() %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   complete(wavenumber = seq(min(wavenumber), max(wavenumber), by = 1)) %>%
-  mutate(filled = rollapply(corrected.intensity, 
-                            width = 5, 
-                            FUN = function(x) mean(x, na.rm = TRUE), 
-                            # by = 1, 
-                            # by.column = TRUE, 
-                            partial = TRUE, 
-                            fill = NA, 
-                            align = "center"))
+  mutate(filled = rollapply(corrected.intensity,
+    width = 5,
+    FUN = function(x) mean(x, na.rm = TRUE),
+    # by = 1,
+    # by.column = TRUE,
+    partial = TRUE,
+    fill = NA,
+    align = "center"
+  ))
 
 peak_df <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/all_lit_peaks.csv") %>%
-  mutate("assigned bond" = replace_na(`assigned bond`, "unassigned"),
-         "assigned subunit" = replace_na(`assigned subunit`, "unassigned"))
+  mutate(
+    "assigned bond" = replace_na(`assigned bond`, "unassigned"),
+    "assigned subunit" = replace_na(`assigned subunit`, "unassigned")
+  )
 rmn_mat <- rmn_data_filled %>%
   unite(ID, genotype, cell.type, replicate, technical, sep = "_") %>%
   select(ID, wavenumber, filled) %>%
@@ -577,16 +619,17 @@ col4 <- brewer.pal(4, "YlGnBu")
 col6 <- brewer.pal(6, "Dark2")
 
 heatmaply_cor(rmn_cor,
-              k_row = 3,
-              k_col = 8,
-              colors = c("#313695", "#abd9e9", "#ffffbf", "#fdae61", "#a50026"),
-              row_side_colors = peak_df$`assigned polymer`,
-              col_side_colors = peak_df$`assigned subunit`,
-              column_text_angle = 90,
-              hide_colorbar = TRUE)
+  k_row = 3,
+  k_col = 8,
+  colors = c("#313695", "#abd9e9", "#ffffbf", "#fdae61", "#a50026"),
+  row_side_colors = peak_df$`assigned polymer`,
+  col_side_colors = peak_df$`assigned subunit`,
+  column_text_angle = 90,
+  hide_colorbar = TRUE
+)
 
 
-# aheatmap(rmn_cor, 
+# aheatmap(rmn_cor,
 #          annCol = peak_df[, c(3, 4)],
 #          Rowv = FALSE,
 #          annColors = list(`assigned subunit` = col6, `assigned polymer` = col4))
@@ -608,22 +651,21 @@ rmn_data_wavenumbers <- rmn_data %>%
     1396,
     1461,
     1129,
-    1367,
-    1384
+    1367
   ) & genotype %in% c("Col-0", "fah1", "omt1")) %>%
-  mutate(cluster = case_when(
-    wavenumber %in% c(1149, 1338, 1396) ~ "1",
-    wavenumber %in% c(1461, 1129, 1367, 1384) ~ "2"
-  ),
-  wavenumber = ordered(wavenumber, levels = c(
-    "1149",
-    "1338",
-    "1396",
-    "1461",
-    "1129",
-    "1367",
-    "1384"
-  ))
+  mutate(
+    cluster = case_when(
+      wavenumber %in% c(1149, 1338, 1396) ~ "1",
+      wavenumber %in% c(1461, 1129, 1367) ~ "2"
+    ),
+    wavenumber = ordered(wavenumber, levels = c(
+      "1149",
+      "1338",
+      "1396",
+      "1461",
+      "1129",
+      "1367"
+    ))
   )
 
 raman.letters <- letter_groups(rmn_data_wavenumbers, scaled, genotype, "tukey", cell.type, wavenumber)
@@ -632,13 +674,15 @@ raman.letters <- letter_groups(rmn_data_wavenumbers, scaled, genotype, "tukey", 
 
 # pdf("raman_peaks.pdf", width = 7, height = 20)
 ggplot(data = rmn_data_wavenumbers, aes(x = genotype, y = scaled)) +
-  geom_rect(aes(y = NULL,
-                x = NULL,
-                fill = cluster),
-    xmin = -Inf,
-    xmax = Inf,
-    ymin = -Inf,
-    ymax = Inf
+  geom_rect(aes(
+    y = NULL,
+    x = NULL,
+    fill = cluster
+  ),
+  xmin = -Inf,
+  xmax = Inf,
+  ymin = -Inf,
+  ymax = Inf
   ) +
   geom_jitter(
     # aes(fill = scaled),
@@ -675,5 +719,516 @@ ggplot(data = rmn_data_wavenumbers, aes(x = genotype, y = scaled)) +
   ) +
   coord_flip()
 # dev.off()
-
 ```
+
+## Publication figures
+
+The following figures will give a good overview:
+
+### Figure 1
+
+show chemical structure of the monomer with next to it the Raman spectra of monomer vs polymer. This way all different monomers can be displayed and Raman spectra will be stacked vertically – would a multivariate analysis be helpful to discriminate most interesting wavenumbers?
+
+### Figure 2
+
+show grey scale image of Arabidopsis cross-section as well as highlight regions in different colours for vascular bundle (blue), interfascicular fibers (red), cortex (green) and pith (yellow). Show in the same color the Raman spectra for each tissue in Arabidopsis stacked vertically – would a multivariate analysis be helpful to discriminate most interesting wavenumbers?
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, fig.cap = "**Figure 2:** Absolute intensity spectra from different tissues in a transverse stem section of *Arabidopsis thaliana* ."}
+#### import and tidy Raman data ####
+raman.files <-
+  list.files(
+    path = "/home/leonard/Documents/Uni/PhD/Raman/measurements/",
+    pattern = "*.CSV",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_csv(flnm,
+    comment = "#",
+    col_names = FALSE,
+    skip = 0,
+    cols_only(
+      X1 = col_number(),
+      X2 = col_number()
+    )
+  ) %>%
+    mutate(filename = flnm)
+}
+
+raman.data <- lapply(raman.files, read_plus) %>%
+  bind_rows()
+
+# raman.data <- raman.data %>%
+#   select(c(1:3))
+
+raman.data$filename <- basename(raman.data$filename)
+
+# raman.data$filename <-
+#   str_replace(raman.data$filename, fixed("fah 1"), "fah1")
+
+raman.data <- raman.data %>%
+  distinct(X1, filename, .keep_all = TRUE) %>%
+  separate(
+    filename,
+    into = c("cell.type", "replicate"),
+    sep = "[XhFi]",
+    extra = "merge"
+  ) %>%
+  rename("wavenumber" = X1, "intensity" = X2) %>%
+  mutate(
+    cell.type = recode(cell.type,
+      "Proc-S" = "Vascular bundle",
+      "Proc-pt" = "Pith",
+      "Proc-I" = "Interfascicular fibre",
+      "Proc-Ep" = "Epidermis"
+    ),
+    replicate = str_remove(replicate, ".CSV")
+  )
+
+raman.data$wavenumber <- round(raman.data$wavenumber, digits = 0)
+
+#### baseline correct Raman data ####
+raman.data.wide <- raman.data %>%
+  group_by(cell.type, replicate) %>%
+  mutate(group_id = row_number()) %>%
+  spread(wavenumber, intensity) %>%
+  select(-group_id) %>%
+  summarise_all(funs(sum(., na.rm = TRUE)))
+
+raman.data.mat <- as.matrix(raman.data.wide[, -c(1:4)])
+rownames(raman.data.mat) <- paste(raman.data.wide$cell.type,
+  raman.data.wide$replicate,
+  sep = "_"
+)
+
+raman.data.correction <- baseline.als(raman.data.mat,
+  lambda = 5,
+  p = 0.01,
+  maxit = 100
+)
+rmn_data_all <- data.frame(raman.data.correction$corrected)
+
+rmn_data_all <- rmn_data_all %>%
+  rownames_to_column() %>%
+  separate(rowname, sep = "_", into = c("cell.type", "replicate"), remove = TRUE) %>%
+  gather(key = "wavenumber", value = "corrected.intensity", -c(cell.type, replicate)) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X."), replacement = "-")) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X"), replacement = "")) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  group_by(cell.type, replicate) %>%
+  inner_join(., raman.data, by = c("cell.type", "replicate", "wavenumber")) %>%
+  mutate("total_auc" = MESS::auc(wavenumber, corrected.intensity, from = 403, to = 1800) / 1000)
+
+# rmn_data_all$genotype <- ordered(rmn_data_all$genotype,
+#                                          levels = c(
+#                                            "Col-0",
+#                                            "4cl1",
+#                                            "4cl2",
+#                                            "4cl1x4cl2",
+#                                            "ccoaomt1",
+#                                            "fah1",
+#                                            "omt1",
+#                                            "ccr1-3",
+#                                            "ccr1xfah1",
+#                                            "cad4",
+#                                            "cad5",
+#                                            "cad4xcad5"
+#                                          ))
+write_csv(rmn_data_all, "raman_spectra_cell_types.csv")
+
+rmn_data_all_avg <- rmn_data_all %>%
+  group_by(cell.type, wavenumber) %>%
+  summarise(intensity = mean(corrected.intensity),
+            auc = mean(total_auc),
+            auc_sd = sd(total_auc)) %>%
+  filter(wavenumber < 1800) %>%
+  ungroup() %>%
+  mutate(cell.type = as.factor(cell.type))
+
+spectra <- ggplot(data = rmn_data_all_avg) +
+  geom_ridgeline(aes(
+    x = wavenumber,
+    y = cell.type,
+    # height = rollmean(intensity, 10, na.pad = TRUE) / 1000,
+    height = intensity / 1000,
+    fill = cell.type,
+    group = cell.type
+  ),
+  alpha = 0.75,
+  size = 0.2,
+  # colour = NA,
+  scale = 0.5,
+  min_height = -500
+  ) +
+  geom_text(
+    data = filter(rmn_data_all_avg, wavenumber == 1799), aes(
+      x = wavenumber,
+      y = cell.type,
+      label = cell.type
+    ),
+    hjust = 0,
+    nudge_y = -0.1,
+    family = "Helvetica",
+    size = 6
+  ) +
+  geom_text(
+    data = filter(rmn_data_all_avg, wavenumber == 403), aes(
+      x = wavenumber,
+      y = cell.type,
+      label = paste("Total area under curve = ", round(auc, digits = 0), " ± ", round(auc_sd, digits = 0))
+    ),
+    hjust = 1,
+    nudge_y = -0.1,
+    family = "Helvetica",
+    size = 6
+  ) +
+  scale_fill_viridis_d() +
+  scale_x_reverse() +
+  theme_leo() +
+  theme(
+    panel.spacing = unit(5, "mm"),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+rmn_data_all_auc <- rmn_data_all %>%
+  group_by(cell.type, replicate) %>%
+  summarise(auc = mean(total_auc)) %>%
+  ungroup()
+
+auc_boxes <- ggplot(data = rmn_data_all_auc, aes(x = cell.type, y = auc)) +
+  geom_quasirandom(aes(fill = cell.type),
+                   shape = 21,
+                   alpha = 0.75,
+                   size = 3) +
+  geom_boxplot(alpha = 0.5,
+               outlier.alpha = 0) +
+  scale_fill_viridis_d() +
+  theme_leo() +
+  labs(y = "AUC per 490 µm²") +
+  # scale_y_continuous(breaks = c(100, 300), labels = c("100", "300")) +
+  theme(axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  coord_flip()
+
+plot_grid(spectra,
+          auc_boxes,
+          rel_widths = c(0.8, 0.2),
+          ncol = 2,
+          align = "h"
+)
+```
+
+### Figure 3
+
+show Raman spectra of the different mutant stacked vertically for vascular bundles on the right columns and interfascicular regions on the left columns.
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, fig.cap = "**Figure 3:** Spectra of the interfascicular fibres and the vascular bundles of *A. thaliana*. The spectra are normalised to the peak at 1603 cm^-1^ representing total lignin."}
+
+rmn_data_ridge_full <- rmn_data_avg %>%
+  filter(genotype != "ccr1xfah1" &
+    wavenumber %in% c(300:1800) &
+    cell.type %in% c("IF", "PMX")) %>%
+  ungroup() %>%
+  mutate(
+    genotype = ordered(genotype, levels = c(
+      "Col-0",
+      "4cl1",
+      "4cl2",
+      "4cl1x4cl2",
+      "ccoaomt1",
+      "fah1",
+      "omt1",
+      "ccr1-3",
+      "cad4",
+      "cad5",
+      "cad4xcad5"
+    )),
+    cell.type = recode(cell.type, 
+      "IF" = "Interfascicular fibres",
+      "PMX" = "Vascular bundle"
+    )
+  )
+
+spectra <- ggplot(data = rmn_data_ridge_full) +
+  geom_ridgeline(aes(
+    x = wavenumber,
+    y = genotype,
+    height = rollmean(mean.scaled, 10, na.pad = TRUE),
+    fill = genotype,
+    group = genotype
+  ),
+  alpha = 0.75,
+  size = 0.2,
+  # colour = NA,
+  scale = 1,
+  min_height = -500
+  ) +
+  scale_fill_viridis_d() +
+  scale_x_reverse() +
+  labs(x = "Wavenumber") +
+  theme_leo() +
+  theme(
+    panel.spacing = unit(5, "mm"),
+    axis.title.y = element_blank()
+  ) +
+  facet_wrap(~cell.type, ncol = 2)
+
+rmn_data_auc <- rmn_data %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  filter(cell.type %in% c("PMX", "IF") &
+           genotype != "ccr1xfah1") %>%
+  summarise(auc = mean(total_auc)) %>%
+  ungroup() %>%
+  mutate(cell.type = recode(cell.type, 
+      "PMX" = "VB"
+    ))
+
+auc_boxes <- ggplot(data = rmn_data_auc, aes(x = genotype, y = auc)) +
+  geom_quasirandom(aes(fill = genotype),
+                   shape = 21,
+                   alpha = 0.75) +
+  geom_boxplot(alpha = 0.5,
+               outlier.alpha = 0) +
+  scale_fill_viridis_d() +
+  theme_leo() +
+  labs(y = "AUC per 490 µm²") +
+  scale_y_continuous(breaks = c(100, 300), labels = c("100", "300")) +
+  theme(axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  coord_flip() +
+  facet_wrap(~ cell.type)
+
+plot_grid(spectra,
+          auc_boxes,
+          rel_widths = c(0.8, 0.2),
+          ncol = 2
+)
+```
+
+### Figure 4
+
+validate the peaks identified as important for mutant distinction with the pyrolysis GC/MS data from Haris.
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, fig.asp = 1.5, fig.cap = "**Figure 4:** Correlation analysis between a weighed average of Raman measurements and bulk lignin composition analysis by pyrolysis-GC/MS."}
+py <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/pyrolysis_units.csv") %>%
+  mutate(genotype = recode(genotype, "col-0" = "Col-0", "4cl1x2" = "4cl1x4cl2", "cad4x5" = "cad4xcad5"))
+
+# pdf("py_covariance.pdf")
+# corrplot(cor(py[,-1]))
+# dev.off()
+
+py <- py %>%
+  gather(key = "peak", value = "value", -genotype) %>%
+  mutate(peak = recode(peak,
+    "Aldehydes" = "CHO",
+    "Alcohols" = "OH",
+    "Acids" = "COOH",
+    "5H" = "G-5OH"
+  ))
+
+py_rmn <- rmn_data_avg %>%
+  filter(cell.type %in% c("PMX", "IF") &
+    wavenumber %in% selected_peaks$wavenumber) %>%
+  group_by(genotype, wavenumber) %>%
+  summarise(total.mean.scaled = mean(mean.scaled))
+
+# pdf("rmn_covariance.pdf")
+# corrplot(cor(spread(py_rmn, key = wavenumber, value = total.mean.scaled)[,-1]))
+# dev.off()
+
+py_rmn_corr <- left_join(py, py_rmn) %>%
+  mutate(peak = ordered(peak, levels = gtools::mixedsort(unique(peak))))
+
+py_rmn_corr_mat <- py_rmn_corr %>%
+  group_by(peak, wavenumber) %>%
+  nest() %>%
+  mutate(
+    cor = map(data, ~ cor.test(.x$value, .x$total.mean.scaled)),
+    tidied = map(cor, tidy)
+  ) %>%
+  unnest(tidied, .drop = TRUE)
+
+# pdf("pyro_correlations.pdf", height = 20, width = 20)
+ggplot(data = py_rmn_corr) +
+  geom_rect(
+    data = py_rmn_corr_mat,
+    xmin = -Inf,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf,
+    aes(fill = if_else(p.value < 0.05, estimate, NULL))
+  ) +
+  geom_point(aes(
+    x = value,
+    y = total.mean.scaled
+  ),
+  size = 0.5
+  ) +
+  scale_fill_distiller(palette = "RdYlBu", na.value = "white", name = "Pearson's r (if p < 0.05)") +
+  labs(
+    x = expression(paste("Pyrolysate * total lignin"^"-1")),
+    y = "Raman average (IF:PMX 1:1)"
+  ) +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    axis.ticks = element_blank(),
+    axis.text = element_blank(),
+    strip.text = element_text(size = 10)
+  ) +
+  facet_grid(peak ~ wavenumber)
+# dev.off()
+```
+
+```{r py peaks, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+options(knitr.kable.NA = "")
+
+py_peaks <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/rmn_peaks.csv")
+
+kable(py_peaks,
+  caption = "Table 3: Py--GC/MS peak assignments.",
+  col.names = c(
+    "Peak",
+    "Unit",
+    "Backbone",
+    "Functional group"
+  ),
+  escape = F
+) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+Looking at the correlations (and the covariance within the data from both methods), some things become quite obvious:
+
+1. The Raman peak at 1664 is specific to **G-OH** (Py-GC/MS peaks 19 & 23), while it seems to be a decent predictor of G-units in general only due to the large contribution of G-OH.
+
+2. The Raman peak at 1625 is specific to **aldehydes**, especially G aldehydes (Py-GC/MS peaks 18 (vanillin) and 22 (G-CHO)).
+
+Other conclusions are somewhat muddled by the high levels of correlation between Raman peaks and between Pyrolysis peaks:
+
+3. The Raman peak at 1383 correlates strongly with **H-units**, for which it has previously been suggested to be diagnostic (@Sun2011). However this correlation hold true for all Raman peaks strongly correlated with 1383, and all pyrolysis peaks correlated with 7 and 9.
+
+4. The Raman peak at 1340 is the only one correlating with total **S-lignin** according to Py-GC/MS. However, this is only due to the pyrolysis peaks attributed to S-C~6~-C~2~-CHO, S-C~6~-C~1~-CHO, S-C~6~ and S-C~6~-COOH. There is no correlation with the peaks for S-C~6~-C~3~ units (32 & 33), while there is a correlation with a peak attributed to unspecified G-units (24).
+
+```{r validated peaks, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+options(knitr.kable.NA = "")
+
+validated_peaks <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/validated_peaks.csv")
+
+kable(validated_peaks,
+  caption = "Table 4: Peaks validated by Py--GC/MS.",
+  col.names = c(
+    "Peak",
+    "Wavenumber",
+    "Assigned polymer",
+    "Assigned structure",
+    "Pearson's r",
+    "P-value"
+  )
+) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Figure 5
+
+show the multivariate analysis that you have already done between our novel peaks and the literature between genotypes for each tissue – the aim is to highlight the genetic biosynthetic pathway used by each tissue so I guess showing difference in the cladogram could be one way, another could be integrating specific peak and comparing their box-plot distribution between the geneotype for each tissue.
+
+```{r change correlations, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, fig.cap = "**Figure 5:** Relative changes in concentration of different lignin subunits and cellulose compared between the two investigated tissues. Relative concentrations are estimated by peaks validated by by Py-GC/MS (table 3) and the two widely accepted cellulose peaks at 1100 cm^-1^ and 380 cm^-1^. Points on the vertical dashed line indicate a homogeneous shift in lignin composition across tissues, deviations from the line show tissue-specific effects."}
+
+rmn_data_corr <- rmn_data %>%
+  filter(wavenumber %in% c(validated_peaks$wavenumber, 379, 1099) &
+    genotype != "ccr1xfah1") %>%
+  ungroup() %>%
+  group_by(wavenumber) %>%
+  mutate(scaled.z = scale_z(scaled)) %>%
+  select(genotype, cell.type, replicate, technical, scaled.z)
+
+# %>%
+#   ungroup() %>%
+#   group_by(genotype, cell.type, wavenumber) %>%
+#   summarise(mean.scaled = mean(scaled.z))
+
+rmn_data_corr <- rmn_data_corr %>%
+  left_join(filter(rmn_data_corr, genotype == "Col-0") %>%
+    ungroup() %>%
+    select(wavenumber, cell.type, scaled.z, replicate, technical) %>%
+    group_by(wavenumber, cell.type) %>%
+    summarise(scaled.WT = mean(scaled.z))) %>%
+  mutate(diff = scaled.z - scaled.WT) %>%
+  select(-scaled.z, -scaled.WT) %>%
+  spread(key = cell.type, value = diff)
+
+rmn_data_corr <- left_join(rmn_data_corr, (validated_peaks %>%
+  rbind(list(15, 379, "Cellulose", "Cellulose", 0, 0)) %>%
+  rbind(list(10, 1099, "Cellulose", "Cellulose", 0, 0))))
+
+# pdf("IF_MX_corr.pdf")
+ggplot(data = filter(rmn_data_corr, genotype %in% c("4cl1x4cl2", "cad4xcad5", "ccr1-3", "omt1", "fah1", "ccoaomt1"))) +
+  geom_abline(slope = 1, intercept = 0, linetype = 2) +
+  geom_point(aes(
+    x = PMX,
+    y = IF,
+    fill = assigned.structure,
+    colour = assigned.structure
+  ),
+  size = 1,
+  shape = 21,
+  alpha = 0.5
+  ) +
+  stat_ellipse(aes(
+    x = PMX,
+    y = IF,
+    fill = assigned.structure,
+  ), geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
+  stat_ellipse(aes(
+    x = PMX,
+    y = IF,
+    colour = assigned.structure,
+  ), alpha = 0.85, type = "t", level = 0.4) +
+  # geom_label_repel(data = filter(rmn_data_corr,
+  #                                IF - PMX > 1 | IF -PMX < -1),
+  #                  aes(x = PMX,
+  #                      y = IF,
+  #                      label = wavenumber),
+  #   nudge_y = 0.25,
+  #   family = "Helvetica",
+  #   segment.colour = "red",
+  #   size = 2.5
+  # ) +
+  theme_leo() +
+  theme(
+    axis.title = element_text(),
+    axis.text.x = element_text(angle = 0),
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.title = element_blank()
+  ) +
+  labs(
+    x = "Vascular bundle",
+    y = "Interfascicular fibres"
+  ) +
+  scale_fill_few() +
+  scale_colour_few() +
+  scale_x_continuous(limits = c(-4, 4)) +
+  scale_y_continuous(limits = c(-4, 4)) +
+  coord_fixed() +
+  facet_wrap(~genotype, ncol = 3)
+# dev.off()
+```
+
+The values in this last figure are transformed quite a bit. Starting with the baseline corrected absolute peak height (abs.), I divided abs. at each wavelength by the respective spectra's peak height of the lignin peak (abs.~lignin~). I then z-scaled each wavenumber across genotypes and cell types to bring everything on the same scale. After that, the z-score of the WT is subtracted from the Z-score of each mutant and cell type for each wavenumber of interest. In short: 
+
+Normalised Intensity $x =  \frac{abs.}{abs._{Lignin}}$
+
+z-scaled intensity $x_{z} = x - \frac{\overline{x}}{\sigma_{x}}$
+
+Plotted difference from the WT $\Delta x_{z} = x_{z} - x_{z}^{WT}$
+
+The annotations are of course tentative, but they already show nicely that the the relative abundance of S-units and other lignin is increased relative to G-units specifically in the IF of the *4cl* double mutant. It also shows that the increase of aldehyde units in the *cad4*x*cad5* is stronger in the bundle.
+
+## References

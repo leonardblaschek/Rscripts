@@ -30,9 +30,11 @@ showtext_auto()
 
 #### generating plot theme ####
 theme_leo <- function(base_size = 12,
-                      base_family = "Helvetica"){
-  theme_minimal(base_size = base_size,
-                base_family = base_family) %+replace%
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
     theme(
       strip.text = element_text(hjust = 0, face = "italic"),
       axis.ticks = element_line(
@@ -40,8 +42,10 @@ theme_leo <- function(base_size = 12,
         lineend = "square",
         color = "black"
       ),
-      axis.text.x = element_text(colour = "black", # flipped coords
-                                 margin = margin(1, 1, 1, 1)),
+      axis.text.x = element_text(
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
       axis.text.y = element_text(
         colour = "black",
         angle = 0,
@@ -54,12 +58,12 @@ theme_leo <- function(base_size = 12,
       panel.border = element_rect(fill = NA, color = "black", size = 0.25),
       panel.spacing = unit(1.5, "mm"),
       legend.position = "bottom",
-      legend.title = element_blank(),
+      # legend.title = element_blank(),
       legend.text = element_text(size = rel(0.8)),
       legend.key.height = unit(4, "mm"),
       legend.key.width = unit(30, "mm"),
-      # plot.margin = unit(c(0, 0, 0, 0), "cm"),   
-      
+      # plot.margin = unit(c(0, 0, 0, 0), "cm"),
+
       complete = TRUE
     )
 }
@@ -75,62 +79,71 @@ library(tidyr)
 library(ggplot2)
 sem.data <- read.csv("file:///home/leonard/R/Output/PhD/SEM_data.csv")
 
-sem.data$replicate <- as.factor(sem.data$replicate)
-sem.data$technical <- as.factor(sem.data$technical)
+sem.data <- sem.data %>%
+  mutate(concavity = 1 - (Area / ConvexArea))
 
 # calculate height and width relative to perimeter
 sem.data <- sem.data %>%
-  mutate(rel.Height = Height/Perim.,
-         rel.Width = Width/Perim.,
-         HeightByWidth = Height/Width)
+  mutate(
+    rel.Height = Height / Perim.,
+    rel.Width = Width / Perim.,
+    HeightByWidth = Height / Width
+  )
 summary(sem.data)
 
 ggplot(sem.data, aes(x = genotype, y = lig.peak)) +
   geom_violin() +
   geom_jitter() +
   theme_leo() +
-  theme(axis.text.x = element_text(angle = 90,
-                                   hjust = 1,
-                                   vjust = 0.5)) +
-  facet_wrap(~ cell.type, ncol = 3)
+  theme(axis.text.x = element_text(
+    angle = 90,
+    hjust = 1,
+    vjust = 0.5
+  )) +
+  facet_wrap(~cell.type, ncol = 3)
 
 ggplot(sem.data, aes(x = genotype, y = Circ.)) +
   geom_violin() +
   geom_jitter() +
-  scale_y_continuous(limits = c(0,1)) +
+  scale_y_continuous(limits = c(0, 1)) +
   theme_leo() +
-  theme(axis.text.x = element_text(angle = 90,
-                                   hjust = 1,
-                                   vjust = 0.5)) +
-  facet_wrap(~ cell.type, ncol = 3)
+  theme(axis.text.x = element_text(
+    angle = 90,
+    hjust = 1,
+    vjust = 0.5
+  )) +
+  facet_wrap(~cell.type, ncol = 3)
 ```
 
 ### Overall Correlations
 
 ```{r plot correlations, message = FALSE}
 library(PerformanceAnalytics)
-chart.Correlation(select(ungroup(sem.data), 
-                         -genotype, -cell.type, -replicate, -technical), 
-                  histogram=TRUE, pch=21)
+chart.Correlation(select(
+  ungroup(sem.data),
+  -genotype, -cell.type, -replicate, -technical
+),
+histogram = TRUE, pch = 21
+)
 
 ggplot(sem.data, aes(x = lig.peak, y = Circ., fill = cell.type)) +
   scale_fill_viridis_d() +
   scale_colour_viridis_d() +
   geom_point(shape = 21, alpha = 0.75, size = 3) +
-  stat_smooth(method="loess", linetype = 2, se = FALSE, aes(colour = cell.type)) +
+  stat_smooth(method = "loess", linetype = 2, se = FALSE, aes(colour = cell.type)) +
   theme_leo()
 
 ggplot(sem.data, aes(x = Circ., y = HeightByWidth, fill = cell.type)) +
   scale_fill_viridis_d() +
   scale_colour_viridis_d() +
   geom_point(shape = 21, alpha = 0.75, size = 3) +
-  stat_smooth(method="loess", linetype = 2, se = FALSE, aes(colour = cell.type)) +
+  stat_smooth(method = "loess", linetype = 2, se = FALSE, aes(colour = cell.type)) +
   theme_leo()
 
 ggplot(sem.data, aes(x = Circ., y = Plant.height, fill = cell.type)) +
   scale_fill_viridis_d() +
   geom_point(shape = 21, alpha = 0.75, size = 3) +
-  stat_smooth(method="loess", colour = "black", linetype = 2, se = FALSE, aes(group = 1)) +
+  stat_smooth(method = "loess", colour = "black", linetype = 2, se = FALSE, aes(group = 1)) +
   theme_leo()
 ```
 
@@ -142,17 +155,19 @@ This model includes only primary metaxylem vessels and uses simple linear regres
 
 ```{r first psem}
 first.model <- psem(
-  lm(Circ. ~ 
-       n_v +
-       mean.OD1 +
-       cellu.peak +
-       lig.peak.pos +
-       lig.peak,
-     data = drop_na(filter(sem.data, cell.type == "PMX"))),
-  lm(Plant.height ~ 
-       Circ. +
-       lig.peak.pos, 
-     data = drop_na(filter(sem.data, cell.type == "PMX"))),
+  lm(Circ. ~
+  n_v +
+    mean.OD1 +
+    cellu.peak +
+    lig.peak.pos +
+    lig.peak,
+  data = drop_na(filter(sem.data, cell.type == "PMX"))
+  ),
+  lm(Plant.height ~
+  Circ. +
+    lig.peak.pos,
+  data = drop_na(filter(sem.data, cell.type == "PMX"))
+  ),
   data = drop_na(filter(sem.data, cell.type == "PMX"))
 )
 summary(first.model, .progressBar = FALSE)
@@ -162,18 +177,20 @@ plot(first.model, digits = 2)
  Here is the same model with a poisson regression for the plant height, increasing the explained variance to 70%. Note that the shown estimates are **not standardised**.
 ```{r first psem.2, message = FALSE, warning = FALSE}
 first.model.poisson <- psem(
-  lm(Circ. ~ 
-       n_v +
-       mean.OD1 +
-       cellu.peak +
-       lig.peak.pos +
-       lig.peak,
-     data = drop_na(filter(sem.data, cell.type == "PMX"))),
-  glm(Plant.height ~ 
-       Circ. +
-       lig.peak.pos, 
-       family = poisson(),
-     data = drop_na(filter(sem.data, cell.type == "PMX"))),
+  lm(Circ. ~
+  n_v +
+    mean.OD1 +
+    cellu.peak +
+    lig.peak.pos +
+    lig.peak,
+  data = drop_na(filter(sem.data, cell.type == "PMX"))
+  ),
+  glm(Plant.height ~
+  Circ. +
+    lig.peak.pos,
+  family = poisson(),
+  data = drop_na(filter(sem.data, cell.type == "PMX"))
+  ),
   data = drop_na(filter(sem.data, cell.type == "PMX"))
 )
 summary(first.model.poisson, .progressBar = FALSE)
@@ -189,32 +206,33 @@ This model incorporates all measured vessel types (PX, PMX, SMX), as well as ran
 The composite variable was dropped again to emphasise the negative effect of vessel neighbourhood on circularity.
 
 ```{r second psem}
-#introduce neighbourhood composite
+# introduce neighbourhood composite
 # summary(drop_na(sem.data))
 betas <- summary(lm(Circ. ~ n_f + n_v,
-     data = sem.data))$coefficients[-1,1]
+  data = sem.data
+))$coefficients[-1, 1]
 
 sem.data$composite <- rowSums(sem.data[, c("n_f", "n_v")] * betas)
 
 second.model <- psem(
   lme(Circ. ~
-        # composite +
-        n_v +
-        # n_p +
-        mean.OD1 +
-        # cellu.peak +
-        lig.peak.pos +
-        lig.peak,
-      random = ~1|cell.type/replicate,
-      data = drop_na(sem.data)
-      ),
+  # composite +
+  n_v +
+    # n_p +
+    mean.OD1 +
+    # cellu.peak +
+    lig.peak.pos +
+    lig.peak,
+  random = ~ 1 | cell.type / replicate,
+  data = drop_na(sem.data)
+  ),
   lme(Plant.height ~
-        Circ. +
-        # cellu.peak +
-        lig.peak.pos +
-        lig.peak,
-      random = ~1|cell.type/replicate,
-      data = drop_na(sem.data)
+  Circ. +
+    # cellu.peak +
+    lig.peak.pos +
+    lig.peak,
+  random = ~ 1 | cell.type / replicate,
+  data = drop_na(sem.data)
   ),
   data = drop_na(sem.data)
 )
@@ -229,19 +247,19 @@ plot(second.model, digits = 2)
 This third model is a multigroup model contrasting the IRX responses and their causes between vessel types. Lignin content is only a significant predictor for circularity in the PMX. However, lignin content of both PMX and SMX directly impacts plant height.
 
 ```{r multigroup}
-third.model <-   psem(
+third.model <- psem(
   lme(Circ. ~
-        n_p +
-        n_f +
-        mean.OD1 +
-        Perim. +
-        X1340.1603 +
-        X1664.1603 +
-        # cellu.peak +
-        # lig.peak.pos +
-        lig.peak,
-      random = ~1|replicate/cell.type,
-      data = drop_na(sem.data)
+  n_p +
+    n_f +
+    mean.OD1 +
+    Perim. +
+    X1340.1603 +
+    X1664.1603 +
+    # cellu.peak +
+    # lig.peak.pos +
+    lig.peak,
+  random = ~ 1 | replicate / cell.type,
+  data = drop_na(sem.data)
   ),
   # lme(Perim. ~
   #       # n_v,
@@ -254,11 +272,11 @@ third.model <-   psem(
   #     data = drop_na(sem.data)
   # ),
   lme(HeightByWidth ~
-        # mean.OD1 +
-        # lig.peak +
-        Circ.,
-      random = ~1|replicate/cell.type,
-      data = drop_na(sem.data)
+  # mean.OD1 +
+  # lig.peak +
+  Circ.,
+  random = ~ 1 | replicate / cell.type,
+  data = drop_na(sem.data)
   ),
   # lme(rel.Height ~
   #       Circ.,
@@ -273,28 +291,35 @@ summary(third.model, .progressBar = FALSE)
 plot(third.model, digits = 2)
 
 # third.model.multigroup <- multigroup(third.model,
-                                     # group = "cell.type"
+# group = "cell.type"
 # )
 # third.model.multigroup
 
 TM.multigroup <- function(x) {
   psem(
     lme(Circ. ~
-          n_v +
-          # n_f +
-          mean.OD1 +
-          Perim. +
-          X1664.1603 +
-          X1340.1603 +
-          # X1131.1603 +
-          # X1457.1340 +
-          X1147.1603 +
-          # cellu.peak +
-          # lig.peak.pos +
-          # X1603.1099,
-          lig.peak,
-        random = ~1|replicate,
-        data = filter(drop_na(sem.data), cell.type == x)
+    n_v +
+      concavity,
+    random = ~ 1 | replicate,
+    data = filter(drop_na(sem.data), cell.type == x)
+    ),
+    lme(concavity ~
+    n_v +
+      # n_f +
+      mean.OD1 +
+      Perim. +
+      X1664.1603 +
+      X1340.1603 +
+      # X1383.1603 +
+      # X1131.1603 +
+      # X1457.1340 +
+      X1625.1603 +
+      cellu.peak +
+      # lig.peak.pos +
+      # X1603.1099,
+      lig.peak,
+    random = ~ 1 | replicate,
+    data = filter(drop_na(sem.data), cell.type == x)
     ),
     # lme(Perim. ~
     #       # n_v,
@@ -342,31 +367,35 @@ summary(TM.multigroup("SMX"), .progressBar = FALSE)
 plot(TM.multigroup("SMX"))
 
 summary(lme(Circ. ~
-          n_v +
-          # n_f +
-          mean.OD1 +
-          Perim. +
-          X1340.1603 +
-          # cellu.peak +
-          # lig.peak.pos +
-          lig.peak,
-        random = ~1|replicate,
-        data = filter(drop_na(sem.data), cell.type == "PMX")
-    ))
+n_v +
+  # n_f +
+  mean.OD1 +
+  Perim. +
+  X1340.1603 +
+  # cellu.peak +
+  # lig.peak.pos +
+  lig.peak,
+random = ~ 1 | replicate,
+data = filter(drop_na(sem.data), cell.type == "PMX")
+))
 ```
 
 ```{r, corrplots, warning=FALSE, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
 #### calculate linear regressions ####
-raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd") 
+raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd")
 raman_irx <- read_csv("raman_irx_shape.csv", col_types = "ccccddddddddddd")
 raman_corr <- right_join(raman_spectra, select(raman_irx, genotype:cell.type, Circ.))
 raman_corr_switch <- left_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
-                                       col_types = "cccc"), raman_corr) %>%
-  mutate(technical = str_c(technical, "switched", sep = "_"),
-         cell.type = "SMX")
+  col_types = "cccc"
+), raman_corr) %>%
+  mutate(
+    technical = str_c(technical, "switched", sep = "_"),
+    cell.type = "SMX"
+  )
 raman_corr <- raman_corr %>%
   anti_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
-                     col_types = "cccc")) %>%
+    col_types = "cccc"
+  )) %>%
   bind_rows(raman_corr_switch)
 
 lin.reg <- function(x) {
@@ -383,52 +412,60 @@ irx_raman_corr <- drop_na(raman_corr) %>%
   group_by(wavenumber, cell.type) %>%
   do(data.frame(lin.reg(.))) %>%
   select(-Circ., -p.Circ.) %>%
-  rename(r = corrected.intensity,
-         p = p.corrected.intensity) %>%
+  rename(
+    r = corrected.intensity,
+    p = p.corrected.intensity
+  ) %>%
   drop_na() %>%
-  full_join(raman_corr %>% 
-              ungroup() %>% 
-              group_by(cell.type, wavenumber) %>% 
-              summarise(intensity.mean = mean(corrected.intensity, na.rm = TRUE))) %>%
+  full_join(raman_corr %>%
+    ungroup() %>%
+    group_by(cell.type, wavenumber) %>%
+    summarise(intensity.mean = mean(corrected.intensity, na.rm = TRUE))) %>%
   filter(wavenumber > 300 & wavenumber < 2000)
 
 plot_correlations <- function(x, y, z) {
-ggplot(data = filter(x, cell.type == y)) +
-  geom_ridgeline_gradient(aes(
-    height = max(intensity.mean) - rollmean(intensity.mean, 3, na.pad = TRUE),
-    fill = r,
-    y = rollmean(intensity.mean, 3, na.pad = TRUE),
-    x = wavenumber
-  ),
-  colour = "white"
-  ) +
-  scale_x_reverse(limits = c(2000, 300)) +
-  labs(
-    title = y,
-    x = "Wavenumber",
-    y = "Absolute intensity"
-  ) +
-  scale_fill_distiller(palette = z) +
-  scale_colour_distiller(palette = z) +
-  theme_leo() +
-  theme(
-    legend.position = "bottom",
-    legend.key.width = unit(4, "mm")
-  ) +
-  guides(fill = guide_legend(), colour = "none") +
-  geom_label_repel(data = filter(x, 
-                                 cell.type == y & 
-                                   (r > (max(x$r[x$cell.type == y]) - 0.02) | 
-                                      r < (min(x$r[x$cell.type == y]) + 0.02))),
-                   aes(x = wavenumber,
-                       y = intensity.mean,
-                       label = wavenumber,
-                       colour = r),
-    nudge_y = 750,
-    family = "Helvetica",
-    segment.colour = "black",
-    size = 2
-  )
+  ggplot(data = filter(x, cell.type == y)) +
+    geom_ridgeline_gradient(aes(
+      height = max(intensity.mean) - rollmean(intensity.mean, 3, na.pad = TRUE),
+      fill = r,
+      y = rollmean(intensity.mean, 3, na.pad = TRUE),
+      x = wavenumber
+    ),
+    colour = "white"
+    ) +
+    scale_x_reverse(limits = c(2000, 300)) +
+    labs(
+      title = y,
+      x = "Wavenumber",
+      y = "Absolute intensity",
+      fill = "Correlation with\ncircularity"
+    ) +
+    scale_fill_distiller(palette = z) +
+    scale_colour_distiller(palette = z) +
+    theme_leo() +
+    theme(
+      legend.position = "bottom",
+      legend.key.width = unit(4, "mm")
+    ) +
+    guides(fill = guide_legend(), colour = "none") +
+    geom_label_repel(
+      data = filter(
+        x,
+        cell.type == y &
+          (r > (max(x$r[x$cell.type == y]) - 0.02) |
+            r < (min(x$r[x$cell.type == y]) + 0.02))
+      ),
+      aes(
+        x = wavenumber,
+        y = intensity.mean,
+        label = wavenumber,
+        colour = r
+      ),
+      nudge_y = 750,
+      family = "Helvetica",
+      segment.colour = "black",
+      size = 2
+    )
 }
 
 plot_correlations(irx_raman_corr, "PX", "PuOr")
@@ -437,16 +474,20 @@ plot_correlations(irx_raman_corr, "SMX", "PuOr")
 ```
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
-raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd") 
+raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd")
 raman_irx <- read_csv("raman_irx_shape.csv", col_types = "ccccddddddddddd")
 raman_corr <- right_join(raman_spectra, select(raman_irx, genotype:cell.type, Circ.))
 raman_corr_switch <- left_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
-                                       col_types = "cccc"), raman_corr) %>%
-  mutate(technical = str_c(technical, "switched", sep = "_"),
-         cell.type = "SMX")
+  col_types = "cccc"
+), raman_corr) %>%
+  mutate(
+    technical = str_c(technical, "switched", sep = "_"),
+    cell.type = "SMX"
+  )
 raman_corr <- raman_corr %>%
   anti_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
-                     col_types = "cccc")) %>%
+    col_types = "cccc"
+  )) %>%
   bind_rows(raman_corr_switch) %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   mutate(intensity.norm = corrected.intensity / corrected.intensity[wavenumber == 1603])
@@ -465,53 +506,61 @@ irx_raman_corr <- drop_na(raman_corr) %>%
   group_by(wavenumber, cell.type) %>%
   do(data.frame(lin.reg(.))) %>%
   select(-Circ., -p.Circ.) %>%
-  rename(r = intensity.norm,
-         p = p.intensity.norm) %>%
+  rename(
+    r = intensity.norm,
+    p = p.intensity.norm
+  ) %>%
   drop_na() %>%
-  full_join(raman_corr %>% 
-              ungroup() %>% 
-              group_by(cell.type, wavenumber) %>% 
-              summarise(intensity.mean = mean(intensity.norm, na.rm = TRUE))) %>%
+  full_join(raman_corr %>%
+    ungroup() %>%
+    group_by(cell.type, wavenumber) %>%
+    summarise(intensity.mean = mean(intensity.norm, na.rm = TRUE))) %>%
   filter(wavenumber > 300 & wavenumber < 2000) %>%
   drop_na()
 
 plot_correlations <- function(x, y, z) {
-ggplot(data = filter(x, cell.type == y)) +
-  geom_ridgeline_gradient(aes(
-    height = max(intensity.mean) - rollmean(intensity.mean, 3, na.pad = TRUE),
-    fill = r,
-    y = rollmean(intensity.mean, 3, na.pad = TRUE),
-    x = wavenumber
-  ),
-  colour = "white"
-  ) +
-  scale_x_reverse(limits = c(2000, 300)) +
-  labs(
-    title = y,
-    x = "Wavenumber",
-    y = "Intensity normalised to 1603"
-  ) +
-  scale_fill_distiller(palette = z) +
-  scale_colour_distiller(palette = z) +
-  theme_leo() +
-  theme(
-    legend.position = "bottom",
-    legend.key.width = unit(4, "mm")
-  ) +
-  guides(fill = guide_legend(), colour = "none") +
-  geom_label_repel(data = filter(x, 
-                                 cell.type == y & 
-                                   (r > (max(x$r[x$cell.type == y]) - 0.04) | 
-                                      r < (min(x$r[x$cell.type == y]) + 0.04))),
-                   aes(x = wavenumber,
-                       y = intensity.mean,
-                       label = wavenumber,
-                       colour = r),
-    nudge_y = 0.25,
-    family = "Helvetica",
-    segment.colour = "black",
-    size = 2
-  )
+  ggplot(data = filter(x, cell.type == y)) +
+    geom_ridgeline_gradient(aes(
+      height = max(intensity.mean) - rollmean(intensity.mean, 3, na.pad = TRUE),
+      fill = r,
+      y = rollmean(intensity.mean, 3, na.pad = TRUE),
+      x = wavenumber
+    ),
+    colour = "white"
+    ) +
+    scale_x_reverse(limits = c(2000, 300)) +
+    labs(
+      title = y,
+      x = "Wavenumber",
+      y = "Intensity normalised to 1603",
+      fill = "Correlation with\ncircularity"
+    ) +
+    scale_fill_distiller(palette = z) +
+    scale_colour_distiller(palette = z) +
+    theme_leo() +
+    theme(
+      legend.position = "bottom",
+      legend.key.width = unit(4, "mm")
+    ) +
+    guides(fill = guide_legend(), colour = "none") +
+    geom_label_repel(
+      data = filter(
+        x,
+        cell.type == y &
+          (r > (max(x$r[x$cell.type == y]) - 0.04) |
+            r < (min(x$r[x$cell.type == y]) + 0.04))
+      ),
+      aes(
+        x = wavenumber,
+        y = intensity.mean,
+        label = wavenumber,
+        colour = r
+      ),
+      nudge_y = 0.25,
+      family = "Helvetica",
+      segment.colour = "black",
+      size = 2
+    )
 }
 
 plot_correlations(irx_raman_corr, "PX", "PuOr")
@@ -520,16 +569,20 @@ plot_correlations(irx_raman_corr, "SMX", "PuOr")
 ```
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
-raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd") 
+raman_spectra <- read_csv("raman_spectra_corrected.csv", col_types = "ccccddd")
 raman_irx <- read_csv("raman_irx_shape.csv", col_types = "ccccddddddddddd")
 raman_corr <- right_join(raman_spectra, select(raman_irx, genotype:cell.type, Perim.))
 raman_corr_switch <- left_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
-                                       col_types = "cccc"), raman_corr) %>%
-  mutate(technical = str_c(technical, "switched", sep = "_"),
-         cell.type = "SMX")
+  col_types = "cccc"
+), raman_corr) %>%
+  mutate(
+    technical = str_c(technical, "switched", sep = "_"),
+    cell.type = "SMX"
+  )
 raman_corr <- raman_corr %>%
   anti_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
-                     col_types = "cccc")) %>%
+    col_types = "cccc"
+  )) %>%
   bind_rows(raman_corr_switch) %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   mutate(intensity.norm = corrected.intensity / corrected.intensity[wavenumber == 1603])
@@ -548,56 +601,83 @@ irx_raman_corr <- drop_na(raman_corr) %>%
   group_by(wavenumber, cell.type) %>%
   do(data.frame(lin.reg(.))) %>%
   select(-Perim., -p.Perim.) %>%
-  rename(r = intensity.norm,
-         p = p.intensity.norm) %>%
+  rename(
+    r = intensity.norm,
+    p = p.intensity.norm
+  ) %>%
   drop_na() %>%
-  full_join(raman_corr %>% 
-              ungroup() %>% 
-              group_by(cell.type, wavenumber) %>% 
-              summarise(intensity.mean = mean(intensity.norm, na.rm = TRUE))) %>%
+  full_join(raman_corr %>%
+    ungroup() %>%
+    group_by(cell.type, wavenumber) %>%
+    summarise(intensity.mean = mean(intensity.norm, na.rm = TRUE))) %>%
   filter(wavenumber > 300 & wavenumber < 2000) %>%
   drop_na()
 
 plot_correlations <- function(x, y, z) {
-ggplot(data = filter(x, cell.type == y)) +
-  geom_ridgeline_gradient(aes(
-    height = max(intensity.mean) - rollmean(intensity.mean, 3, na.pad = TRUE),
-    fill = r,
-    y = rollmean(intensity.mean, 3, na.pad = TRUE),
-    x = wavenumber
-  ),
-  colour = "white"
-  ) +
-  scale_x_reverse(limits = c(2000, 300)) +
-  labs(
-    title = y,
-    x = "Wavenumber",
-    y = "Intensity normalised to 1603"
-  ) +
-  scale_fill_distiller(palette = z) +
-  scale_colour_distiller(palette = z) +
-  theme_leo() +
-  theme(
-    legend.position = "bottom",
-    legend.key.width = unit(4, "mm")
-  ) +
-  guides(fill = guide_legend(), colour = "none") +
-  geom_label_repel(data = filter(x, 
-                                 cell.type == y & 
-                                   (r > (max(x$r[x$cell.type == y]) - 0.04) | 
-                                      r < (min(x$r[x$cell.type == y]) + 0.04))),
-                   aes(x = wavenumber,
-                       y = intensity.mean,
-                       label = wavenumber,
-                       colour = r),
-    nudge_y = 0.25,
-    family = "Helvetica",
-    segment.colour = "black",
-    size = 2
-  )
+  ggplot(data = filter(x, cell.type == y)) +
+    geom_ridgeline_gradient(aes(
+      height = max(intensity.mean) - rollmean(intensity.mean, 3, na.pad = TRUE),
+      fill = r,
+      y = rollmean(intensity.mean, 3, na.pad = TRUE),
+      x = wavenumber
+    ),
+    colour = "white"
+    ) +
+    scale_x_reverse(limits = c(2000, 300)) +
+    labs(
+      title = y,
+      x = "Wavenumber",
+      y = "Intensity normalised to 1603",
+      fill = "Correlation with\nperimeter"
+    ) +
+    scale_fill_distiller(palette = z) +
+    scale_colour_distiller(palette = z) +
+    theme_leo() +
+    theme(
+      legend.position = "bottom",
+      legend.key.width = unit(4, "mm")
+    ) +
+    guides(fill = guide_legend(), colour = "none") +
+    geom_label_repel(
+      data = filter(
+        x,
+        cell.type == y &
+          (r > (max(x$r[x$cell.type == y]) - 0.04) |
+            r < (min(x$r[x$cell.type == y]) + 0.04))
+      ),
+      aes(
+        x = wavenumber,
+        y = intensity.mean,
+        label = wavenumber,
+        colour = r
+      ),
+      nudge_y = 0.25,
+      family = "Helvetica",
+      segment.colour = "black",
+      size = 2
+    )
 }
 
 plot_correlations(irx_raman_corr, "PX", "PuOr")
 plot_correlations(irx_raman_corr, "PMX", "PuOr")
 plot_correlations(irx_raman_corr, "SMX", "PuOr")
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+ggplot(data = sem.data, aes(Circ., concavity)) +
+  geom_point(
+    aes(fill = cell.type),
+    shape = 21,
+    width = 0.1,
+    alpha = 0.9,
+    size = 2,
+    stroke = 0.25
+  ) +
+  geom_smooth(
+    span = 2,
+    colour = "red",
+    linetype = 2
+  ) +
+  scale_fill_viridis_d() +
+  theme_leo()
 ```

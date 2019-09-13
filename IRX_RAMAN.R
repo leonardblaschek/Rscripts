@@ -142,7 +142,7 @@ raman.data <- raman.data %>%
 # raman.data$technical <- factor(raman.data$technical)
 raman.data$wavenumber <- round(raman.data$wavenumber, digits = 0)
 
-raman.data <- inner_join(raman.irx[,c(1:4)], raman.data)
+# raman.data <- inner_join(raman.irx[,c(1:4)], raman.data)
 
 #### baseline correct ####
 raman.data.corrected <- raman.data %>%
@@ -159,7 +159,10 @@ rownames(raman.data.corrected.mx) <- paste(raman.data.corrected$genotype,
                                         raman.data.corrected$technical,
                                         sep = "_")
 
-corrected.spectra <- baseline.als(raman.data.corrected.mx)
+corrected.spectra <- baseline.als(raman.data.corrected.mx,
+                                  lambda = 5,
+                                  p = 0.01,
+                                  maxit = 100)
 corrected <- data.frame(corrected.spectra$corrected)
 
 raman.data.corrected <- corrected %>%
@@ -192,6 +195,9 @@ raman.data.corrected$cell.type <- as.factor(raman.data.corrected$cell.type)
 raman.data.corrected$replicate <- as.factor(raman.data.corrected$replicate)
 raman.data.corrected$technical <- as.factor(raman.data.corrected$technical)
 raman.data.corrected$technical <- as.factor(raman.data.corrected$technical)
+raman.data.corrected <- raman.data.corrected %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(scaled = corrected.intensity / corrected.intensity[wavenumber == 1603])
 
 #### average data ####
 raman.data.ratios <- distinct(raman.data.corrected) %>%

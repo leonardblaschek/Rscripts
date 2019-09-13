@@ -158,11 +158,50 @@ raman.irx <- read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/raman_IRX_revi
   select(genotype:Perim., Circ., Round, Height, Width) %>%
   filter(object == 2) %>%
   select(-object)
+
 raman.nb <- read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/raman_IRX.csv") %>%
   select(genotype:n_f)
 raman.irx <- left_join(raman.irx, raman.nb)
 raman.irx$replicate <- as.character(raman.irx$replicate)
 raman.irx$technical <- as.character(raman.irx$technical)
+
+raman_convex <- read.csv("/home/leonard/Documents/Uni/PhD/IRX/raman_irx_convex.csv")
+
+raman_convex$File <-
+  str_replace(raman_convex$File, fixed("fah 1"), "fah1")
+
+raman_convex <- raman_convex %>%
+  select(-X) %>%
+  separate(
+    File,
+    into = c("genotype", "replicate", "cell.type", "technical"),
+    sep = "\\s*#|-|\\s",
+    extra = "merge"
+  ) %>%
+  mutate(
+    genotype = recode(
+      genotype,
+      "4cl1＆2" = "4cl1x4cl2",
+      "cad4＆5" = "cad4xcad5",
+      "ccoaomt" = "ccoaomt1",
+      "ccr1" = "ccr1-3",
+      "col.o" = "Col-0",
+      "Col.0" = "Col-0",
+      "ccr1＆fah1" = "ccr1xfah1"
+    ),
+    cell.type = recode(cell.type,
+                       "px" = "PX",
+                       "SX" = "SMX",
+                       "MX" = "PMX"),
+    replicate = str_extract(replicate,
+                            "\\d"),
+    technical = str_extract(technical,
+                            "(\\d)+")
+  ) %>%
+  filter(cell.type != "？？")
+
+raman.irx <- left_join(raman.irx, raman_convex)
+  
 write_csv(raman.irx, "raman_irx_shape.csv")
 
 #### import and tidy plant height data ####
@@ -252,7 +291,10 @@ rownames(raman.data.mat) <- paste(raman.data.wide$genotype,
                                            raman.data.wide$technical,
                                            sep = "_")
 
-raman.data.correction <- baseline.als(raman.data.mat)
+raman.data.correction <- baseline.als(raman.data.mat,
+                                      lambda = 5,
+                                      p = 0.01,
+                                      maxit = 100)
 raman.data.corrected <- data.frame(raman.data.correction$corrected)
 
 raman.data.corrected <- raman.data.corrected %>%
@@ -285,22 +327,27 @@ write_csv(raman.data.corrected, "raman_spectra_corrected.csv")
 #### average Raman data, calculate integrals and detect peaks ####
 raman.data.plot <- raman.data.corrected %>%
   group_by(genotype, cell.type, replicate, technical) %>%
-  mutate("1603" = corrected.intensity[wavenumber == 1603],
-         "1662" = corrected.intensity[wavenumber == 1662],
-         "1119" = corrected.intensity[wavenumber == 1119],
-         "1603/1099" = corrected.intensity[wavenumber == 1603] / corrected.intensity[wavenumber == 1099],
-         "1099/1603" = corrected.intensity[wavenumber == 1099] / corrected.intensity[wavenumber == 1603],
-         "1119/1603" = corrected.intensity[wavenumber == 1119] / corrected.intensity[wavenumber == 1603],
-         "1621/1603" = corrected.intensity[wavenumber == 1621] / corrected.intensity[wavenumber == 1603],
-         "1340/1603" = corrected.intensity[wavenumber == 1340] / corrected.intensity[wavenumber == 1603],
-         "1664/1603" = corrected.intensity[wavenumber == 1664] / corrected.intensity[wavenumber == 1603],
-         "1147/1603" = corrected.intensity[wavenumber == 1147] / corrected.intensity[wavenumber == 1603],
-         "1457/1603" = corrected.intensity[wavenumber == 1457] / corrected.intensity[wavenumber == 1603],
-         "1457/1340" = corrected.intensity[wavenumber == 1457] / corrected.intensity[wavenumber == 1340],
-         "1131/1603" = corrected.intensity[wavenumber == 1131] / corrected.intensity[wavenumber == 1603],
-         "381/1099" = corrected.intensity[wavenumber == 381] / corrected.intensity[wavenumber == 1099],
-         "lig.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1550, to = 1640),
-         "cellu.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1110, to = 1130))
+  mutate(
+    # "1603" = corrected.intensity[wavenumber == 1603],
+    # "1662" = corrected.intensity[wavenumber == 1662],
+    # "1119" = corrected.intensity[wavenumber == 1119],
+    "1603/1099" = corrected.intensity[wavenumber == 1603] / corrected.intensity[wavenumber == 1099],
+    "1099/1603" = corrected.intensity[wavenumber == 1099] / corrected.intensity[wavenumber == 1603],
+    # "1119/1603" = corrected.intensity[wavenumber == 1119] / corrected.intensity[wavenumber == 1603],
+    "1625/1603" = corrected.intensity[wavenumber == 1625] / corrected.intensity[wavenumber == 1603],
+    "1383/1603" = corrected.intensity[wavenumber == 1383] / corrected.intensity[wavenumber == 1603],
+    "1340/1603" = corrected.intensity[wavenumber == 1340] / corrected.intensity[wavenumber == 1603],
+    "1664/1603" = corrected.intensity[wavenumber == 1664] / corrected.intensity[wavenumber == 1603],
+    # "1147/1603" = corrected.intensity[wavenumber == 1147] / corrected.intensity[wavenumber == 1603],
+    # "1457/1603" = corrected.intensity[wavenumber == 1457] / corrected.intensity[wavenumber == 1603],
+    # "1457/1340" = corrected.intensity[wavenumber == 1457] / corrected.intensity[wavenumber == 1340],
+    # "1131/1603" = corrected.intensity[wavenumber == 1131] / corrected.intensity[wavenumber == 1603],
+    "381/1099" = corrected.intensity[wavenumber == 381] / corrected.intensity[wavenumber == 1099],
+    "lig.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1550, to = 1640) /
+      MESS::auc(wavenumber, corrected.intensity, from = 300, to = 2000),
+    "cellu.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1080, to = 1115) /
+      MESS::auc(wavenumber, corrected.intensity, from = 300, to = 2000)
+  )
 
 raman.data.peaks <- distinct(raman.data.corrected) %>%
   group_by(genotype, cell.type, replicate, technical) %>%
@@ -725,15 +772,15 @@ irx_export <- irx.avg %>%
             lig_1603.mean = mean(`1603/1099`),
             cellu_cryst.mean = mean(`381/1099`),
             cellu_1099.mean = mean(`1099/1603`),
-            cellu_1119.mean = mean(`1119/1603`),
-            ald.mean = mean(`1621/1603`),
+            # cellu_1119.mean = mean(`1119/1603`),
+            ald.mean = mean(`1625/1603`),
             S.sd = sd(`1340/1603`),
             G.sd = sd(`1664/1603`),
             lig_1603.sd = sd(`1603/1099`),
             cellu_cryst.sd = sd(`381/1099`),
             cellu_1099.sd = sd(`1099/1603`),
-            cellu_1119.sd = sd(`1119/1603`),
-            ald.sd = sd(`1621/1603`)) %>%
+            # cellu_1119.sd = sd(`1119/1603`),
+            ald.sd = sd(`1625/1603`)) %>%
   select(sort(current_vars()))
 
 irx_neighbour_exp <- raman.irx %>%
