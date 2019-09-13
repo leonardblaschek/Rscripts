@@ -166,7 +166,6 @@ ggplot(pop_irx, aes(Circ., concavity)) +
   geom_point(
     aes(fill = genotype),
     shape = 21,
-    width = 0.1,
     alpha = 0.9,
     size = 2,
     stroke = 0.25
