@@ -18,6 +18,7 @@ library(zoo)
 library(ggridges)
 library(ggrepel)
 library(tidyverse)
+library(ggbeeswarm)
 
 font_add(
   "Helvetica",
@@ -80,7 +81,7 @@ library(ggplot2)
 sem.data <- read.csv("file:///home/leonard/R/Output/PhD/SEM_data.csv")
 
 sem.data <- sem.data %>%
-  mutate(concavity = 1 - (Area / ConvexArea))
+  mutate(convexity = Area / ConvexArea)
 
 # calculate height and width relative to perimeter
 sem.data <- sem.data %>%
@@ -297,13 +298,12 @@ plot(third.model, digits = 2)
 
 TM.multigroup <- function(x) {
   psem(
-    lme(Circ. ~
+    lm(Circ. ~
     n_v +
-      concavity,
-    random = ~ 1 | replicate,
+      convexity,
     data = filter(drop_na(sem.data), cell.type == x)
     ),
-    lme(concavity ~
+    lm(convexity ~
     n_v +
       # n_f +
       mean.OD1 +
@@ -315,10 +315,10 @@ TM.multigroup <- function(x) {
       # X1457.1340 +
       X1625.1603 +
       cellu.peak +
+      # total_auc +
       # lig.peak.pos +
       # X1603.1099,
       lig.peak,
-    random = ~ 1 | replicate,
     data = filter(drop_na(sem.data), cell.type == x)
     ),
     # lme(Perim. ~
@@ -664,9 +664,52 @@ plot_correlations(irx_raman_corr, "SMX", "PuOr")
 ```
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
-ggplot(data = sem.data, aes(Circ., concavity)) +
+
+sem.data <- sem.data %>%
+  mutate(genotype = ordered(genotype,
+                              levels = c(
+                                "Col-0",
+                                "4cl1",
+                                "4cl2",
+                                "4cl1x4cl2",
+                                "ccoaomt1",
+                                "fah1",
+                                "omt1",
+                                "ccr1-3",
+                                "cad4",
+                                "cad5",
+                                "cad4xcad5"
+                              )))
+pdf("circ_convexity.pdf")
+ggplot(data = sem.data, aes(Circ., convexity)) +
   geom_point(
-    aes(fill = cell.type),
+    aes(fill = genotype),
+    shape = 21,
+    # width = 0.1,
+    alpha = 0.9,
+    size = 2,
+    stroke = 0.25
+  ) +
+  # stat_density_2d(aes(fill = stat(level)),
+  #                 geom = "polygon", 
+  #                 n = 100 ,
+  #                 bins = 20) + 
+  geom_smooth(
+    span = 2,
+    colour = "red",
+    linetype = 2
+  ) +
+  scale_fill_viridis_d() +
+  facet_wrap(~ cell.type, ncol = 3) +
+  guides(fill = "colorbar") +
+  theme(legend.title = element_blank(),
+        legend.position = "bottom") +
+  theme_leo()
+dev.off()
+
+ggplot(data = sem.data, aes(Area, convexity)) +
+  geom_point(
+    aes(fill = genotype),
     shape = 21,
     width = 0.1,
     alpha = 0.9,
@@ -680,4 +723,128 @@ ggplot(data = sem.data, aes(Circ., concavity)) +
   ) +
   scale_fill_viridis_d() +
   theme_leo()
+
+ggplot(data = sem.data, aes(Perim., convexity)) +
+  geom_point(
+    aes(fill = genotype),
+    shape = 21,
+    width = 0.1,
+    alpha = 0.9,
+    size = 2,
+    stroke = 0.25
+  ) +
+  geom_smooth(
+    span = 2,
+    colour = "red",
+    linetype = 2
+  ) +
+  scale_fill_viridis_d() +
+  theme_leo()
+
+
+sem_long <- sem.data %>%
+  select(genotype, cell.type, Circ., convexity) %>%
+  gather(key = "parameter", value = "value", -genotype, -cell.type) %>%
+  mutate(genotype = ordered(genotype,
+                              levels = c(
+                                "Col-0",
+                                "4cl1",
+                                "4cl2",
+                                "4cl1x4cl2",
+                                "ccoaomt1",
+                                "fah1",
+                                "omt1",
+                                "ccr1-3",
+                                "cad4",
+                                "cad5",
+                                "cad4xcad5"
+                              )),
+        parameter = recode(parameter, "Circ." = "Circularity",
+         "convexity" = "Convexity"),
+        parameter = ordered(parameter, levels = c(
+           "Circularity",
+           "Convexity"
+         )),
+        cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX")))
+
+ggplot(data = sem.data, aes(total_auc, convexity)) +
+  geom_point(
+    aes(fill = cell.type),
+    shape = 21,
+    width = 0.1,
+    alpha = 0.9,
+    size = 2,
+    stroke = 0.25
+  ) +
+  # geom_smooth(
+  #   span = 2,
+  #   colour = "red",
+  #   linetype = 2
+  # ) +
+  scale_fill_viridis_d() +
+  theme_leo()
+
+ggplot(data = sem.data, aes(x = reorder(genotype, convexity, mean), y = convexity)) +
+  geom_jitter(
+    aes(fill = cell.type),
+    shape = 21,
+    width = 0.1,
+    alpha = 0.9,
+    size = 2,
+    stroke = 0.25
+  ) +
+  # geom_smooth(
+  #   span = 2,
+  #   colour = "red",
+  #   linetype = 2
+  # ) +
+  scale_fill_viridis_d() +
+  theme_leo()
+
+pdf("shape_overview.pdf", width = 7, height = 5)
+ggplot(data = sem_long, aes(x = genotype, y = value)) +
+  geom_quasirandom(
+    aes(fill = genotype),
+    shape = 21,
+    # width = 0.1,
+    alpha = 0.5,
+    size = 2,
+    stroke = 0.25
+  ) +
+  geom_boxplot(
+    alpha = 0.75,
+    outlier.alpha = 0,
+    width = 0.4
+  ) +
+  # geom_smooth(
+  #   span = 2,
+  #   colour = "red",
+  #   linetype = 2
+  # ) +
+  scale_fill_viridis_d() +
+  # coord_flip() +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  facet_grid(parameter ~ cell.type, scales = "free_y") +
+  theme_leo() +
+  theme(legend.position = "none",
+        axis.title = element_blank(),
+        axis.text.x = element_text(angle = 90,
+                                   hjust = 1,
+                                   vjust = 0.5))
+dev.off()
+
 ```

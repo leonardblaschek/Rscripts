@@ -218,6 +218,45 @@ spectra.WT.MX <- ggplot() +
   ) +
   facet_grid(cell.type ~ genotype)
 ggplotly(spectra.WT.MX)
+
+rmn_pres <- rmn_data_avg_WT %>%
+  filter(cell.type == "PMX") %>%
+  mutate(fill_col = case_when(wavenumber %in% c(1550:1640) ~ "lignin",
+                               wavenumber %in% c(1080:1115) ~ "cellulose"))
+
+pdf("pres_spectra.pdf", height = 4, width = 10)
+ggplot(
+  data = rmn_pres,
+  aes(
+    x = wavenumber,
+    y = 0,
+    height = rollmean(mean.scaled, 3, na.pad = TRUE),
+    group = 1
+  )
+) +
+  geom_ridgeline_gradient(aes(fill = fill_col),
+    min_height = -0.5
+  ) +
+  scale_fill_few(na.value = rgb(0, 0, 0, 0)) +
+  geom_label_repel(
+    data = filter(rmn_pres, wavenumber %in% c(1664, 1625, 1340)),
+    aes(label = c("S-lignin", "Aldehydes", "G-lignin"),
+        y = mean.scaled),
+    min.segment.length = 0,
+    nudge_x = 100,
+    label.size = NA,
+    family = "Helvetica",
+    size = 5,
+    fill = NA
+  ) +
+  annotate(geom = "text", x = 1099, y = 0.2, hjust = 1, label = "Cellulose", family = "Helvetica", size = 5) +
+  annotate(geom = "text", x = 1593, y = 0.95, hjust = 1, label = "Lignin", family = "Helvetica", size = 5) +
+  labs(x = "Wavenumber") +
+  theme_leo() +
+  theme(axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank())
+dev.off()
 ```
 
 ## Scaled wild type spectra
@@ -1230,5 +1269,97 @@ z-scaled intensity $x_{z} = x - \frac{\overline{x}}{\sigma_{x}}$
 Plotted difference from the WT $\Delta x_{z} = x_{z} - x_{z}^{WT}$
 
 The annotations are of course tentative, but they already show nicely that the the relative abundance of S-units and other lignin is increased relative to G-units specifically in the IF of the *4cl* double mutant. It also shows that the increase of aldehyde units in the *cad4*x*cad5* is stronger in the bundle.
+
+### Figure 6
+
+Here are the spectra from Zoltan. My first take-aways are the following:
+
+* **1625 cm^-1^** comes from S and G aldehydes and ferulates
+* **1664 cm^-1^** comes from G-OH > G-CHO = S-OH = S-CHO
+* **1600 cm^-1^** shifts toward lower wavenumbers the more carbons are directly linked to the aromatic ring, *i.e* monomers > polymers and C > G > S
+* **1340 cm^-1^** comes from all S-units
+* **1130 cm^-1^** comes from aldehydes
+
+```{r model compounds, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, fig.cap = "**Figure 6**: Spectra of monomeric and polymeric lignin model compounds. The intensities are scaled relative to the total area under the curve of the respective spectrum. For assignments of the annotated wavenumbers see table 2."}
+
+rmn_model_files <-
+  list.files(
+    path = "/home/leonard/Documents/Uni/PhD/Raman/Zoltan/",
+    pattern = ".csv",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_csv(flnm,
+           comment = "#",
+           col_names = FALSE,
+           skip = 5,
+           cols_only(X1 = col_number(),
+                     X2 = col_number())
+  ) %>%
+    mutate(filename = flnm)
+}
+
+rmn_models <- lapply(rmn_model_files, read_plus) %>%
+  bind_rows()
+
+rmn_models <- rmn_models %>%
+  mutate(filename = str_remove(basename(filename), ".\\.csv$")) %>%
+  separate(filename, into = c("state", "unit", "gamma"), remove = FALSE) %>%
+  rename("wavenumber" = "X1",
+         "intensity" = "X2") %>%
+  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
+  group_by(state, unit, gamma) %>%
+  mutate(AUC = MESS::auc(wavenumber, intensity),
+         scaled = intensity / AUC)
+
+# pdf("monomer_spectra.pdf", height = 5, width = 9)
+ggplot(rmn_models) +
+  geom_vline(xintercept = 1625, linetype = 2) +
+  geom_vline(xintercept = 1664, linetype = 2) +
+  geom_vline(xintercept = 1340, linetype = 2) +
+  geom_vline(xintercept = 1383, linetype = 2) +
+  geom_vline(xintercept = 1150, linetype = 2) +
+  geom_vline(xintercept = 1130, linetype = 2) +
+  annotate("text", label = "1625", x = 1620, y = 0.75, hjust = 0, family = "Helvetica") +
+  annotate("text", label = "1664", x = 1670, y = 0.75, hjust = 1, family = "Helvetica") +
+  annotate("text", label = "1340", x = 1335, y = 0.75, hjust = 0, family = "Helvetica") +
+  annotate("text", label = "1383", x = 1387, y = 0.75, hjust = 1, family = "Helvetica") +
+  annotate("text", label = "1150", x = 1155, y = 0.75, hjust = 1, family = "Helvetica") +
+  annotate("text", label = "1130", x = 1125, y = 0.75, hjust = 0, family = "Helvetica") +
+  geom_ridgeline(aes(
+    x = wavenumber,
+    y = filename,
+    height = scaled,
+    fill = unit,
+    group = filename
+  ),
+  alpha = 0.75,
+  size = 0.2,
+  # colour = NA,
+  scale = 100,
+  min_height = -0.002
+  ) +
+  scale_fill_viridis_d() +
+  scale_x_reverse() +
+  scale_y_discrete(labels = c("C-COOH",
+                              "G-CHO",
+                              "G-COOH",
+                              "G-OH",
+                              "S-CHO",
+                              "S-COOH",
+                              "S-OH",
+                              "G-CHO DHP",
+                              "G-OH DHP")) +
+  labs(x = "Wavenumber") +
+  theme_leo() +
+  theme(
+    panel.spacing = unit(5, "mm"),
+    axis.title.y = element_blank()
+  ) 
+# dev.off()
+  
+```
 
 ## References

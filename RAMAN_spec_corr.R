@@ -239,7 +239,7 @@ p.heat <-
 rspec.col.MX <-
   ggplot(data = subset(rspec, cell.type == "MX" &
                          genotype == "col-0"),
-         aes(x = wave.number, y = mean)) +
+         aes(x = wave.number, y = zoo::rollmean(mean, 5, na.pad=TRUE))) +
   geom_vline(xintercept = 1596.4,
              colour = "grey75",
              size = 0.5) +
@@ -255,7 +255,7 @@ rspec.col.MX <-
     size = 0.5,
     linetype = 2
   ) +
-  geom_line(group = 1, size = 0.5) +
+  geom_line(group = 1, size = 0.25) +
   theme_few() +
   expand_limits(y = -150) +
   scale_x_reverse(breaks = c(750, 1000, 1250, 1500, 1750)) +
@@ -265,15 +265,15 @@ rspec.col.MX <-
   y = "Intensity") +
   theme(
     text = element_text(family = "Helvetica", colour = "black"),
-    axis.title.y = element_text(size = 14, margin = margin(
+    axis.title.y = element_text(size = 6, margin = margin(
       t = 0,
       r = -1,
       b = 0,
       l = 0
     )),
-    axis.title.x = element_text(size = 14),
+    axis.title.x = element_text(size = 6),
     axis.text.y = element_blank(),
-    axis.text.x = element_text(colour = "black", size = 14),
+    axis.text.x = element_text(colour = "black", size = 6),
     axis.ticks.x = element_line(
       size = 0.25,
       lineend = "square",
@@ -281,11 +281,11 @@ rspec.col.MX <-
     ),
     axis.ticks.y = element_blank(),
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
-    plot.margin = unit(c(0.75, 0.75, -1.25, 0.75), "cm")
+    plot.margin = unit(c(2, 20, -10, 20), "pt")
   )
 dev.off()
 
-pdf("rspec_grid.pdf", height = 3, width = 8)
+pdf("rspec_grid.pdf", height = 1.75, width = 5)
 plot_grid(
   rspec.col.MX,
   corr.heat,

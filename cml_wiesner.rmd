@@ -62,7 +62,7 @@ theme_leo <- function(base_size = 14,
       ),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.5),
       panel.spacing = unit(1.5, "mm"),
       legend.position = "none",
       legend.text = element_text(size = rel(0.8)),
@@ -592,31 +592,18 @@ ggplot(data = cml_data, aes(x = distance.scaled, y = absorbance.rescaled)) +
 
 library(tukeygrps)
 
-cml_data_box <- cml_data_box %>%
-  unite("genotype_position", genotype, position, sep = "_")
-
-box_letters <- letter_groups(cml_data_box, absorbance, genotype_position, "kruskal") %>%
-  separate(genotype_position, into = c("genotype", "position"), sep = "_")
-
-cml_data_box <- cml_data_box %>%
-  separate(genotype_position, into = c("genotype", "position"), sep = "_")
-
-# tukey <- function(x) {
-#   aov1 <- aov(data = x, absorbance ~ interaction(genotype, position))
-#   groups <- HSD.test(aov1, "interaction(genotype, position)", alpha = 0.001)
-#   groups$groups[["genotype"]] <- rownames(groups$groups)
-#   groups$groups[["absorbance"]] <- -0.05
-#   return(groups[["groups"]])
-# }
+## comparisons across layers
+# cml_data_box <- cml_data_box %>%
+#   unite("genotype_position", genotype, position, sep = "_")
 # 
-# box_letters <- cml_data_box[, -c(1, 3, 4, 5)] %>%
-#   # group_by(position) %>%
-#   do(data.frame(tukey(.))) %>% 
-#   separate(genotype, into = c("genotype", "position"), sep = "\\.")
+# box_letters <- letter_groups(cml_data_box, absorbance, genotype_position, "kruskal") %>%
+#   separate(genotype_position, into = c("genotype", "position"), sep = "_")
+# 
+# cml_data_box <- cml_data_box %>%
+#   separate(genotype_position, into = c("genotype", "position"), sep = "_")
 
-# box_letters <- cml_data_box %>%
-#   group_by(position) %>%
-#   do(data.frame(tukey(.)))
+## comparisons within layers
+box_letters <- letter_groups(cml_data_box, absorbance, genotype, "kruskal", position)
 
 layer_boxes <- ggplot(
   data = cml_data_box,
@@ -635,17 +622,19 @@ layer_boxes <- ggplot(
     alpha = 0.5
   ) +
   scale_fill_brewer(palette = "YlGnBu") +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.01))) +
   geom_quasirandom(
     width = 0.2,
     shape = 19,
-    size = 1.5,
+    size = 1,
     stroke = 0,
-    alpha = 0.25,
+    alpha = 0.1,
     # aes(colour = replicate)
   ) +
   geom_boxplot(
-    fill = rgb(1, 1, 1, 0.75),
-    outlier.alpha = 0
+    fill = rgb(1, 1, 1, 0.5),
+    outlier.alpha = 0,
+    size = 0.25
   ) +
   # geom_violin(
   #   fill = rgb(1, 1, 1, 0.5),
@@ -655,7 +644,8 @@ layer_boxes <- ggplot(
     data = box_letters,
     aes(label = groups),
     family = "Helvetica",
-    size = 4.5
+    size = 6 / (14 / 5),
+    vjust = 1
   ) +
   labs(y = "Absorbance") +
   scale_x_discrete(
@@ -676,21 +666,39 @@ layer_boxes <- ggplot(
   theme_leo() +
   theme(
     axis.text.x = element_text(
+      size = 6,
       angle = 90,
       vjust = 0.5,
       hjust = 1
     ),
-    axis.title.x = element_blank()
+    axis.title.x = element_blank(),
+    axis.ticks = element_line(
+      size = 0.25,
+      lineend = "square"
+    ),
+    axis.title.y = element_text(size = 6),
+    axis.text.y = element_text(size = 6),
+    strip.text = element_text(
+      vjust = 0.1,
+      hjust = 0,
+      face = "italic",
+      size = 6
+    ),
+    plot.margin = unit(c(0, 0, 0, 0), "cm")
   ) +
   facet_wrap(~position, nrow = 1)
 
-pdf("cml_box_across.pdf", width = 14)
+pdf("cml_box_across.pdf", width = 5, height = 2)
 layer_boxes
 dev.off()
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, warning = FALSE}
 
 prfl <- function(x, y, z) {
   ggplot(data = filter(cml_data, genotype == x), aes(x = distance.scaled, y = absorbance)) +
-    geom_rect(data = cml_data[1,],
+    geom_rect(
+      data = cml_data[1, ],
       aes(
         xmin = 0.45,
         xmax = 0.55,
@@ -700,7 +708,8 @@ prfl <- function(x, y, z) {
       fill = "#ffffcc",
       alpha = 0.5
     ) +
-    geom_rect(data = cml_data[1,],
+    geom_rect(
+      data = cml_data[1, ],
       aes(
         xmin = 0.35,
         xmax = 0.45,
@@ -710,7 +719,8 @@ prfl <- function(x, y, z) {
       fill = "#a1dab4",
       alpha = 0.5
     ) +
-    geom_rect(data = cml_data[1,],
+    geom_rect(
+      data = cml_data[1, ],
       aes(
         xmin = 0.55,
         xmax = 0.65,
@@ -720,7 +730,8 @@ prfl <- function(x, y, z) {
       fill = "#a1dab4",
       alpha = 0.5
     ) +
-    geom_rect(data = cml_data[1,],
+    geom_rect(
+      data = cml_data[1, ],
       aes(
         xmin = 0.1,
         xmax = 0.35,
@@ -730,7 +741,8 @@ prfl <- function(x, y, z) {
       fill = "#41b6c4",
       alpha = 0.5
     ) +
-    geom_rect(data = cml_data[1,],
+    geom_rect(
+      data = cml_data[1, ],
       aes(
         xmin = 0.65,
         xmax = 0.9,
@@ -740,7 +752,8 @@ prfl <- function(x, y, z) {
       fill = "#41b6c4",
       alpha = 0.5
     ) +
-    geom_rect(data = cml_data[1,],
+    geom_rect(
+      data = cml_data[1, ],
       aes(
         xmin = 0.02,
         xmax = 0.1,
@@ -750,7 +763,8 @@ prfl <- function(x, y, z) {
       fill = "#225ea8",
       alpha = 0.5
     ) +
-    geom_rect(data = cml_data[1,],
+    geom_rect(
+      data = cml_data[1, ],
       aes(
         xmin = 0.9,
         xmax = 0.98,
@@ -761,12 +775,13 @@ prfl <- function(x, y, z) {
       alpha = 0.5
     ) +
     geom_line(aes(group = interaction(ROI, replicate, genotype)),
-      alpha = 0.25
+      alpha = 0.25,
+      size = 0.25
     ) +
     geom_line(
       data = filter(cml_data, genotype == x & ROI == y & replicate == z),
       colour = "red",
-      size = 1,
+      size = 0.5,
       alpha = 0.85
     ) +
 
@@ -777,14 +792,26 @@ prfl <- function(x, y, z) {
     scale_y_continuous(limits = c(0, 1)) +
     labs(y = "Absorbance") +
     theme_leo() +
-    theme(axis.title.x = element_blank())
+    theme(
+      axis.title.x = element_blank(),
+      plot.margin = unit(c(0, 0, 0, 0), "cm"),
+      axis.text.x = element_text(
+        size = 6
+      ),
+      axis.ticks = element_line(
+        size = 0.25,
+        lineend = "square"
+      ),
+      axis.title.y = element_text(size = 6),
+      axis.text.y = element_text(size = 6)
+    )
 }
 
-# pdf("profiles.pdf", height = 2, width = 4.5)
+pdf("profiles.pdf", height = 0.75, width = 1.94)
 prfl("Col-0", "12", "1")
 prfl("cad4xcad5", "9", "1")
 prfl("4cl1x4cl2", "8", "1")
-# dev.off()
+dev.off()
 ```
 ## Boxplot with mean absorbances per ROI
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, warning = FALSE}

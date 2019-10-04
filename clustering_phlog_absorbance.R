@@ -9,7 +9,7 @@ library(gplots)
 library(RColorBrewer)
 library(reshape2)
 library(Hmisc)
-library(proxy)
+# library(proxy)
 
 #### import Helvetica Neue ####
 font_add("Helvetica", regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",

@@ -12,7 +12,8 @@ library(agricolae)
 font_add("Helvetica",
          regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
          italic = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
-         bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Md.otf")
+         bold = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Md.otf",
+         bolditalic = "/prop_fonts/prop_fonts/30. Minion     [1990 - Robert Slimbach]/MinionPro-BoldIt.otf")
 showtext_auto()
 
 
@@ -26,7 +27,7 @@ print.HSD.OD <- function(x) {
   aov1 <- aov(mean.od ~ bin + genotype, data = x)
   groups <- HSD.test(aov1, c("bin", "genotype"), alpha = 0.05)
   groups[["groups"]][["cell.type"]] <-  unique(x$cell.type)
-  groups[["groups"]][["mean.od"]] <- -0.03
+  groups[["groups"]][["mean.od"]] <- -0.005
   write.table(
     groups[["groups"]],
     file = "stats_OD_poplarFW.csv",
@@ -223,12 +224,18 @@ poplar.OD_dist <-
     group = bin,
     fill = cell
   )) +
-  geom_vline(colour = "grey95",
-             xintercept = 1,
-             size = 33) +
-  geom_vline(colour = "grey95",
-             xintercept = 3,
-             size = 33) +
+  annotate("rect",
+                fill = "grey95",
+                ymin = -Inf,
+                ymax = Inf,
+                xmin = 0.5,
+                xmax = 1.5) +
+  annotate("rect",
+                fill = "grey95",
+                ymin = -Inf,
+                ymax = Inf,
+                xmin = 2.5,
+                xmax = 3.5) +
   geom_bar(
     stat = "identity",
     colour = NA,
@@ -238,39 +245,55 @@ poplar.OD_dist <-
     size = 0.1,
     width = 0.75
   ) +
-  geom_jitter(
-    data = poplar.bin.pre,
-    fill = NA,
-    position = position_dodge(.9),
-    alpha = 0.5
+  geom_point(
+    # data = poplar.bin.pre,
+    # fill = NA,
+    position = position_jitterdodge(.5),
+    # width = 0.1,
+    alpha = 0.5,
+    shape = 19,
+    size = 1,
+    stroke = 0
   ) +
   scale_y_continuous(
-    limits = c(-0.09, 0.35),
+    limits = c(-0.005, 0.35),
     breaks = c(0, 0.1, 0.2, 0.3),
-    labels = c(" 0.0", " 0.1", " 0.2", " 0.3")
+    labels = c(" 0.0", " 0.1", " 0.2", " 0.3"),
+    expand = expand_scale(mult = c(0.15, 0))
   ) +
   scale_x_discrete(labels = c("WT",
-                              expression(italic("c4h")),
-                              expression(italic("ccr")))) +
-  theme_base() +
+                              expression(paste(italic("C4H"), "-RNAi")),
+                              expression(paste(italic("CCR"), "-RNAi")))) +
+  theme_minimal() +
   theme(
-    text = element_text(family = "Helvetica", colour = "black"),
-    plot.background = element_blank(),
+    text = element_text(size = 6, family = "Helvetica"),
+    legend.position = "none",
+    axis.ticks = element_line(
+      size = 0.25,
+      lineend = "square",
+      color = "black"
+    ),
+    axis.title.y = element_text(size = 6),
     axis.title.x = element_blank(),
-    axis.text.x = element_blank(),
-    axis.ticks.x = element_blank(),
-    strip.text.x = element_text(
+    axis.text.y = element_text(size = 6, colour = "black"),
+    axis.text.x = element_text(
+      size = 6,
+      colour = "black",
+      angle = 90,
+      vjust = 0.5,
+      hjust = 1
+    ),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+    panel.spacing.x = unit(1.5, "mm"),
+    strip.text = element_text(
+      vjust = 0.1,
       hjust = 0,
       face = "italic",
-      colour = "black"
+      size = 6
     ),
-    strip.text.y = element_text(
-      vjust = 0.5,
-      face = "italic",
-      colour = "black"
-    ),
-    panel.spacing = unit(1, "mm"),
-    plot.margin = unit(c(0, 0, -0.15, 0), "cm")
+    plot.margin = unit(c(0, 0, 0, 0), "cm")
   ) +
   labs(y = "Absorbance") +
   geom_text(
@@ -280,10 +303,14 @@ poplar.OD_dist <-
     family = "Helvetica",
     angle = 90,
     hjust = 1,
-    size = 4
+    size = 6 / (14 / 5)
   ) +
   facet_grid(~ cell.type) +
   scale_fill_manual(values = barcols, guide = FALSE)
+
+pdf("poplar_OD.pdf", width = 3.4, height = 1.5)
+poplar.OD_dist
+dev.off()
 
 
 #### set statistical letters for hue ####
@@ -317,18 +344,51 @@ poplar.hue_dist <-
     colour = bin,
     fill = cell
   )) +
-  geom_vline(colour = "grey95",
-             xintercept = 1,
-             size = 33) +
-  geom_vline(colour = "grey95",
-             xintercept = 3,
-             size = 33) +
+  annotate("rect",
+           fill = "grey95",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = 0.5,
+           xmax = 1.5) +
+  annotate("rect",
+           fill = "grey95",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = 2.5,
+           xmax = 3.5) +
+  annotate("text",
+           x = c(0.65, 1.65, 2.65),
+           y = 380,
+           colour = "darkblue",
+           label = "I",
+           family = "Helvetica",
+           fontface = 4,
+           vjust = 0,
+           size = 6 / (14 / 5)) +
+  annotate("text",
+           x = c(0.95, 1.95, 2.95),
+           y = 380,
+           colour = "darkblue",
+           label = "II",
+           family = "Helvetica",
+           fontface = 4,
+           vjust = 0,
+           size = 6 / (14 / 5)) +
+  annotate("text",
+           x = c(1.3, 2.3, 3.3),
+           y = 380,
+           colour = "darkblue",
+           label = "III",
+           family = "Helvetica",
+           fontface = 4,
+           vjust = 0,
+           size = 6 / (14 / 5)) +
   geom_jitter(
     data = poplar.bin.pre,
-    position = position_dodge(0.9),
+    position = position_jitterdodge(0.9),
     alpha = 0.75,
     shape = 21,
-    size = 3,
+    size = 1,
     stroke = 0.25
   ) +
   stat_summary(
@@ -337,7 +397,7 @@ poplar.hue_dist <-
     fun.ymax = mean,
     geom = "crossbar",
     width = 0.5,
-    size = 1,
+    size = 0.5,
     fatten = 0,
     position = position_dodge(0.9)
   ) +
@@ -349,20 +409,35 @@ poplar.hue_dist <-
   scale_x_discrete(labels = c("WT",
                               expression(italic("c4h")),
                               expression(italic("ccr")))) +
-  theme_base() +
+  theme_minimal() +
   theme(
-    text = element_text(family = "Helvetica"),
-    plot.background = element_blank(),
-    axis.title.x = element_blank(),
-    axis.text.x = element_text(
-      angle = 0,
-      hjust = 0.5,
-      vjust = 0
-    ),
-    strip.text.x = element_blank(),
-    axis.ticks.x = element_blank(),
-    panel.spacing = unit(1, "mm"),
+    text = element_text(size = 6, family = "Helvetica"),
     legend.position = "none",
+    axis.ticks = element_line(
+      size = 0.25,
+      lineend = "square",
+      color = "black"
+    ),
+    axis.title.y = element_text(size = 6),
+    axis.title.x = element_blank(),
+    axis.text.y = element_text(size = 6, colour = "black"),
+    axis.text.x = element_text(
+      size = 6,
+      colour = "black",
+      angle = 90,
+      vjust = 0.5,
+      hjust = 1
+    ),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+    panel.spacing.x = unit(1.5, "mm"),
+    strip.text = element_text(
+      vjust = 0.1,
+      hjust = 0,
+      face = "italic",
+      size = 6
+    ),
     plot.margin = unit(c(0, 0, 0, 0), "cm")
   ) +
   labs(y = "Hue") +
@@ -373,12 +448,15 @@ poplar.hue_dist <-
     family = "Helvetica",
     angle = 90,
     hjust = 1,
-    size = 4
+    size = 6 / (14 / 5)
   ) +
   scale_fill_manual(values = barcols, guide = FALSE) +
   scale_colour_manual(values = c("black", "black", "black")) +
   facet_grid(~ cell.type)
 
+pdf("poplar_hue.pdf", width = 3.4, height = 1.5)
+poplar.hue_dist
+dev.off()
 
 #### plot figure 7b,c ####
 pdf("poplar_basic_grid.pdf", height = 4, width = 10)
@@ -398,7 +476,7 @@ plot_grid(
 dev.off()
 
 
-####### distance distribution and correlation with absorbance #### ####
+####distance distribution and correlation with absorbance ####
 pdf("distance_dist.pdf", width = 7, height = 4)
 ggplot(data = poplar, aes(x = Distance, fill = genotype)) +
   geom_density(adjust = 2,

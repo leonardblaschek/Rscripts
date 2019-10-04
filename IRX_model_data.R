@@ -5,6 +5,7 @@ library(showtext)
 library(zoo)
 library(cowplot)
 library(tidyverse)
+library(ggridges)
 
 
 #### import Helvetica Neue ####
@@ -346,7 +347,8 @@ raman.data.plot <- raman.data.corrected %>%
     "lig.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1550, to = 1640) /
       MESS::auc(wavenumber, corrected.intensity, from = 300, to = 2000),
     "cellu.peak" = MESS::auc(wavenumber, corrected.intensity, from = 1080, to = 1115) /
-      MESS::auc(wavenumber, corrected.intensity, from = 300, to = 2000)
+      MESS::auc(wavenumber, corrected.intensity, from = 300, to = 2000),
+    "total_auc" = MESS::auc(wavenumber, corrected.intensity, from = 300, to = 2000)
   )
 
 raman.data.peaks <- distinct(raman.data.corrected) %>%
@@ -604,10 +606,23 @@ raman.letters <- filter(raman.data.plot, variable %in% c("1603", "1119", "1603/1
 
 raman.letters$value <- ifelse(raman.letters$variable == "lig.peak.pos", 1585, raman.letters$value)
 
-
-raman.summary <- ggplot(data = filter(raman.data.plot, variable %in% c("1603", "1119", "1603/1119", "1340/1603")), aes(x = genotype, y = value)) +
+rmn_sum <- raman.data.plot %>%
+  filter(variable %in% c("lig.peak",
+                                                   "cellu.peak", 
+                                                   "1664/1603",
+                                                   "1625/1603",
+                                                   "1340/1603") &
+                    cell.type != "IF" &
+                    genotype == "Col-0") %>%
+  ungroup() %>%
+  mutate(variable = ordered(recode(variable, "cellu.peak" = "Cellulose",
+                           "lig.peak" = "Lignin",
+                           "1340/1603" = "S-lignin",
+                           "1664/1603" = "G-lignin",
+                           "1625/1603" = "Aldehydes"), levels = c("Lignin", "Cellulose", "G-lignin", "S-lignin", "Aldehydes")))
+raman.summary <- ggplot(data = rmn_sum, aes(x = cell.type, y = value)) +
   geom_jitter(
-    aes(fill = value.scaled),
+    aes(fill = cell.type),
     shape = 21,
     width = 0.1,
     alpha = 0.9,
@@ -616,35 +631,39 @@ raman.summary <- ggplot(data = filter(raman.data.plot, variable %in% c("1603", "
   ) +
   # geom_violin(draw_quantiles = 0.5, adjust = 1.5, fill = rgb(1,1,1,0.5)) +
   geom_boxplot(fill = rgb(1,1,1,0.5), outlier.alpha = 0) +
-  geom_text(data = raman.letters,
-            aes(label = groups),
-            angle = 90,
-            hjust = 1,
-            family = "Helvetica") +
-  scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow", limits = c(-10, 10)) +
+  # geom_text(data = raman.letters,
+  #           aes(label = groups),
+  #           angle = 90,
+  #           hjust = 1,
+  #           family = "Helvetica") +
+  # scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow", limits = c(-10, 10)) +
+  scale_fill_viridis_d() +
   scale_y_continuous(expand = expand_scale(mult = c(0.2,0.05))) +
-  scale_x_discrete(
-    labels = c(
-      "Col-0",
-      expression(italic("4cl1")),
-      expression(italic("4cl2")),
-      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
-      expression(italic("ccoaomt1")),
-      expression(italic("fah1")),
-      expression(italic("omt1")),
-      expression(italic("ccr1")),
-      expression(italic("cad4")),
-      expression(italic("cad5")),
-      expression(paste(italic("cad4"), "x", italic("cad5")))
-    )
-  ) +
+  labs(x = "",
+       y = "Proportion") +
+  # scale_x_discrete(
+  #   labels = c(
+  #     "Col-0",
+  #     expression(italic("4cl1")),
+  #     expression(italic("4cl2")),
+  #     expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+  #     expression(italic("ccoaomt1")),
+  #     expression(italic("fah1")),
+  #     expression(italic("omt1")),
+  #     expression(italic("ccr1")),
+  #     expression(italic("cad4")),
+  #     expression(italic("cad5")),
+  #     expression(paste(italic("cad4"), "x", italic("cad5")))
+  #   )
+  # ) +
   theme_leo() +
   theme(text = element_text(family = "Helvetica"),
         legend.position = "none") +
-  facet_grid(variable ~ cell.type,
-             scales = "free_y")
+  facet_wrap(~ variable, ncol = 5)
+  # facet_grid(variable ~ cell.type,
+  #            scales = "free_y")
 
-pdf("raman_summary.pdf", width = 10, height = 6)
+pdf("raman_summary.pdf", width = 10, height = 3)
 raman.summary
 dev.off()
 
@@ -719,45 +738,53 @@ raman.irx$cell.type <- ordered(raman.irx$cell.type,
                                ))
 
 # irx neighbours
-irx.neighbours <-
+pdf("irx_neighbours.pdf", width = 7, height = 5)
   ggplot(data = select(raman.irx, genotype:cell.type, n_f, n_v, n_p) %>% 
            gather(key = "adjacency", value = "proportion",
                    n_f, n_v, n_p) %>%
-           group_by(genotype, cell.type, adjacency) %>%
+           group_by(cell.type, adjacency) %>%
            summarise(proportion.mean = mean(proportion, na.rm = TRUE),
+                     proportion.sd = sd(proportion, na.rm = TRUE),
                      proportion.n = n()),
-         aes(x = genotype, y = proportion.mean)) +
+         aes(x = cell.type, y = proportion.mean)) +
   geom_bar(
     aes(fill = adjacency),
     stat = "identity",
     # width = 0.1,
-    alpha = 0.9,
+    alpha = 1,
     size = 2
     # stroke = 0.25
   ) +
   scale_fill_few() +
   # scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow") +
   # scale_y_continuous(expand = expand_scale(mult = c(0.28,0.05))) +
-  scale_x_discrete(
-    labels = c(
-      "Col-0",
-      expression(italic("4cl1")),
-      expression(italic("4cl2")),
-      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
-      expression(italic("ccoaomt1")),
-      expression(italic("fah1")),
-      expression(italic("omt1")),
-      expression(italic("ccr1")),
-      expression(italic("cad4")),
-      expression(italic("cad5")),
-      expression(paste(italic("cad4"), "x", italic("cad5")))
-    )
-  ) +
-  geom_text(aes(x = genotype, y = 0, label = proportion.n)) +
+  # scale_x_discrete(
+  #   labels = c(
+  #     "Col-0",
+  #     expression(italic("4cl1")),
+  #     expression(italic("4cl2")),
+  #     expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+  #     expression(italic("ccoaomt1")),
+  #     expression(italic("fah1")),
+  #     expression(italic("omt1")),
+  #     expression(italic("ccr1")),
+  #     expression(italic("cad4")),
+  #     expression(italic("cad5")),
+  #     expression(paste(italic("cad4"), "x", italic("cad5")))
+  #   )
+  # ) +
+  # geom_text(aes(x = genotype, y = 0, label = proportion.n)) +
   theme_leo() +
-  theme(legend.position = "bottom") +
-  facet_wrap(~ cell.type, nrow = 1) 
+  theme(text = element_text(size =20),
+        legend.position = "none",
+        axis.title = element_blank()) 
+  # facet_wrap(~ cell.type, nrow = 1) 
 # coord_flip()
+  
+  ggplot(data = raman.irx) +
+    geom_density_ridges(aes(x = n_v, y = cell.type, fill = cell.type), alpha = 0.5) +
+    theme_leo() 
+  dev.off()
 
 pdf("irx_overview_5.pdf", width = 10, height = 6)
 irx.neighbours

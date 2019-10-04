@@ -1,15 +1,16 @@
 library(showtext)
-library(ggplot2)
+library(tidyverse)
 library(ggthemes)
 library(RColorBrewer)
 library(reshape2)
 library(colorspace)
 library(agricolae)
 library(dplyr)
-library(rowr)
+# library(rowr)
 library(cowplot)
 library(png)
 library(grid)
+library(tukeygrps)
 
 
 #### import Helvetica Neue ####
@@ -165,47 +166,83 @@ names(barcols) <- phlog.monol.avg$cell
 
 
 #### set statistical letters for hue ####
-phlog.monol.pre %>%
-  group_by(cell.type) %>%
-  do(data.frame(print.HSD.hue(.)))
-letters.hue.monol <-
-  read.csv("stats_hue.csv",
-           header = FALSE)
-colnames(letters.hue.monol) <-
-  c("genotype", "mean.hue1", "group", "cell.type")
+## within cell types
+letters.hue.monol <- letter_groups(phlog.monol.pre, mean.hue1, genotype, "tukey", cell.type, print_position = 305)
+
 letters.hue.monol$cell <-
   as.factor(paste(letters.hue.monol$genotype, letters.hue.monol$cell.type))
 
+## within genotypes
+letters.hue.monol.g <- letter_groups(phlog.monol.pre, mean.hue1, cell.type, "tukey", genotype, print_position = 305)
+
+letters.hue.monol.g$cell <-
+  as.factor(paste(letters.hue.monol.g$genotype, letters.hue.monol.g$cell.type))
+
 
 #### plot hue ####
-b <-
-  ggplot(data = phlog.monol.pre, aes(x = genotype, y = mean.hue1)) +
-  geom_vline(xintercept = 1,
-             size = 5,
-             color = "grey95") +
-  geom_vline(xintercept = 3,
-             size = 5,
-             color = "grey95") +
-  geom_vline(xintercept = 5,
-             size = 5,
-             color = "grey95") +
-  geom_vline(xintercept = 7,
-             size = 5,
-             color = "grey95") +
-  geom_vline(xintercept = 9,
-             size = 5,
-             color = "grey95") +
-  geom_vline(xintercept = 11,
-             size = 5,
-             color = "grey95") +
+
+h_plot <- ggplot() +
+  annotate("rect",
+           xmin = 0.5,
+           xmax = 1.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 0.5,
+           xmax = 1.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 2.5,
+           xmax = 3.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 4.5,
+           xmax = 5.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 6.5,
+           xmax = 7.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 8.5,
+           xmax = 9.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 10.5,
+           xmax = 11.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
   geom_jitter(
+    data = phlog.monol.pre,
+    aes(x = genotype, y = mean.hue1),
     width = 0.1,
     alpha = 0.75,
     shape = 21,
-    size = 3,
+    size = 2,
     stroke = 0.25
   ) +
   stat_summary(
+    data = phlog.monol.pre,
+    aes(x = genotype, y = mean.hue1),
     fun.y = mean,
     fun.ymin = mean,
     fun.ymax = mean,
@@ -214,32 +251,16 @@ b <-
     size = 0.5,
     fatten = 0
   ) +
-  theme_minimal() +
-  theme(
-    text = element_text(size = 14, family = "Helvetica"),
-    axis.ticks.y = element_line(
-      size = 0.25,
-      lineend = "square",
-      color = "black"
-    ),
-    axis.title.y = element_text(size = 14),
-    axis.text.y = element_text(size = 12, colour = "black"),
-    axis.text.x = element_text(
-      size = 12,
-      colour = "black",
-      angle = 90,
-      vjust = 0.5,
-      hjust = 1
-    ),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    panel.border = element_rect(fill = NA, color = "black", size = 0.25),
-    panel.spacing.x = unit(1.5, "mm"),
-    legend.position = "none",
-    strip.text = element_blank(),
-    plot.margin = unit(c(0, 0, 0, 0), "cm")
+  geom_text(
+    data = letters.hue.monol,
+    aes(x = genotype, y = mean.hue1, label = groups),
+    family = "Helvetica",
+    angle = 90,
+    colour = "black",
+    hjust = 1,
+    size = 6 / (14 / 5),
+    position = position_dodge(width = 0.85)
   ) +
-  labs(y = "Hue", x = " ") +
   scale_x_discrete(
     labels = c(
       "Col-0",
@@ -256,74 +277,24 @@ b <-
       expression(paste(italic("cad4"), "x", italic("cad5")))
     )
   ) +
-  scale_y_continuous(
-    breaks = c(310, 330, 350, 370),
-    labels =
-      c('310', '330', '350', '10'),
-    limits = c(300, 370)
-  ) +
-  facet_wrap(~ cell.type, ncol = 6) +
-  aes(fill = cell) +
-  scale_fill_manual(values = barcols) +
-  geom_text(
-    data = letters.hue.monol,
-    aes(label = group),
-    family = "Helvetica",
-    angle = 90,
-    colour = "black",
-    hjust = 1,
-    size = 3,
-    position = position_dodge(width = 0.8)
-  )
-pdf("hue_monol_rev.pdf", height = 4, width = 10)
-b
-dev.off()
-
-
-#### set statistical letters for absorbance ####
-phlog.monol.pre %>%
-  group_by(cell.type) %>%
-  do(data.frame(print.HSD.OD(.)))
-letters.OD.monol <-
-  read.csv("stats_OD.csv",
-           header = FALSE)
-colnames(letters.OD.monol) <-
-  c("genotype", "mean.OD2", "group", "cell.type")
-letters.OD.monol$cell <-
-  as.factor(paste(letters.OD.monol$genotype, letters.OD.monol$cell.type))
-
-
-#### plot absorbance ####
-a <- ggplot(phlog.monol.avg, aes(x = genotype, y = mean.OD2)) +
-  geom_vline(xintercept = 1,
-             size = 5,
-             color = "grey95") +
-  geom_vline(xintercept = 3,
-             size = 5,
-             color = "grey95") +
-  geom_vline(xintercept = 5,
-             size = 5,
-             color = "grey95") +
-  geom_vline(xintercept = 7,
-             size = 5,
-             color = "grey95") +
-  geom_vline(xintercept = 9,
-             size = 5,
-             color = "grey95") +
-  geom_vline(xintercept = 11,
-             size = 5,
-             color = "grey95") +
   theme_minimal() +
   theme(
-    text = element_text(size = 14, family = "Helvetica"),
+    text = element_text(size = 6, family = "Helvetica"),
     legend.position = "none",
-    axis.ticks.y = element_line(
+    axis.ticks = element_line(
       size = 0.25,
       lineend = "square",
       color = "black"
     ),
-    axis.title.y = element_text(size = 14),
-    axis.text.y = element_text(size = 12, colour = "black"),
+    axis.title.y = element_text(size = 6),
+    axis.text.y = element_text(size = 6, colour = "black"),
+    axis.text.x = element_text(
+      size = 6,
+      colour = "black",
+      angle = 90,
+      vjust = 0.5,
+      hjust = 1
+    ),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
@@ -331,44 +302,364 @@ a <- ggplot(phlog.monol.avg, aes(x = genotype, y = mean.OD2)) +
     strip.text = element_text(
       vjust = 0.1,
       hjust = 0,
-      face = "italic"
+      face = "italic",
+      size = 6
     ),
-    plot.margin = unit(c(0, 0, -0.4, 0), "cm")
+    plot.margin = unit(c(0, 0, 0, 0), "cm")
   ) +
-  labs(y = "Absorbance", x = " ") +
-  scale_x_discrete(breaks = c()) +
+  labs(y = "Hue", x = " ") +
   scale_y_continuous(
-    limits = c(-0.09, 0.55),
-    breaks = c(0, 0.2, 0.4),
-    labels = c(' 0.0', ' 0.2', ' 0.4')
+    limits = c(290, 375),
+    breaks = c(310, 330, 350, 370),
+    labels = c("310", "330", "350", "10"),
+    expand = expand_scale(mult = c(0.1, 0))
   ) +
-  geom_bar(stat = "identity",
-           position = position_dodge(width = 0.85),
-           width = 0.75) +
-  facet_wrap(~ cell.type, ncol = 6) +
+  facet_wrap(~cell.type, ncol = 6) +
   aes(fill = cell) +
-  scale_fill_manual(values = barcols) +
+  scale_fill_manual(values = barcols)
+
+pdf("hue_monol_rev.pdf", height = 2.25, width = 6.7)
+h_plot
+dev.off()
+
+h_g <- ggplot() +
+  annotate("rect",
+           xmin = 0.5,
+           xmax = 1.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 2.5,
+           xmax = 3.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 4.5,
+           xmax = 5.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  geom_jitter(
+    data = phlog.monol.pre,
+    aes(x = cell.type, y = mean.hue1),
+    width = 0.1,
+    alpha = 0.75,
+    shape = 21,
+    size = 2,
+    stroke = 0.25
+  ) +
+  stat_summary(
+    data = phlog.monol.pre,
+    aes(x = cell.type, y = mean.hue1),
+    fun.y = mean,
+    fun.ymin = mean,
+    fun.ymax = mean,
+    geom = "crossbar",
+    width = 1,
+    size = 0.5,
+    fatten = 0
+  ) +
+  geom_text(
+    data = letters.hue.monol.g,
+    aes(x = cell.type, y = mean.hue1, label = groups),
+    family = "Helvetica",
+    colour = "black",
+    vjust = 1,
+    size = 6 / (14 / 5),
+    position = position_dodge(width = 0.85)
+  ) +
+  scale_x_discrete() +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 6, family = "Helvetica"),
+    legend.position = "none",
+    axis.ticks = element_line(
+      size = 0.25,
+      lineend = "square",
+      color = "black"
+    ),
+    axis.title.y = element_text(size = 6),
+    axis.text.y = element_text(size = 6, colour = "black"),
+    axis.text.x = element_text(
+      size = 6,
+      colour = "black"
+    ),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+    panel.spacing.x = unit(1.5, "mm"),
+    strip.text = element_text(
+      vjust = 0.1,
+      hjust = 0,
+      face = "italic",
+      size = 6
+    ),
+    plot.margin = unit(c(0, 0, 0, 0), "cm")
+  ) +
+  labs(y = "Hue", x = " ") +
+  scale_y_continuous(
+    limits = c(290, 375),
+    breaks = c(310, 330, 350, 370),
+    labels = c("310", "330", "350", "10"),
+    expand = expand_scale(mult = c(0, 0))
+  ) +
+  facet_wrap(~genotype, ncol = 6) +
+  aes(fill = cell) +
+  scale_fill_manual(values = barcols)
+
+pdf("hue_monol_rev_g.pdf", height = 4, width = 5)
+h_g
+dev.off()
+
+
+
+#### set statistical letters for absorbance ####
+
+## within cell types
+letters.OD.monol <- letter_groups(phlog.monol.pre, mean.OD1, genotype, "tukey", cell.type, print_position = -0.005)
+
+letters.OD.monol$cell <-
+  as.factor(paste(letters.OD.monol$genotype, letters.OD.monol$cell.type))
+
+## within genotypes
+letters.OD.monol.g <- letter_groups(phlog.monol.pre, mean.OD1, cell.type, "tukey", genotype)
+
+letters.OD.monol.g$cell <-
+  as.factor(paste(letters.OD.monol.g$genotype, letters.OD.monol.g$cell.type))
+
+
+#### plot absorbance ####
+a <- ggplot() +
+  annotate("rect",
+    xmin = 0.5,
+    xmax = 1.5,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 0.5,
+           xmax = 1.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 2.5,
+           xmax = 3.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 4.5,
+           xmax = 5.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 6.5,
+           xmax = 7.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 8.5,
+           xmax = 9.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 10.5,
+           xmax = 11.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  geom_bar(data = phlog.monol.avg,
+    aes(x = genotype, y = mean.OD2),
+    stat = "identity",
+    position = position_dodge(width = 0.85),
+    width = 0.75
+  ) +
   geom_jitter(
     data = phlog.monol.pre,
     aes(x = genotype, y = mean.OD1),
     width = 0.1,
-    alpha = 0.5
+    alpha = 0.5,
+    shape = 19,
+    size = 1,
+    stroke = 0
   ) +
   geom_text(
     data = letters.OD.monol,
-    aes(label = group),
+    aes(x = genotype, y = mean.OD1, label = groups),
     family = "Helvetica",
     angle = 90,
     colour = "black",
     hjust = 1,
-    size = 3,
+    size = 6 / (14 / 5),
     position = position_dodge(width = 0.85)
-  )
-pdf("OD_monol_rev.pdf", height = 3.7, width = 10)
+  ) +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(paste(italic("ccr1"), "x", italic("fah1"))),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 6, family = "Helvetica"),
+    legend.position = "none",
+    axis.ticks = element_line(
+      size = 0.25,
+      lineend = "square",
+      color = "black"
+    ),
+    axis.title.y = element_text(size = 6),
+    axis.text.y = element_text(size = 6, colour = "black"),
+    axis.text.x = element_text(
+      size = 6,
+      colour = "black",
+      angle = 90,
+      vjust = 0.5,
+      hjust = 1
+    ),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+    panel.spacing.x = unit(1.5, "mm"),
+    strip.text = element_text(
+      vjust = 0.1,
+      hjust = 0,
+      face = "italic",
+      size = 6
+    ),
+    plot.margin = unit(c(0, 0, 0, 0), "cm")
+  ) +
+  labs(y = "Absorbance", x = " ") +
+  scale_y_continuous(
+    limits = c(-0.09, 0.55),
+    breaks = c(0, 0.2, 0.4),
+    labels = c("0.0", "0.2", "0.4"),
+    expand = expand_scale(mult = c(0.1, 0))
+  ) +
+  facet_wrap(~cell.type, ncol = 6) +
+  aes(fill = cell) +
+  scale_fill_manual(values = barcols)
+
+pdf("OD_monol_rev.pdf", height = 2.25, width = 6.7)
 a
 dev.off()
 
-#### import images ####
+a_g <- ggplot() +
+  annotate("rect",
+           xmin = 0.5,
+           xmax = 1.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 2.5,
+           xmax = 3.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  annotate("rect",
+           xmin = 4.5,
+           xmax = 5.5,
+           ymin = -Inf,
+           ymax = Inf,
+           fill = "grey95"
+  ) +
+  geom_bar(data = phlog.monol.avg,
+           aes(x = cell.type, y = mean.OD2),
+           stat = "identity",
+           position = position_dodge(width = 0.85),
+           width = 0.75
+  ) +
+  geom_jitter(
+    data = phlog.monol.pre,
+    aes(x = cell.type, y = mean.OD1),
+    width = 0.1,
+    alpha = 0.5,
+    shape = 19,
+    size = 1,
+    stroke = 0
+  ) +
+  geom_text(
+    data = letters.OD.monol.g,
+    aes(x = cell.type, y = mean.OD1, label = groups),
+    family = "Helvetica",
+    colour = "black",
+    vjust = 1,
+    size = 6 / (14 / 5),
+    position = position_dodge(width = 0.85)
+  ) +
+  scale_x_discrete() +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 6, family = "Helvetica"),
+    legend.position = "none",
+    axis.ticks = element_line(
+      size = 0.25,
+      lineend = "square",
+      color = "black"
+    ),
+    axis.title.y = element_text(size = 6),
+    axis.text.y = element_text(size = 6, colour = "black"),
+    axis.text.x = element_text(
+      size = 6,
+      colour = "black"
+    ),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+    panel.spacing.x = unit(1.5, "mm"),
+    strip.text = element_text(
+      vjust = 0.1,
+      hjust = 0,
+      face = "italic",
+      size = 6
+    ),
+    plot.margin = unit(c(0, 0, 0, 0), "cm")
+  ) +
+  labs(y = "Absorbance", x = " ") +
+  scale_y_continuous(
+    limits = c(-0.05, 0.55),
+    breaks = c(0, 0.2, 0.4),
+    labels = c("0.0", "0.2", "0.4"),
+    expand = expand_scale(mult = c(0, 0))
+  ) +
+  facet_wrap(~genotype, ncol = 6) +
+  aes(fill = cell) +
+  scale_fill_manual(values = barcols)
+
+pdf("OD_monol_rev_g.pdf", height = 4, width = 5)
+a_g
+dev.off()
+
+### import images ####
 # WTstained <-
 #   rasterGrob(
 #     readPNG(
@@ -536,7 +827,7 @@ stained_pre <- plot_grid(
   vjust = 1,
   label_x = 0.02,
   label_y = 0.98,
-  label_size = 12
+  label_size = 6
 )
 
 stained <- plot_grid(
@@ -552,7 +843,7 @@ stained <- plot_grid(
   vjust = 1,
   label_x = 0.5,
   label_y = 0.98,
-  label_size = 12,
+  label_size = 6,
   rel_widths = c(2.86, 7.14)
 )
 
@@ -589,7 +880,7 @@ unstained_pre <- plot_grid(
   vjust = 1,
   label_x = 0.02,
   label_y = 0.98,
-  label_size = 12
+  label_size = 6
 )
 
 unstained <- plot_grid(
@@ -605,32 +896,50 @@ unstained <- plot_grid(
   vjust = 1,
   label_x = 0.5,
   label_y = 0.99,
-  label_size = 12,
+  label_size = 6,
   rel_widths = c(2.86, 7.14)
 )
 
 
 #### plot grid ####
-pdf("genotypes_grid.pdf", height = 11.75, width = 10)
+pdf("genotypes_grid.pdf", height = 6, width = 6.7)
 plot_grid(
   unstained,
   stained,
   a,
-  b,
-  labels = c('(a)', '(b)', '(c)', '(d)'),
+  # b,
+  labels = c('A', 'B', 'C'),
   ncol = 1,
-  nrow = 4,
+  nrow = 3,
   hjust = 0,
   vjust = 1,
   label_x = 0.001,
   label_y = 0.99,
-  label_size = 18,
+  label_size = 10,
   label_fontfamily = "Helvetica",
-  rel_heights = c(1.2, 1.2, 1, 1.21)
+  rel_heights = c(1.1, 1.1, 1)
+)
+dev.off()
+
+pdf("genotype_grid_supplemental.pdf", height = 6, width = 6.7)
+plot_grid(
+  a_g,
+  h_plot,
+  h_g,
+  labels = c('A', 'B', 'C'),
+  ncol = 1,
+  nrow = 3,
+  hjust = 0,
+  vjust = 1,
+  label_x = 0.001,
+  label_y = 0.99,
+  label_size = 10,
+  label_fontfamily = "Helvetica",
+  rel_heights = c(1.5, 1, 1.5)
 )
 dev.off()
 
 #### reduce figure size via ghostscript ####
 system(
-  "gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r600 -sOutputFile=geno_grid.pdf genotypes_grid.pdf"
+  "gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/default -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r600 -sOutputFile=geno_grid.pdf genotypes_grid.pdf"
 )

@@ -75,6 +75,7 @@ pop_irx_ref <- pop_irx %>%
   select(c(
     "genotype",
     "replicate",
+    "technical",
     "X",
     "Y",
     "Length"
@@ -88,7 +89,7 @@ pop_irx_ref$ref.x2 <- pop_irx_ref$X + (pop_irx_ref$Length / 2)
 pop_irx <- pop_irx %>%
   filter(object != "ref") %>%
   full_join(select(pop_irx_ref, -X, -Y, -Length),
-    by = c("genotype", "replicate")
+    by = c("genotype", "replicate", "technical")
   )
 
 #### calculate difference of the centre of each vessel to the cambium ####
@@ -150,9 +151,9 @@ ggplot(pop_irx, aes(x = n_v, y = Circ.)) +
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
 
 pop_irx <- pop_irx %>%
-  mutate(concavity = 1 - (Area / ConvexArea))
+  mutate(convexity = Area / ConvexArea)
 
-left <- ggplot(data = pop_irx, aes(x = genotype, y = concavity)) +
+left <- ggplot(data = pop_irx, aes(x = genotype, y = convexity)) +
   geom_jitter() +
   geom_boxplot()
 
@@ -162,7 +163,7 @@ right <- ggplot(data = pop_irx, aes(x = genotype, y = Circ.)) +
 
 plot_grid(left, right, ncol = 2)
 
-ggplot(pop_irx, aes(Circ., concavity)) +
+ggplot(pop_irx, aes(Circ., convexity)) +
   geom_point(
     aes(fill = genotype),
     shape = 21,
@@ -178,7 +179,7 @@ ggplot(pop_irx, aes(Circ., concavity)) +
   scale_fill_viridis_d() +
   theme_leo()
 
-ggplot(pop_irx, aes(x = n_v, y = concavity)) +
+ggplot(pop_irx, aes(x = n_v, y = convexity)) +
   geom_point(aes(fill = genotype),
     shape = 21,
     size = 2,
@@ -198,27 +199,106 @@ ggplot(pop_irx, aes(x = n_v, y = concavity)) +
 ```
 
 ```{r}
+
+pop_count <- pop_irx %>%
+  group_by(genotype, replicate, type) %>%
+  summarise(to_do = n())
+
+write_csv(pop_count, "poplar_todo.csv")
+
 pop_irx <- as.data.frame(pop_irx)
 poplar_psem <- psem(
-    lme(Circ. ~
+    lm(Circ. ~
     n_v +
+      Distance +
       # n_p +
-      concavity,
-    random = ~ 1 | replicate,
-    data = pop_irx
+      convexity,
+    data = filter(pop_irx, type == "P")
     ),
-    lme(concavity ~
+    lm(convexity ~
     n_v +
       # n_p +
       Mean +
+      Distance +
       Perim.,
-    random = ~ 1 | replicate,
-    data = pop_irx
+    data = filter(pop_irx, type == "P")
     ),
-    data = pop_irx
+    data = filter(pop_irx, type == "P")
   )
 
 summary(poplar_psem)
 plot(poplar_psem)
+
+poplar_psem <- psem(
+    lm(Circ. ~
+    n_v +
+      Distance +
+      # n_p +
+      convexity,
+    data = filter(pop_irx, type == "S")
+    ),
+    lm(convexity ~
+    n_v +
+      # n_p +
+      Mean +
+      Distance +
+      Perim.,
+    data = filter(pop_irx, type == "S")
+    ),
+    data = filter(pop_irx, type == "S")
+  )
+
+summary(poplar_psem)
+plot(poplar_psem)
+```
+
+```{r}
+pdf("irx_neighbours_pop.pdf", width = 7, height = 5)
+  ggplot(data = select(pop_irx, genotype, type, n_f, n_v, n_p, n_r) %>% 
+           gather(key = "adjacency", value = "proportion",
+                   n_f, n_v, n_p, n_r) %>%
+           group_by(type, adjacency) %>%
+           summarise(proportion.mean = mean(proportion, na.rm = TRUE),
+                     proportion.sd = sd(proportion, na.rm = TRUE),
+                     proportion.n = n()),
+         aes(x = type, y = proportion.mean)) +
+  geom_bar(
+    aes(fill = adjacency),
+    stat = "identity",
+    # width = 0.1,
+    alpha = 1,
+    size = 2
+    # stroke = 0.25
+  ) +
+  scale_fill_few() +
+  # scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow") +
+  # scale_y_continuous(expand = expand_scale(mult = c(0.28,0.05))) +
+  # scale_x_discrete(
+  #   labels = c(
+  #     "Col-0",
+  #     expression(italic("4cl1")),
+  #     expression(italic("4cl2")),
+  #     expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+  #     expression(italic("ccoaomt1")),
+  #     expression(italic("fah1")),
+  #     expression(italic("omt1")),
+  #     expression(italic("ccr1")),
+  #     expression(italic("cad4")),
+  #     expression(italic("cad5")),
+  #     expression(paste(italic("cad4"), "x", italic("cad5")))
+  #   )
+  # ) +
+  # geom_text(aes(x = genotype, y = 0, label = proportion.n)) +
+  theme_leo() +
+  theme(text = element_text(size =20),
+        legend.position = "bottom",
+        axis.title = element_blank()) 
+  # facet_wrap(~ cell.type, nrow = 1) 
+# coord_flip()
+  
+  ggplot(data = pop_irx) +
+    geom_density_ridges(aes(x = n_v, y = type, fill = type), alpha = 0.5) +
+    theme_leo() 
+  dev.off()
 ```
 

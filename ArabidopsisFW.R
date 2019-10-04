@@ -91,6 +91,26 @@ pdf("corrplots.pdf", width = 12, height = 12)
 chart.Correlation(fw.matrix, histogram=TRUE, pch=21)
 dev.off()
 
+influence_ttest <- fw.spread %>%
+  group_by(genotype) %>%
+  summarise(
+    "CB -> XF" = t.test(XF_CB, XF_XF)$p.value,
+    "MX -> XF" = t.test(XF_MX, XF_XF)$p.value,
+    "IF -> XF" = t.test(XF_IF, XF_XF)$p.value,
+    "PA -> PX" = t.test(PX_PA, PX_PX)$p.value,
+    "MX -> PX" = t.test(PX_MX, PX_PX)$p.value,
+    "LP -> IF" = t.test(IF_LP, IF_IF)$p.value,
+    "CB -> IF" = t.test(IF_CB, IF_IF)$p.value,
+    "XF -> IF" = t.test(IF_XF, IF_IF)$p.value,
+    "IF -> LP" = t.test(LP_IF, LP_LP)$p.value,
+    "CB -> MX" = t.test(MX_CB, MX_MX)$p.value,
+    "PA -> MX" = t.test(MX_PA, MX_MX)$p.value,
+    "XF -> MX" = t.test(MX_XF, MX_MX)$p.value,
+    "PX -> MX" = t.test(MX_PX, MX_MX)$p.value
+  ) %>%
+  pivot_longer(-genotype, names_to = "relationship", values_to = "p_value") %>%
+  filter(p_value < 0.05)
+
 #### plot relative influence (Fig. 8b) ####
 interaction <-
   ggplot(data = fw.loading, aes(x = ordered(

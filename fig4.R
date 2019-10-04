@@ -250,36 +250,43 @@ tl.od <-
   ) +
   geom_errorbar(data = subset(timeline.avg, time == 270 | time == 300), width = 10, size = 0.2) +
   geom_ribbon(data = subset(timeline.avg, time != 270 & time != 300), aes(fill = thickness), alpha = 0.5) +
-  geom_vline(xintercept = 255, linetype = 2) +
-  geom_point(aes(fill = thickness), shape = 21, size = 2, stroke = 0.2) +
+  geom_vline(xintercept = 255, linetype = 2, size = 0.25) +
+  geom_point(aes(fill = thickness), shape = 21, size = 0.75, stroke = 0.2) +
   theme_minimal() +
   theme(
-    text = element_text(size = 14, family = "Helvetica"),
-    axis.ticks.y = element_line(
+    text = element_text(size = 6, family = "Helvetica"),
+    axis.ticks = element_line(
       size = 0.25,
       lineend = "square",
       color = "black"
     ),
-    axis.ticks.x = element_blank(),
     axis.title.x = element_blank(),
-    axis.title.y = element_text(size = 12, colour = "black"),
-    axis.text.y = element_text(size = 12, colour = "black"),
-    axis.text.x = element_blank(),
+    axis.title.y = element_text(size = 6, colour = "black"),
+    axis.text.y = element_text(size = 6, colour = "black"),
+    axis.text.x = element_text(
+      size = 6,
+      angle = 90,
+      vjust = 0.5,
+      hjust = 1,
+      colour = "black"
+    ),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
-    panel.spacing.x = unit(1.5, "mm"),
-    plot.margin = unit(c(0.4, 0, 0, 0.1), "cm"),
-    legend.position = c(0.194, 1.2),
+    panel.spacing.x = unit(2, "pt"),
+    plot.margin = unit(c(10, 0, 0, 0), "pt"),
+    legend.position = c(0.22, 1.3),
     legend.margin = margin(0, 0, 0, 0),
-    legend.spacing.x = unit(2, "mm"),
+    legend.spacing.x = unit(2, "pt"),
     legend.direction = "horizontal",
     legend.title = element_blank(),
-    legend.text = element_text(size = 9),
+    legend.key.size = unit(8, "pt"),
+    legend.text = element_text(size = 6),
     strip.text = element_text(
       vjust = 0.1,
       hjust = 0,
-      face = "italic"
+      face = "italic",
+      size = 6
     )
   ) +
   labs(y = "Absorbance") +
@@ -300,25 +307,20 @@ tl.hue <-
   geom_errorbar(data = subset(timeline.avg, time == 270 | time == 300), width = 10, size = 0.2) +
   geom_ribbon(data = subset(timeline.avg, time != 270 & time != 300), aes(fill = thickness), alpha = 0.5) +
   geom_vline(xintercept = 255, linetype = 2) +
-  geom_point(aes(fill = thickness), shape = 21, size = 2, stroke = 0.2) +
+  geom_point(aes(fill = thickness), shape = 21, size = 1, stroke = 0.2) +
   theme_minimal() +
   theme(
-    text = element_text(size = 14, family = "Helvetica"),
-    axis.ticks.y = element_line(
-      size = 0.25,
-      lineend = "square",
-      color = "black"
-    ),
-    axis.ticks.x = element_line(
+    text = element_text(size = 6, family = "Helvetica"),
+    axis.ticks = element_line(
       size = 0.25,
       lineend = "square",
       color = "black"
     ),
     axis.title.x = element_blank(),
-    axis.title.y = element_text(size = 12, colour = "black"),
-    axis.text.y = element_text(size = 12, colour = "black"),
+    axis.title.y = element_text(size = 6, colour = "black"),
+    axis.text.y = element_text(size = 6, colour = "black"),
     axis.text.x = element_text(
-      size = 12,
+      size = 6,
       angle = 90,
       vjust = 0.5,
       hjust = 1,
@@ -327,10 +329,21 @@ tl.hue <-
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
-    panel.spacing.x = unit(1.5, "mm"),
-    plot.margin = unit(c(0, 0, 0, 0.1), "cm"),
-    legend.position = "none",
-    strip.text = element_blank()
+    panel.spacing.x = unit(2, "pt"),
+    plot.margin = unit(c(0.1, 0, 0, 0.1), "cm"),
+    legend.position = c(0.08, 0.8),
+    legend.margin = margin(0, 0, 0, 0),
+    legend.spacing.x = unit(2, "pt"),
+    legend.direction = "vertical",
+    legend.title = element_blank(),
+    legend.key.size = unit(8, "pt"),
+    legend.text = element_text(size = 6),
+    strip.text = element_text(
+      vjust = 0.1,
+      hjust = 0,
+      face = "italic",
+      size = 6
+    )
   ) +
   labs(y = "Hue") +
   scale_fill_brewer(palette = "YlGnBu", name = "Thickness [mm]") +
@@ -383,18 +396,18 @@ thick.ellipse <-
   labs(y = "Hue", x = "Absorbance") +
   theme_minimal() +
   theme(
-    text = element_text(size = 14, family = "Helvetica"),
-    strip.text = element_text(hjust = 0, face = "italic"),
+    text = element_text(size = 6, family = "Helvetica"),
+    strip.text = element_text(hjust = 0, face = "italic", size = 6),
     axis.ticks = element_line(
       size = 0.25,
       lineend = "square",
       color = "black"
     ),
-    axis.title = element_text(size = 12),
-    axis.text.y = element_text(size = 12, colour = "black"),
+    axis.title = element_text(size = 6),
+    axis.text.y = element_text(size = 6, colour = "black"),
     axis.text.x = element_text(
       colour = "black",
-      size = 10,
+      size = 6,
       angle = 0,
       vjust = 1,
       hjust = 0.5
@@ -403,13 +416,13 @@ thick.ellipse <-
     panel.grid.minor = element_blank(),
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
     panel.spacing = unit(1.5, "mm"),
-    legend.position = c(0.17, 0.15),
+    legend.position = c(0.15, 0.15),
     legend.title = element_blank(),
-    legend.text = element_text(size = 9),
+    legend.text = element_text(size = 6),
     legend.spacing = unit(0.25, "mm"),
     legend.key.height = unit(4, "mm"),
     legend.key.width = unit(4, "mm"),
-    plot.margin = unit(c(0, 0, 0, 0.1), "cm")
+    plot.margin = unit(c(0, 0, 0.1, 0.1), "cm")
   ) +
   xlim(-0.15, 0.8) +
   ylim(230, 370) +
@@ -424,25 +437,40 @@ dev.off()
 
 
 #### import images ####
-timeline_imgs <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/timeline/cropped/montage.png"))
+# timeline_imgs <- rasterGrob(readPNG("~/Documents/Uni/Phloroglucinol/18-06_draft/Images/timeline/cropped/montage.png"))
 
 
 #### plot the whole figure ####
-pdf("fig4.pdf", height = 12, width = 10)
+pdf("fig4.pdf", height = 4.1, width = 5)
 plot_grid(
   timeline_imgs,
-  thick.ellipse,
-  tl.grid,
-  labels = c("(a)", "(b)", ""),
+  # thick.ellipse,
+  tl.od,
+  labels = c("A", "B", "C"),
   label_fontfamily = "Helvetica",
-  nrow = 3,
+  nrow = 2,
   ncol = 1,
-  label_size = 18,
-  rel_heights = c(1.2, 0.5, 1),
+  label_size = 10,
+  rel_heights = c(1,0.57),
+  hjust = 0,
+  vjust = 1
+)
+dev.off()
+
+pdf("figS5.pdf", height = 4.1, width = 5)
+plot_grid(
+  thick.ellipse,
+  tl.hue,
+  labels = c("A", "B"),
+  label_fontfamily = "Helvetica",
+  nrow = 2,
+  ncol = 1,
+  label_size = 10,
+  rel_heights = c(1,1),
   hjust = 0,
   vjust = 1
 )
 dev.off()
 
 #### reduce figure size via ghostscript ####
-system("gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r150 -sOutputFile=stain_fade_grid.pdf fade_stain.pdf")
+system("gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/default -dNOPAUSE -dQUIET -dBATCH -dDetectDuplicateImages -dCompressFonts=true -r600 -sOutputFile=stain_fade_grid.pdf fig4.pdf")

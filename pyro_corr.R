@@ -271,7 +271,7 @@ p <-
     aes(colour = WT),
     shape = 16,
     stroke = 0.1,
-    size = 2,
+    size = 1,
     alpha = 0.5
   ) +
   geom_errorbar(aes(colour = WT),
@@ -287,15 +287,23 @@ p <-
     method = lm,
     colour = "blue",
     linetype = 1,
-    size = 0.5,
+    size = 0.25,
     se = FALSE
   ) +
   theme_few() +
   theme(
     text = element_text(size = 12, family = 'Helvetica'),
-    strip.text = element_text(
+    strip.text.x = element_text(
+      size = 6,
       hjust = 0,
-      vjust = 0.5,
+      vjust = 0,
+      face = "italic",
+      colour = "black"
+    ),
+    strip.text.y = element_text(
+      size = 6,
+      hjust = 0.5,
+      vjust = 0,
       face = "italic",
       colour = "black"
     ),
@@ -303,26 +311,13 @@ p <-
     panel.grid.major.x = element_blank(),
     legend.position = "none",
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
-    axis.ticks.y = element_line(
+    axis.ticks = element_line(
       size = 0.25,
       lineend = "square",
       color = "black"
     ),
-    axis.ticks.x = element_line(
-      size = 0.25,
-      lineend = "square",
-      color = "black"
-    ),
-    axis.title.x = element_text(size = 14, colour = "black"),
-    axis.title.y = element_text(size = 14, colour = "black"),
-    axis.text.y = element_text(size = 12, colour = "black"),
-    axis.text.x = element_text(
-      size = 12,
-      angle = 0,
-      vjust = 0.5,
-      hjust = 0.5,
-      colour = "black"
-    )
+    axis.title = element_text(size = 6, colour = "black"),
+    axis.text = element_text(size = 6, colour = "black"),
   ) +
   labs(x = expression(paste("Log"[italic("e")], "(content * biomass" ^ -1, ")")),
        y = expression(paste("Log"[italic("e")], "(wiesner stain absorbance)"))) +
@@ -334,7 +329,7 @@ p <-
     aes(label = paste("R² = ", round(r, 3))),
     family = "Helvetica",
     colour = "black",
-    size = 3,
+    size = 6 / (14/5),
     hjust = 0
   ) +
   geom_text(
@@ -342,10 +337,10 @@ p <-
     aes(label = r),
     family = "Helvetica",
     colour = "black",
-    size = 3,
+    size = 6 / (14/5),
     hjust = 0
   )
 
-pdf("pyro_corr_both_log.pdf")
+pdf("pyro_corr_both_log.pdf", width = 5, height = 5)
 p
 dev.off()
