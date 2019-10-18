@@ -1,0 +1,950 @@
+---
+title: "IRX publication figures"
+author: "Leonard Blaschek"
+date: "07/10/2019"
+output: 
+  pdf_document:
+    latex_engine: lualatex
+    fig_caption: yes
+    fig_height: 6
+    includes:
+      in_header: rmd_temp.tex
+sansfont: IBM Plex Sans
+monofont: Inconsolata
+mainfont: IBM Plex Sans
+bibliography: /home/leonard/Documents/Bibliographics/zotero_lib.bib
+link-citations: true
+linkcolor: black
+urlcolor: blue
+citecolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(baseline)
+library(agricolae)
+library(ggthemes)
+library(showtext)
+library(zoo)
+library(cowplot)
+library(tidyverse)
+library(ggridges)
+library(sf)
+library(piecewiseSEM)
+library(tukeygrps)
+
+#### import CooperHewitt ####
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 6,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.25,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        size = 6,
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        size = 6,
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.title = element_text(
+        colour = "black",
+        size = 6
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = 6),
+      legend.key.height = unit(4, "mm"),
+      complete = TRUE
+    )
+}
+
+```
+
+## Wild type vessel overview
+
+Panel **A** is shape data and lignin and cellulose relative to toal AUC,
+
+Panel **B** is lignin composition data, *i.e.* relative to the total lignin peak.
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+#### import and tidy shape data of the vessels from the Raman measurements ####
+rmn_irx <- read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/raman_IRX_revisited.csv") %>%
+  select(genotype:Perim., Circ., Round, Height, Width) %>%
+  filter(object == 2) %>%
+  select(-object)
+
+rmn_nb <- read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/raman_IRX.csv") %>%
+  select(genotype:n_f)
+rmn_irx <- left_join(rmn_irx, rmn_nb)
+rmn_irx$replicate <- as.character(rmn_irx$replicate)
+rmn_irx$technical <- as.character(rmn_irx$technical)
+
+raman_convex <- read.csv("/home/leonard/Documents/Uni/PhD/IRX/raman_irx_convex.csv")
+
+raman_convex$File <-
+  str_replace(raman_convex$File, fixed("fah 1"), "fah1")
+
+raman_convex <- raman_convex %>%
+  select(-X) %>%
+  separate(
+    File,
+    into = c("genotype", "replicate", "cell.type", "technical"),
+    sep = "\\s*#|-|\\s",
+    extra = "merge"
+  ) %>%
+  mutate(
+    genotype = recode(
+      genotype,
+      "4cl1＆2" = "4cl1x4cl2",
+      "cad4＆5" = "cad4xcad5",
+      "ccoaomt" = "ccoaomt1",
+      "ccr1" = "ccr1-3",
+      "col.o" = "Col-0",
+      "Col.0" = "Col-0",
+      "ccr1＆fah1" = "ccr1xfah1"
+    ),
+    cell.type = recode(cell.type,
+                       "px" = "PX",
+                       "SX" = "SMX",
+                       "MX" = "PMX"),
+    replicate = str_extract(replicate,
+                            "\\d"),
+    technical = str_extract(technical,
+                            "(\\d)+")
+  ) %>%
+  filter(cell.type != "？？")
+
+rmn_irx <- left_join(rmn_irx, raman_convex)
+
+```
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+#### import and tidy Raman data ####
+rmn_files <-
+  list.files(
+    path = "/home/leonard/Documents/Uni/PhD/IRX/RAMAN/nuoendagula/",
+    pattern = "*.txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_tsv(flnm,
+    comment = "#",
+    col_names = FALSE,
+    skip = 1,
+    cols_only(
+      X1 = col_number(),
+      X2 = col_number()
+    )
+  ) %>%
+    mutate(filename = flnm)
+}
+
+rmn_data <- lapply(rmn_files, read_plus) %>%
+  bind_rows()
+
+rmn_data <- rmn_data %>%
+  select(c(1:3))
+
+rmn_data$filename <- basename(rmn_data$filename)
+
+rmn_data$filename <-
+  str_replace(rmn_data$filename, fixed("fah 1"), "fah1")
+
+rmn_data <- rmn_data %>%
+  distinct(X1, filename, .keep_all = TRUE) %>%
+  separate(
+    filename,
+    into = c("genotype", "replicate", "cell.type", "technical"),
+    sep = "\\s*#|-|\\s",
+    extra = "merge"
+  ) %>%
+  rename("wavenumber" = X1, "intensity" = X2) %>%
+  mutate(
+    genotype = recode(
+      genotype,
+      "4cl1＆2" = "4cl1x4cl2",
+      "cad4＆5" = "cad4xcad5",
+      "ccoaomt" = "ccoaomt1",
+      "ccr1" = "ccr1-3",
+      "col.o" = "Col-0",
+      "Col.0" = "Col-0",
+      "ccr1＆fah1" = "ccr1xfah1"
+    ),
+    cell.type = recode(cell.type,
+      "px" = "PX",
+      "SX" = "SMX",
+      "MX" = "PMX"
+    ),
+    replicate = str_extract(
+      replicate,
+      "\\d"
+    ),
+    technical = str_extract(
+      technical,
+      "(\\d)+"
+    )
+  ) %>%
+  filter(cell.type != "？？")
+
+rmn_data$wavenumber <- round(rmn_data$wavenumber, digits = 0)
+
+#### baseline correct Raman data ####
+rmn_data_wide <- rmn_data %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(group_id = row_number()) %>%
+  spread(wavenumber, intensity) %>%
+  select(-group_id) %>%
+  summarise_all(funs(sum(., na.rm = TRUE)))
+
+rmn_data_mat <- as.matrix(rmn_data_wide[, -c(1:4)])
+rownames(rmn_data_mat) <- paste(rmn_data_wide$genotype,
+  rmn_data_wide$cell.type,
+  rmn_data_wide$replicate,
+  rmn_data_wide$technical,
+  sep = "_"
+)
+
+rmn_data_correction <- baseline.als(rmn_data_mat,
+  lambda = 5,
+  p = 0.01,
+  maxit = 100
+)
+rmn_data_corrected <- as_tibble(rmn_data_correction$corrected, rownames = NA)
+
+rmn_data_corrected <- rmn_data_corrected %>%
+  rownames_to_column() %>%
+  separate(rowname, sep = "_", into = c("genotype", "cell.type", "replicate", "technical"), remove = TRUE) %>%
+  gather(key = "wavenumber", value = "corrected.intensity", -c(genotype, cell.type, replicate, technical)) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X."), replacement = "-")) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X"), replacement = "")) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  inner_join(., rmn_data, by = c("genotype", "cell.type", "replicate", "technical", "wavenumber")) %>%
+  ungroup() %>%
+  filter(genotype != "ccr1xfah1" &
+    wavenumber %in% c(300:1700)) %>%
+  mutate(
+    genotype = ordered(genotype,
+      levels = c(
+        "Col-0",
+        "4cl1",
+        "4cl2",
+        "4cl1x4cl2",
+        "ccoaomt1",
+        "fah1",
+        "omt1",
+        "ccr1-3",
+        "cad4",
+        "cad5",
+        "cad4xcad5"
+      )
+    )
+  )
+
+lig_peak <- rmn_data_corrected %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  filter(wavenumber %in% c(1580:1620)) %>%
+  mutate(
+    peak.pos = wavenumber[which.max(corrected.intensity)],
+    peak.height = corrected.intensity[which(wavenumber == peak.pos)]
+  ) %>%
+  filter(wavenumber == 1580) %>%
+  select(genotype:technical, peak.pos, peak.height)
+
+rmn_data_corrected <- left_join(rmn_data_corrected, lig_peak) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(
+    AUC = MESS::auc(wavenumber, intensity),
+    scaled = corrected.intensity / AUC,
+    scaled_max = corrected.intensity / peak.height,
+    lig_peak = peak.height / AUC
+  )
+
+rmn_data_pre <- rmn_data_corrected %>%
+  group_by(genotype, cell.type, replicate, wavenumber) %>%
+  summarise(
+    samples.pre = length(corrected.intensity),
+    mean.scaled = mean(scaled, na.rm = TRUE),
+    mean.scaled_max = mean(scaled_max, na.rm = TRUE),
+    mean.lig_peak = mean(lig_peak, na.rm = TRUE)
+  )
+
+rmn_data_avg <- rmn_data_pre %>%
+  group_by(genotype, cell.type, wavenumber) %>%
+  summarise(
+    plants = paste("plants: ", length(mean.scaled)),
+    bundles = ifelse(length(mean.scaled) > 1,
+      paste("cells/plant: ", min(samples.pre), "—", max(samples.pre), sep = ""),
+      paste("cells/plant: ", min(samples.pre))
+    ),
+    mean.scaled = mean(mean.scaled, na.rm = TRUE),
+    mean.scaled_max = mean(mean.scaled_max, na.rm = TRUE),
+    mean.lig_peak = mean(mean.lig_peak, na.rm = TRUE)
+  )
+
+#### average Raman data, calculate integrals and detect peaks ####
+rmn_sum <- rmn_data_corrected %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  summarise(
+    "total_lignin" = mean(lig_peak),
+    "G_rel" = scaled_max[wavenumber == 1664],
+    "G_tot" = scaled[wavenumber == 1664],
+    "CHO_rel" = scaled_max[wavenumber == 1625],
+    "S_rel" = scaled_max[wavenumber == 1340],
+    "S_tot" = scaled[wavenumber == 1340],
+    "cellulose" = scaled[wavenumber == 1099] + scaled[wavenumber == 381],
+    "AUC" = mean(AUC)
+  )
+```
+
+```{r figure 2, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+rmn_sum_long <- rmn_sum %>%
+  filter(cell.type != "IF" & genotype == "Col-0") %>%
+  group_by(cell.type, replicate, technical) %>%
+  transmute(
+    Lignin = total_lignin,
+    Cellulose = cellulose,
+    `G-lignin` = G_rel,
+    `S-lignin` = S_rel,
+    `CHO-lignin` = CHO_rel
+  ) %>%
+  left_join(rmn_irx %>%
+    filter(genotype == "Col-0") %>%
+    select(
+      cell.type, 
+      replicate, 
+      technical, 
+      Area, 
+      # Perim., 
+      n_v, 
+      n_p, 
+      n_f)) %>%
+  pivot_longer(
+    cols = -c(cell.type:technical),
+    names_to = "variable",
+    values_to = "value"
+  ) %>%
+  ungroup() %>%
+  mutate(variable = ordered(recode(variable,
+    "n_v" = "Adj. V",
+    "n_f" = "Adj. F",
+    "n_p" = "Adj. P",
+    # "Perim." = "Perimeter"
+  ),
+  levels = c(
+    "Area",
+    # "Perimeter",
+    "Adj. V",
+    "Adj. F",
+    "Adj. P",
+    "Cellulose",
+    "Lignin",
+    "G-lignin",
+    "S-lignin",
+    "CHO-lignin"
+  )
+  ),
+  cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX")))
+
+irx.summary.letters <- letter_groups(filter(rmn_sum_long, variable %in% c(
+      "Area",
+      "Adj. V",
+      "Adj. F",
+      "Adj. P",
+      "Cellulose",
+      "Lignin"
+    )),
+    value,
+    cell.type,
+    "tukey",
+    variable,
+    print_position = 0)
+
+irx.summary <- ggplot(
+  data =
+    filter(rmn_sum_long, variable %in% c(
+      "Area",
+      "Adj. V",
+      "Adj. F",
+      "Adj. P",
+      "Cellulose",
+      "Lignin"
+    )),
+  aes(x = cell.type, y = value)
+) +
+  geom_jitter(
+    aes(fill = cell.type),
+    shape = 21,
+    width = 0.1,
+    alpha = 0.9,
+    size = 2,
+    stroke = 0.25
+  ) +
+  # geom_violin(draw_quantiles = 0.5, adjust = 1.5, fill = rgb(1,1,1,0.5)) +
+  geom_boxplot(fill = rgb(1, 1, 1, 0.5), outlier.alpha = 0) +
+  # geom_text(data = raman.letters,
+  #           aes(label = groups),
+  #           angle = 90,
+  #           hjust = 1,
+  #           family = "Helvetica") +
+  # scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow", limits = c(-10, 10)) +
+  geom_label(data = irx.summary.letters,
+            aes(label = groups),
+            size = 6 / (14 / 5),
+            family = "Helvetica") +
+  scale_fill_viridis_d() +
+  scale_y_continuous(expand = expand_scale(mult = c(0.2, 0.05))) +
+  labs(
+    x = "",
+    y = ""
+  ) +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none"
+  ) +
+  facet_wrap(~variable, ncol = 2, scales = "free_y")
+
+# pdf("irx_summary.pdf", width = 3, height = 3)
+# irx.summary
+# dev.off()
+
+lig.summary.letters <- letter_groups(filter(rmn_sum_long, variable %in% c(
+      "G-lignin",
+      "S-lignin",
+      "CHO-lignin"
+    )),
+    value,
+    cell.type,
+    "tukey",
+    variable,
+    # print_position = "above"
+    )
+
+lig.summary <- ggplot(
+  data =
+    filter(rmn_sum_long, variable %in% c(
+      "G-lignin",
+      "S-lignin",
+      "CHO-lignin"
+    )),
+  aes(x = cell.type, y = value)
+) +
+  geom_jitter(
+    aes(fill = cell.type),
+    shape = 21,
+    width = 0.1,
+    alpha = 0.9,
+    size = 2,
+    stroke = 0.25
+  ) +
+  # geom_violin(draw_quantiles = 0.5, adjust = 1.5, fill = rgb(1,1,1,0.5)) +
+  geom_boxplot(fill = rgb(1, 1, 1, 0.5), outlier.alpha = 0) +
+  # geom_text(data = raman.letters,
+  #           aes(label = groups),
+  #           angle = 90,
+  #           hjust = 1,
+  #           family = "Helvetica") +
+  # scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow", limits = c(-10, 10)) +
+  geom_label(data = lig.summary.letters,
+            aes(label = groups),
+            size = 6 / (14 / 5),
+            family = "Helvetica") +
+  scale_fill_viridis_d() +
+  scale_y_continuous(expand = expand_scale(mult = c(0.2, 0.05))) +
+  labs(
+    x = "",
+    y = ""
+  ) +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none"
+  ) +
+  facet_wrap(~variable, ncol = 1, scales = "free_y")
+
+# pdf("lig_summary.pdf", width = 1.5, height = 3)
+# lig.summary
+# dev.off()
+
+plot_grid(irx.summary,
+          lig.summary,
+          labels = c("A", "B"),
+          nrow = 1,
+          rel_widths = c(1, 0.5))
+
+```
+
+## Visual vessel overview
+
+These are all the vessel shapes that I measured in the Wiesner images, just for an idea how the collapse looks.
+
+```{r figure 3, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+irx_data <-
+  read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/irx_measurements.csv", sep = "\t")
+# irx_data <- subset(irx_data, replicate == 1 & technical == 3)
+irx_ref <- subset(irx_data, object == "ref", select = c(1, 2, 3, 6, 7, 27))
+irx_ref$ref.y1 <- irx_ref$Y
+irx_ref$ref.y2 <- irx_ref$Y
+irx_ref$ref.x1 <- irx_ref$X - (irx_ref$Length / 2)
+irx_ref$ref.x2 <- irx_ref$X + (irx_ref$Length / 2)
+
+# irx_data <-
+#   merge(subset(irx_data, object != "ref"),
+#         irx_ref[, c(1, 2, 3, 7, 8, 9, 10)],
+#         by = c("genotype", "replicate", "technical"))
+
+irx_data <- irx_data %>%
+  filter(object != "ref") %>%
+  left_join(irx_ref[, c(1, 2, 3, 7, 8, 9, 10)], 
+            by = c("genotype", "replicate", "technical"))
+
+irx_data$Distance <-
+  apply(irx_data[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
+        1 ,
+        function(x) {
+          a <- c(x[1], x[2])
+          b <- c(x[3], x[5])
+          c <- c(x[4], x[6])
+          v1 <- b - c
+          v2 <- a - b
+          m <- cbind(v1, v2)
+          d <- abs(det(m)) / sqrt(sum(v1 * v1))
+          d
+        })
+
+irx_data <- irx_data %>%
+  rownames_to_column(var = "number")
+
+irx_x <- irx_data %>%
+  select(genotype, replicate, technical, object, number, contains("ROIx")) %>%
+  group_by(genotype, replicate, technical, object, number) %>%
+  pivot_longer(contains("ROIx"), names_to = "variable", values_to = "ROIx") %>%
+  separate(variable, into = c("variable", "point"), sep = "x") %>%
+  select(-variable)
+
+irx_y <- irx_data %>%
+  select(genotype, replicate, technical, object, number, contains("ROIy")) %>%
+  group_by(genotype, replicate, technical, object, number) %>%
+  pivot_longer(contains("ROIy"), names_to = "variable", values_to = "ROIy") %>%
+  separate(variable, into = c("variable", "point"), sep = "y") %>%
+  select(-variable)
+
+irx_roi <- left_join(irx_x, irx_y) %>%
+  drop_na() %>%
+  filter_at(vars("ROIx", "ROIy"), any_vars(. != 0))
+
+irx_str <- irx_roi %>%
+  unite("ID", genotype:number, remove = FALSE, sep = ",") %>%
+  group_by(ID) %>%
+  mutate(number = as.numeric(number),
+         ROIx = ROIx - mean(ROIx, na.rm = TRUE),
+         ROIy = ROIy - mean(ROIy, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by(ID, point) %>%
+  summarise(xy = list(c(ROIx, ROIy))) %>%
+  ungroup() %>%
+  group_by(ID) %>%
+  mutate(point = as.numeric(point),
+         max_point = max(point)) %>%
+  bind_rows(filter(., point == 0) %>%
+              group_by(ID) %>%
+              mutate(point = max_point + 1)) %>%
+  arrange(ID, point) %>%
+  summarise(xy = list(c(xy))) %>%
+  mutate(geometry = map(xy,
+                        ~ do.call(rbind, .) %>% # make each list a matrix
+                          list() %>% # st_polygon() requires a list
+                          st_polygon()
+                    )
+         ) %>% 
+  st_as_sf()
+
+irx_str <- irx_str %>%
+  group_by(ID) %>%
+  mutate(area = st_area(geometry),
+         CH = st_convex_hull(geometry),
+         convex_area = st_area(CH),
+         convexity = area / convex_area,
+         circularity = 4 * pi * (area / (lwgeom::st_perimeter(geometry)^2))) %>%
+  separate(ID, into = c("genotype", "replicate", "technical", "cell.type", "number"), sep = ",") %>%
+  filter(genotype != "ccr1xfah1") %>%
+  mutate(
+    genotype = recode(genotype, "col-0" = "Col-0"),
+    genotype = ordered(genotype, levels = c(
+      "Col-0",
+      "4cl1",
+      "4cl2",
+      "4cl1x4cl2",
+      "ccoaomt1",
+      "fah1",
+      "omt1",
+      "ccr1-3",
+      "cad4",
+      "cad5",
+      "cad4xcad5"
+    )))
+
+# pdf("sf_ROIs.pdf")
+ggplot() +
+  geom_sf(data = irx_str,
+          aes(colour = area),
+          # colour = "black",
+          fill = NA,
+          lwd = 0.1) +
+  theme_leo() +
+  theme(text = element_text(family = "Helvetica"),
+        legend.position = "none",
+        panel.border = element_blank(),
+        axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank()) +
+  scale_colour_viridis_c() +
+  facet_grid(cell.type ~ genotype)
+# dev.off()
+
+# irx_sample <- irx_str %>%
+#   mutate(circularity = ordered(as.character(round(circularity, digits = 1)),
+#                                levels = c("1", "0.9", "0.8", "0.7", "0.6", "0.5", "0.4", "0.3", "0.2")),
+#          convexity = round(convexity, digits = 1))
+# 
+# # pdf("sf_ROIs_round.pdf")
+# ggplot() +
+#   geom_sf(data = irx_sample,
+#           aes(colour = area),
+#           # colour = "black",
+#           fill = NA,
+#           lwd = 0.5) +
+#   theme_voi() +
+#   theme(text = element_text(family = "Helvetica"),
+#         legend.position = "none") +
+#   scale_colour_viridis_c() +
+#   facet_grid(circularity ~ convexity)
+# # dev.off()
+# 
+# # pdf("sf_ROIs_all.pdf", width = 20, height = 25)
+# ggplot() +
+#   geom_sf(data = irx_str,
+#           aes(colour = cell.type),
+#           # colour = "black",
+#           fill = NA,
+#           lwd = 0.5) +
+#   theme_void() +
+#   theme(text = element_text(family = "Helvetica"),
+#         legend.position = "bottom",
+#         strip.text = element_blank()) +
+#   scale_colour_few() +
+#   facet_wrap(~ convexity)
+# dev.off()
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, warning = FALSE, eval = TRUE, echo = FALSE}
+#### import and tidy Wiesner test data ####
+wiesner.data <-
+  read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
+           skip = 2)
+
+wiesner.data$genotype <- recode(wiesner.data$genotype, cad4x5 = "cad4xcad5")
+
+# set cell types according to measurement order
+wiesner.data[1:50 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 50), 4] <-
+  "IF"
+wiesner.data[51:100 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 50), 4] <-
+  "MX"
+wiesner.data[101:150 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 50), 4] <-
+  "XF"
+wiesner.data[151:200 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 50), 4] <-
+  "PX"
+wiesner.data[201:250 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 50), 4] <-
+  "LP"
+wiesner.data[251:300 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 50), 4] <-
+  "PH"
+
+# import SMX measurements
+wiesner.data.SMX <- read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/measurements_SMX.csv",
+                          skip = 2)
+wiesner.data.SMX$replicate <- as.factor(wiesner.data.SMX$replicate)
+
+wiesner.data <- rbind(select(wiesner.data, -technical), select(wiesner.data.SMX, -technical))
+
+wiesner.data$genotype <-
+  ordered(
+    wiesner.data$genotype,
+    levels = c(
+      "col-0",
+      "4cl1",
+      "4cl2",
+      "4cl1x2",
+      "ccoaomt1",
+      "fah1",
+      "omt1",
+      "ccr1-3",
+      "ccr1xfah1",
+      "cad4",
+      "cad5",
+      "cad4xcad5"
+    )
+  )
+
+# calculate the correct hue on the 360 point circular scale
+wiesner.data$hue <- ((wiesner.data$h.stained + 128) / 255 * 360)
+
+wiesner.data$replicate <-
+  as.factor(as.character(wiesner.data$replicate))
+
+# calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. for the unlignified phloem
+wiesner.data$diff <-
+  wiesner.data$OD.stained - wiesner.data$OD.unstained
+# summary(wiesner.data)
+
+wiesner.data.bg <- wiesner.data %>%
+  filter(cell.type == "PH") %>%
+  select(1:2, 9) %>%
+  ungroup() %>%
+  group_by(genotype, replicate) %>%
+  summarise(OD.bg = mean(diff, na.rm = TRUE))
+
+wiesner.data <-
+  full_join(
+    wiesner.data,
+    wiesner.data.bg,
+    all = TRUE,
+    by = c("genotype", "replicate")
+  )
+wiesner.data$diff.adj <- wiesner.data$diff - wiesner.data$OD.bg
+wiesner.data <- subset(wiesner.data, cell.type != "PH")
+
+# average per replicate (for boxplots)
+wiesner.data.pre <-  wiesner.data %>%
+  mutate(cell.type = recode(cell.type, "MX" = "PMX"),
+         genotype = recode(genotype, "col-0" = "Col-0",
+                           "4cl1x2" = "4cl1x4cl2")) %>%
+  group_by(genotype, cell.type, replicate) %>%
+  summarise(
+    mean.hue1 = mean(hue, na.rm = TRUE),
+    SD.hue1 = sd(hue, na.rm = TRUE),
+    mean.OD1 = mean(diff.adj, na.rm = TRUE),
+    SD.OD1 = sd(diff.adj, na.rm = TRUE)) %>%
+  select(genotype, cell.type, replicate, mean.OD1)
+
+#### import and tidy shape data of the vessels from the Raman measurements ####
+raman.irx <- read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/raman_IRX_revisited.csv") %>%
+  select(genotype:Perim., Circ., Round, Height, Width) %>%
+  filter(object == 2) %>%
+  select(-object)
+
+raman.nb <- read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/raman_IRX.csv") %>%
+  select(genotype:n_f)
+raman.irx <- left_join(raman.irx, raman.nb)
+raman.irx$replicate <- as.character(raman.irx$replicate)
+raman.irx$technical <- as.character(raman.irx$technical)
+
+raman_convex <- read.csv("/home/leonard/Documents/Uni/PhD/IRX/raman_irx_convex.csv")
+
+raman_convex$File <-
+  str_replace(raman_convex$File, fixed("fah 1"), "fah1")
+
+raman_convex <- raman_convex %>%
+  select(-X) %>%
+  separate(
+    File,
+    into = c("genotype", "replicate", "cell.type", "technical"),
+    sep = "\\s*#|-|\\s",
+    extra = "merge"
+  ) %>%
+  mutate(
+    genotype = recode(
+      genotype,
+      "4cl1＆2" = "4cl1x4cl2",
+      "cad4＆5" = "cad4xcad5",
+      "ccoaomt" = "ccoaomt1",
+      "ccr1" = "ccr1-3",
+      "col.o" = "Col-0",
+      "Col.0" = "Col-0",
+      "ccr1＆fah1" = "ccr1xfah1"
+    ),
+    cell.type = recode(cell.type,
+                       "px" = "PX",
+                       "SX" = "SMX",
+                       "MX" = "PMX"),
+    replicate = str_extract(replicate,
+                            "\\d"),
+    technical = str_extract(technical,
+                            "(\\d)+")
+  ) %>%
+  filter(cell.type != "？？")
+
+raman.irx <- left_join(raman.irx, raman_convex)
+  
+# write_csv(raman.irx, "raman_irx_shape.csv")
+
+#### import and tidy plant height data ####
+raman.heights <- read.csv("file:///home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
+  select(genotype, replicate, height) %>%
+  mutate(genotype = recode(genotype, "col-0" = "Col-0")) %>%
+  rename("Plant.height" = "height") %>%
+  rbind(read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/heights_haris.csv"))
+raman.heights$replicate <- as.character(raman.heights$replicate)
+
+#### merge data frames ####
+raman.irx <- left_join(raman.irx, rmn_sum)
+raman.irx.switch <- left_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
+                                       col_types = "cccc"), raman.irx) %>%
+  mutate(technical = str_c(technical, "switched", sep = "_"),
+         cell.type = "SMX")
+raman.irx <- raman.irx %>%
+  anti_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
+                     col_types = "cccc")) %>%
+  bind_rows(raman.irx.switch)
+raman.irx <- left_join(raman.irx, raman.heights)
+raman.irx <- left_join(raman.irx, wiesner.data.pre) %>%
+  mutate(convexity = Area / ConvexArea)
+# write.csv(raman.irx, file = "SEM_data.csv")
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+TM.multigroup <- function(x) {
+  psem(
+    lm(Circ. ~
+    n_v +
+      convexity,
+    data = filter(drop_na(raman.irx), cell.type == x)
+    ),
+    lm(convexity ~
+    n_v +
+      # n_f +
+      mean.OD1 +
+      Perim. +
+      G_rel +
+      S_rel +
+      # X1383.1603 +
+      # X1131.1603 +
+      # X1457.1340 +
+      CHO_rel +
+      cellulose +
+      # total_auc +
+      # lig.peak.pos +
+      # X1603.1099,
+      total_lignin,
+    data = filter(drop_na(raman.irx), cell.type == x)
+    ),
+    # lme(Perim. ~
+    #       # n_v,
+    #       # n_f +
+    #       mean.OD1 +
+    #       # cellu.peak +
+    #       # lig.peak.pos +
+    #       lig.peak,
+    #     random = ~1|replicate,
+    #     data = filter(drop_na(raman.irx), cell.type == x)
+    # ),
+    # lme(HeightByWidth ~
+    #       # mean.OD1 +
+    #       # lig.peak +
+    #       # n_v +
+    #       Circ.,
+    #     random = ~1|replicate,
+    #     data = filter(drop_na(raman.irx), cell.type == x)
+    # ),
+    # lme(X1147.1603 ~
+    #       Perim.,
+    #     random = ~1|replicate,
+    #     data = filter(drop_na(raman.irx), cell.type == x)
+    # ),
+    # lme(X1603.1099 ~
+    #       Perim.,
+    #     random = ~1|replicate,
+    #     data = filter(drop_na(raman.irx), cell.type == x)
+    # ),
+    # lme(mean.OD1 ~
+    #       X1664.1603 +
+    #       X1603.1099 +
+    #       X1621.1603,
+    #     random = ~1|replicate,
+    #     data = filter(drop_na(raman.irx), cell.type == x)
+    # ),
+    data = filter(drop_na(raman.irx), cell.type == x)
+  )
+}
+```
+
+## SEM for PX
+
+Collapse explained: 44%
+
+Positive (strengthening) factors: 
+
+* Perimeter
+* Relative G-OH content
+
+negative (weakening) factors:
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+summary(TM.multigroup("PX"), .progressBar = FALSE)
+plot(TM.multigroup("PX"))
+```
+
+## SEM for PMX
+
+Collapse explained: 50%
+
+Positive (strengthening) factors: 
+
+* Relative G-OH content
+* Total coniferaldehyde (Wiesner)
+* Relative aldehyde content (Raman)
+
+negative (weakening) factors:
+
+* Relative S-content
+* Adjacent vessels
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+summary(TM.multigroup("PMX"), .progressBar = FALSE)
+plot(TM.multigroup("PMX"))
+```
+
+## SEM for SMX
+
+Collapse explained: 31%
+
+Positive (strengthening) factors: 
+
+* Total lignin (relative to AUC)
+
+negative (weakening) factors:
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+summary(TM.multigroup("SMX"), .progressBar = FALSE)
+plot(TM.multigroup("SMX"))
+```
+```

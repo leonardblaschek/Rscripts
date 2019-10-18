@@ -1,0 +1,1740 @@
+---
+title: "Raman publication figures"
+author: "Leonard Blaschek"
+date: "14/10/2019"
+output: 
+  pdf_document:
+    latex_engine: lualatex
+    fig_caption: yes
+    fig_height: 6
+    includes:
+      in_header: rmd_temp.tex
+sansfont: IBM Plex Sans
+monofont: Inconsolata
+mainfont: IBM Plex Sans
+bibliography: /home/leonard/Documents/Bibliographics/zotero_lib.bib
+link-citations: true
+linkcolor: black
+urlcolor: blue
+citecolor: blue
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(baseline)
+library(ropls)
+library(corrplot)
+library(factoextra)
+library(showtext)
+library(ggthemes)
+library(zoo)
+library(kableExtra)
+library(viridis)
+library(tidyverse)
+library(broom)
+library(ggrepel)
+library(gplots)
+library(ggridges)
+library(RColorBrewer)
+library(tukeygrps)
+library(cowplot)
+library(ggbeeswarm)
+
+#### import CooperHewitt ####
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 6,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.25,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        size = 6,
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        size = 6,
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.title = element_text(
+        colour = "black",
+        size = 6
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = 6),
+      legend.key.height = unit(4, "mm"),
+      complete = TRUE
+    )
+}
+
+scale_range <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+scale_z <- function(x) {
+  (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
+}
+scale_max <- function(x) {
+  x / max(x)
+}
+# scale_lig <- function(x) {
+#   x / max(x[wavenumber > 1590 & wavenumber < 1610])
+# }
+```
+
+### Figure 1 -- spectra of synthetic models
+
+```{r model compounds, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+
+rmn_model_files <-
+  list.files(
+    path = "/home/leonard/Documents/Uni/PhD/Raman/Zoltan/",
+    pattern = ".csv",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_csv(flnm,
+    comment = "#",
+    col_names = FALSE,
+    skip = 5,
+    cols_only(
+      X1 = col_number(),
+      X2 = col_number()
+    )
+  ) %>%
+    mutate(filename = flnm)
+}
+
+rmn_models <- lapply(rmn_model_files, read_plus) %>%
+  bind_rows()
+
+rmn_models <- rmn_models %>%
+  mutate(filename = str_remove(basename(filename), ".\\.csv$")) %>%
+  separate(filename, into = c("state", "unit", "gamma"), remove = FALSE) %>%
+  rename(
+    "wavenumber" = "X1",
+    "intensity" = "X2"
+  ) %>%
+  mutate(
+    wavenumber = round(wavenumber, digits = 0),
+    unit = recode(unit,
+      "g" = "G",
+      "s" = "S"
+    )
+  ) %>%
+  filter(wavenumber %in% c(300:1700)) %>%
+  group_by(state, unit, gamma) %>%
+  mutate(
+    AUC = MESS::auc(wavenumber, intensity),
+    scaled = intensity / AUC
+  )
+
+rmn_models <- rmn_models %>%
+  ungroup() %>%
+  mutate(filename = ordered(filename,
+    levels =
+      rev(c(
+        "poly-g-oh",
+        "mono-g-oh",
+        "poly-g-cho",
+        "mono-g-cho",
+        "mono-g-cooh",
+        "mono-s-oh",
+        "poly-s-cho",
+        "mono-s-cho",
+        "mono-s-cooh",
+        "mono-h-cooh",
+        "mono-c-cooh"
+      ))
+  ), gamma = ordered(gamma, levels = rev(c("oh", "cho", "cooh"))))
+
+
+spectra_plot <- ggplot(filter(rmn_models, unit %in% c("G", "S"))) +
+  geom_text_repel(
+    data = tibble(
+      wavenumber = rep(c(1656, 1620, 1600, 1335, 1140), 2),
+      unit = rep(c("G", "S"), each = 5, len = 10),
+      gamma = rep("COOH", 10),
+      scaled = rep(1, 10)
+    ),
+    aes(
+      label = wavenumber,
+      x = wavenumber,
+      y = scaled
+    ),
+    angle = 90,
+    size = 2,
+    hjust = 0.5,
+    direction = "x",
+    min.segment.length = 0,
+    nudge_y = -0.25,
+    segment.colour = "grey85",
+    family = "Helvetica",
+    size = 6 / (14 / 5)
+  ) +
+  annotate("segment",
+    x = c(1656, 1620, 1600, 1335, 1140),
+    xend = c(1656, 1620, 1600, 1335, 1140),
+    y = 1,
+    yend = Inf,
+    colour = "grey85"
+  ) +
+  geom_ridgeline(aes(
+    x = wavenumber,
+    y = gamma,
+    height = rollmean(scaled, 3, na.pad = TRUE),
+    # fill = state,
+    colour = state
+  ),
+  alpha = 0.5,
+  size = 0.2,
+  # colour = NA,
+  fill = NA,
+  scale = 100,
+  min_height = -0.002
+  ) +
+  scale_fill_manual(values = c("poly" = "#d73027", "mono" = "#4575b4")) +
+  scale_colour_manual(values = c("poly" = "#d73027", "mono" = "#4575b4")) +
+  scale_x_reverse(
+    limits = c(1700, 1000),
+    # sec.axis = sec_axis(~., breaks = unique(peak_pres$peak))
+  ) +
+  scale_y_discrete(
+    labels = c(
+      "COOH",
+      "CHO",
+      "OH"
+    )
+  ) +
+  labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
+  theme_leo() +
+  theme(
+    panel.spacing = unit(5, "mm"),
+    axis.title.y = element_blank(),
+    axis.text.x.top = element_text(
+      angle = 90,
+      vjust = 0.5,
+      hjust = 1
+    ),
+  ) +
+  facet_wrap(~unit, ncol = 2)
+
+
+#### Upset plot ####
+peak_pres <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/synth_peak_presence.csv") %>%
+  complete(peak, compound, fill = list(present = "no")) %>%
+  separate(compound, into = c("state", "unit", "gamma"), sep = "-", remove = FALSE) %>%
+  mutate(
+    compound = ordered(compound,
+      levels =
+        rev(c(
+          "poly-g-oh",
+          "mono-g-oh",
+          "poly-g-cho",
+          "mono-g-cho",
+          "mono-g-cooh",
+          "mono-s-oh",
+          "poly-s-cho",
+          "mono-s-cho",
+          "mono-s-cooh",
+          "mono-h-cooh",
+          "mono-c-cooh"
+        ))
+    ),
+    unit = recode(unit,
+      "g" = "G",
+      "s" = "S"
+    ),
+    gamma = ordered(gamma, levels = rev(c("oh", "cho", "cooh")))
+  )
+
+peak_pres_max <- peak_pres %>%
+  group_by(peak) %>%
+  summarise(
+    max = max(compound[present == "yes"]),
+    min = min(compound[present == "yes"])
+  )
+
+peak_upset <- ggplot(peak_pres) +
+  # annotate("rect",
+  #          fill = "#4575b4",
+  #          alpha = 0.25,
+  #          xmin = -Inf,
+  #          xmax = Inf,
+  #          ymin = c(0.5, 5.5, 9.5),
+  #          ymax = c(4.5, 8.5, 10.5)) +
+  # annotate("rect",
+  #          fill = "#d73027",
+  #          alpha = 0.25,
+  #          xmin = -Inf,
+  #          xmax = Inf,
+  #          ymin = c(4.5, 8.5, 10.5),
+  #          ymax = c(5.5, 9.5, 11.5)) +
+  geom_point(data = filter(peak_pres, present == "no"),
+    aes(
+      x = reorder(peak, -as.numeric(peak)),
+      y = compound,
+      colour = state,
+      alpha = present,
+      size = present
+    ),
+    shape = 20,
+    # size = 3
+  ) +
+  geom_hline(
+    yintercept = c(1.5, 2.5, 6.5),
+    color = "white",
+    linetype = 2
+  ) +
+  geom_segment(
+    data = peak_pres_max,
+    aes(
+      group = peak,
+      y = min,
+      yend = max,
+      x = reorder(peak, -as.numeric(peak)),
+      xend = reorder(peak, -as.numeric(peak))
+    )
+  ) +
+  geom_point(data = filter(peak_pres, present == "yes"),
+    aes(
+      x = reorder(peak, -as.numeric(peak)),
+      y = compound,
+      colour = state,
+      alpha = present,
+      size = present
+    ),
+    shape = 20,
+    # size = 3
+  ) +
+  labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
+  scale_y_discrete(labels = rev(c(
+          "G-OH",
+          "G-OH",
+          "G-CHO",
+          "G-CHO",
+          "G-COOH",
+          "S-OH",
+          "S-CHO",
+          "S-CHO",
+          "S-COOH",
+          "H-COOH",
+          "C-COOH"
+        ))) +
+  scale_colour_manual(values = c("poly" = "#d73027",
+                                 "mono" = "#4575b4")) +
+  scale_alpha_manual(values = c("yes" = 1,
+                                "no" = 0.1)) +
+  scale_size_manual(values = c("yes" = 3, "no" = 1)) +
+  theme_leo() +
+  theme(
+    panel.border = element_blank(),
+    axis.text.x = element_text(
+      angle = 90,
+      vjust = 0.5,
+      hjust = 1
+    ),
+    axis.ticks = element_blank(),
+    axis.title.y = element_blank(),
+    # axis.text.y = element_blank()
+  )
+# pdf("peak_upset_plot.pdf", height = 2)
+# peak_upset
+# dev.off()
+
+# pdf("spectra_upset_grid.pdf", width = 6.7, height = 5)
+plot_grid(spectra_plot,
+  peak_upset,
+  labels = c("A", "B"),
+  nrow = 2,
+  rel_heights = c(1, 0.4)
+)
+# dev.off()
+```
+
+Here are the spectra from Zoltan. The monomers are in blue, the DHPs in red. My first take-aways are the following:
+
+* **1625 cm^-1^** comes from S and G aldehydes (at 1620) and ferulates (at 1632)
+* **1664 cm^-1^** comes from G-OH > G-CHO = S-OH = S-CHO (at 1656)
+* **\textasciitilde1600 cm^-1^** shifts toward lower wavenumbers the more carbons are directly linked to the aromatic ring, *i.e* monomers > polymers and C > G > S
+* **1340 cm^-1^** comes from all S-units, with contributions from G-polymers (at 1335)
+* **1140 cm^-1^** comes from G-polymers and aldehyde monomers
+
+\newpage
+
+### Figure 2 -- spectra of lignified and unlignified tissues
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+#### import and tidy Raman data ####
+rmn_files <-
+  list.files(
+    path = "/home/leonard/Documents/Uni/PhD/Raman/measurements/",
+    pattern = "*.CSV",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_csv(flnm,
+    comment = "#",
+    col_names = FALSE,
+    skip = 0,
+    cols_only(
+      X1 = col_number(),
+      X2 = col_number()
+    )
+  ) %>%
+    mutate(filename = flnm)
+}
+
+rmn_data <- lapply(rmn_files, read_plus) %>%
+  bind_rows()
+
+# rmn_data <- rmn_data %>%
+#   select(c(1:3))
+
+rmn_data$filename <- basename(rmn_data$filename)
+
+# rmn_data$filename <-
+#   str_replace(rmn_data$filename, fixed("fah 1"), "fah1")
+
+rmn_data <- rmn_data %>%
+  distinct(X1, filename, .keep_all = TRUE) %>%
+  separate(
+    filename,
+    into = c("cell.type", "replicate"),
+    sep = "[XhFi]",
+    extra = "merge"
+  ) %>%
+  rename("wavenumber" = X1, "intensity" = X2) %>%
+  mutate(
+    cell.type = recode(cell.type,
+      "Proc-S" = "Vascular bundle",
+      "Proc-pt" = "Pith",
+      "Proc-I" = "Interfascicular fibre",
+      "Proc-Ep" = "Epidermis"
+    ),
+    replicate = str_remove(replicate, ".CSV")
+  )
+
+rmn_data$wavenumber <- round(rmn_data$wavenumber, digits = 0)
+
+#### baseline correct Raman data ####
+rmn_data_wide <- rmn_data %>%
+  group_by(cell.type, replicate) %>%
+  mutate(group_id = row_number()) %>%
+  spread(wavenumber, intensity) %>%
+  select(-group_id) %>%
+  summarise_all(funs(sum(., na.rm = TRUE)))
+
+rmn_data_mat <- as.matrix(rmn_data_wide[, -c(1:4)])
+rownames(rmn_data_mat) <- paste(rmn_data_wide$cell.type,
+  rmn_data_wide$replicate,
+  sep = "_"
+)
+
+rmn_data_correction <- baseline.als(rmn_data_mat,
+  lambda = 5,
+  p = 0.01,
+  maxit = 100
+)
+rmn_data_all <- as_tibble(rmn_data_correction$corrected, rownames = NA)
+
+rmn_data_all <- rmn_data_all %>%
+  rownames_to_column() %>%
+  separate(rowname, sep = "_", into = c("cell.type", "replicate"), remove = TRUE) %>%
+  gather(key = "wavenumber", value = "corrected.intensity", -c(cell.type, replicate)) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X."), replacement = "-")) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X"), replacement = "")) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  group_by(cell.type, replicate) %>%
+  inner_join(., rmn_data, by = c("cell.type", "replicate", "wavenumber")) %>%
+  filter(wavenumber %in% c(300:1700)) %>%
+  mutate("total_auc" = MESS::auc(wavenumber, corrected.intensity))
+
+# rmn_data_all$genotype <- ordered(rmn_data_all$genotype,
+#                                          levels = c(
+#                                            "Col-0",
+#                                            "4cl1",
+#                                            "4cl2",
+#                                            "4cl1x4cl2",
+#                                            "ccoaomt1",
+#                                            "fah1",
+#                                            "omt1",
+#                                            "ccr1-3",
+#                                            "ccr1xfah1",
+#                                            "cad4",
+#                                            "cad5",
+#                                            "cad4xcad5"
+#                                          ))
+write_csv(rmn_data_all, "raman_spectra_cell_types.csv")
+
+rmn_data_all_avg <- rmn_data_all %>%
+  group_by(cell.type, wavenumber) %>%
+  summarise(
+    intensity = mean(corrected.intensity),
+    auc = mean(total_auc),
+    auc_sd = sd(total_auc)
+  ) %>%
+  ungroup() %>%
+  mutate(cell.type = as.factor(cell.type))
+
+spectra <- ggplot(data = rmn_data_all_avg) +
+  geom_ridgeline(aes(
+    x = wavenumber,
+    y = cell.type,
+    # height = rollmean(intensity, 10, na.pad = TRUE) / 1000,
+    height = intensity / 1000,
+    fill = cell.type,
+    group = cell.type
+  ),
+  alpha = 0.75,
+  size = 0.2,
+  # colour = NA,
+  scale = 0.5,
+  min_height = -500
+  ) +
+  geom_text(
+    data = filter(rmn_data_all_avg, wavenumber == 1699), aes(
+      x = wavenumber,
+      y = cell.type,
+      label = cell.type
+    ),
+    hjust = 0,
+    nudge_y = -0.1,
+    family = "Helvetica",
+    size = 6 / (14 / 5)
+  ) +
+  geom_text(
+    data = filter(rmn_data_all_avg, wavenumber == 403), aes(
+      x = wavenumber,
+      y = cell.type,
+      label = paste("Total area under curve = ", round(auc, digits = 0), " ± ", round(auc_sd, digits = 0))
+    ),
+    hjust = 1,
+    nudge_y = -0.1,
+    family = "Helvetica",
+    size = 6 / (14 / 5)
+  ) +
+  scale_fill_viridis_d() +
+  scale_x_reverse() +
+  labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
+  theme_leo() +
+  theme(
+    panel.spacing = unit(5, "mm"),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+rmn_data_all_auc <- rmn_data_all %>%
+  group_by(cell.type, replicate) %>%
+  summarise(auc = mean(total_auc)) %>%
+  ungroup()
+
+auc_boxes <- ggplot(data = rmn_data_all_auc, aes(x = cell.type, y = auc)) +
+  geom_quasirandom(aes(fill = cell.type),
+    shape = 21,
+    alpha = 0.75,
+    size = 3
+  ) +
+  geom_boxplot(
+    alpha = 0.5,
+    outlier.alpha = 0
+  ) +
+  scale_fill_viridis_d() +
+  theme_leo() +
+  labs(y = "AUC per 490 µm²") +
+  scale_y_continuous(breaks = NULL) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  coord_flip()
+
+plot_grid(spectra,
+  auc_boxes,
+  rel_widths = c(0.8, 0.2),
+  ncol = 2,
+  align = "h"
+)
+```
+
+There is not much to talk about this figure. I think it should go into the supplemental.
+
+\newpage
+
+### Figure 3 -- mutant spectra
+
+```{r load and correct mutant spectra, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+#### import and tidy Raman data ####
+rmn_files <-
+  list.files(
+    path = "/home/leonard/Documents/Uni/PhD/IRX/RAMAN/nuoendagula/",
+    pattern = "*.txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_tsv(flnm,
+    comment = "#",
+    col_names = FALSE,
+    skip = 1,
+    cols_only(
+      X1 = col_number(),
+      X2 = col_number()
+    )
+  ) %>%
+    mutate(filename = flnm)
+}
+
+rmn_data <- lapply(rmn_files, read_plus) %>%
+  bind_rows()
+
+rmn_data <- rmn_data %>%
+  select(c(1:3))
+
+rmn_data$filename <- basename(rmn_data$filename)
+
+rmn_data$filename <-
+  str_replace(rmn_data$filename, fixed("fah 1"), "fah1")
+
+rmn_data <- rmn_data %>%
+  distinct(X1, filename, .keep_all = TRUE) %>%
+  separate(
+    filename,
+    into = c("genotype", "replicate", "cell.type", "technical"),
+    sep = "\\s*#|-|\\s",
+    extra = "merge"
+  ) %>%
+  rename("wavenumber" = X1, "intensity" = X2) %>%
+  mutate(
+    genotype = recode(
+      genotype,
+      "4cl1＆2" = "4cl1x4cl2",
+      "cad4＆5" = "cad4xcad5",
+      "ccoaomt" = "ccoaomt1",
+      "ccr1" = "ccr1-3",
+      "col.o" = "Col-0",
+      "Col.0" = "Col-0",
+      "ccr1＆fah1" = "ccr1xfah1"
+    ),
+    cell.type = recode(cell.type,
+      "px" = "PX",
+      "SX" = "SMX",
+      "MX" = "PMX"
+    ),
+    replicate = str_extract(
+      replicate,
+      "\\d"
+    ),
+    technical = str_extract(
+      technical,
+      "(\\d)+"
+    )
+  ) %>%
+  filter(cell.type != "？？")
+
+rmn_data$wavenumber <- round(rmn_data$wavenumber, digits = 0)
+
+#### baseline correct Raman data ####
+rmn_data_wide <- rmn_data %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(group_id = row_number()) %>%
+  spread(wavenumber, intensity) %>%
+  select(-group_id) %>%
+  summarise_all(funs(sum(., na.rm = TRUE)))
+
+rmn_data_mat <- as.matrix(rmn_data_wide[, -c(1:4)])
+rownames(rmn_data_mat) <- paste(rmn_data_wide$genotype,
+  rmn_data_wide$cell.type,
+  rmn_data_wide$replicate,
+  rmn_data_wide$technical,
+  sep = "_"
+)
+
+rmn_data_correction <- baseline.als(rmn_data_mat,
+  lambda = 5,
+  p = 0.01,
+  maxit = 100
+)
+rmn_data_corrected <- as_tibble(rmn_data_correction$corrected, rownames = NA)
+
+rmn_data_corrected <- rmn_data_corrected %>%
+  rownames_to_column() %>%
+  separate(rowname, sep = "_", into = c("genotype", "cell.type", "replicate", "technical"), remove = TRUE) %>%
+  gather(key = "wavenumber", value = "corrected.intensity", -c(genotype, cell.type, replicate, technical)) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X."), replacement = "-")) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X"), replacement = "")) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  inner_join(., rmn_data, by = c("genotype", "cell.type", "replicate", "technical", "wavenumber")) %>%
+  ungroup() %>%
+  filter(genotype != "ccr1xfah1" &
+    wavenumber %in% c(300:1700) &
+    cell.type %in% c("IF", "PMX")) %>%
+  mutate(
+    genotype = ordered(genotype,
+      levels = c(
+        "Col-0",
+        "4cl1",
+        "4cl2",
+        "4cl1x4cl2",
+        "ccoaomt1",
+        "fah1",
+        "omt1",
+        "ccr1-3",
+        "cad4",
+        "cad5",
+        "cad4xcad5"
+      )
+    ),
+    cell.type = recode(cell.type, "PMX" = "VB")
+  )
+
+lig_peak <- rmn_data_corrected %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  filter(wavenumber %in% c(1580:1620)) %>%
+  mutate(
+    peak.pos = wavenumber[which.max(corrected.intensity)],
+    peak.height = corrected.intensity[which(wavenumber == peak.pos)]
+  ) %>%
+  filter(wavenumber == 1580) %>%
+  select(genotype:technical, peak.pos, peak.height)
+
+rmn_data_corrected <- left_join(rmn_data_corrected, lig_peak) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(
+    AUC = MESS::auc(wavenumber, intensity),
+    scaled = corrected.intensity / AUC,
+    scaled_max = corrected.intensity / peak.height,
+    lig_peak = peak.height / AUC
+  )
+
+rmn_data_pre <- rmn_data_corrected %>%
+  group_by(genotype, cell.type, replicate, wavenumber) %>%
+  summarise(
+    samples.pre = length(corrected.intensity),
+    mean.scaled = mean(scaled, na.rm = TRUE),
+    mean.scaled_max = mean(scaled_max, na.rm = TRUE),
+    mean.lig_peak = mean(lig_peak, na.rm = TRUE)
+  )
+
+rmn_data_avg <- rmn_data_pre %>%
+  group_by(genotype, cell.type, wavenumber) %>%
+  summarise(
+    plants = paste("plants: ", length(mean.scaled)),
+    bundles = ifelse(length(mean.scaled) > 1,
+      paste("cells/plant: ", min(samples.pre), "—", max(samples.pre), sep = ""),
+      paste("cells/plant: ", min(samples.pre))
+    ),
+    mean.scaled = mean(mean.scaled, na.rm = TRUE),
+    mean.scaled_max = mean(mean.scaled_max, na.rm = TRUE),
+    mean.lig_peak = mean(mean.lig_peak, na.rm = TRUE)
+  )
+```
+
+```{r genotype ridgeline, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+rmn_data_ridge_full <- rmn_data_avg %>%
+  ungroup() %>%
+  mutate(
+    genotype = ordered(genotype, levels = c(
+      "Col-0",
+      "4cl1",
+      "4cl2",
+      "4cl1x4cl2",
+      "ccoaomt1",
+      "fah1",
+      "omt1",
+      "ccr1-3",
+      "cad4",
+      "cad5",
+      "cad4xcad5"
+    )),
+    cell.type = recode(cell.type,
+      "IF" = "Interfascicular fibres",
+      "VB" = "Vascular bundle"
+    )
+  )
+
+spectra <- ggplot(data = rmn_data_ridge_full) +
+  geom_ridgeline(aes(
+    x = wavenumber,
+    y = genotype,
+    height = rollmean(mean.scaled, 3, na.pad = TRUE),
+    fill = genotype,
+    group = genotype
+  ),
+  alpha = 0.75,
+  size = 0.2,
+  # colour = NA,
+  scale = 200,
+  min_height = -500
+  ) +
+  scale_fill_viridis_d() +
+  scale_x_reverse() +
+  scale_y_discrete(labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )) +
+  labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
+  theme_leo() +
+  theme(
+    panel.spacing = unit(1, "mm"),
+    axis.title.y = element_blank()
+  ) +
+  facet_wrap(~cell.type, ncol = 2)
+
+rmn_data_auc <- rmn_data_corrected %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  summarise(AUC = mean(AUC))
+
+mutant_ridge_letters <- letter_groups(rmn_data_auc,
+                                      AUC,
+                                      genotype,
+                                      "tukey",
+                                      cell.type,
+                                      print_position = "above")
+
+auc_boxes <- ggplot(data = rmn_data_auc, aes(x = genotype, y = AUC)) +
+  geom_quasirandom(aes(fill = genotype),
+    shape = 21,
+    alpha = 0.75
+  ) +
+  geom_boxplot(
+    alpha = 0.5,
+    outlier.alpha = 0
+  ) +
+  scale_fill_viridis_d() +
+  theme_leo() +
+  labs(y = "AUC per 490 µm²") +
+  scale_y_continuous(breaks = NULL) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  geom_text(data = mutant_ridge_letters,
+            aes(label = groups),
+    family = "Helvetica",
+    size = 6 / (14 / 5)) +
+  coord_flip() +
+  facet_wrap(~cell.type)
+
+# pdf("raman_genotypes.pdf", width = 10 , height = 10)
+plot_grid(spectra,
+  auc_boxes,
+  rel_widths = c(0.8, 0.2),
+  ncol = 2,
+  align = "h"
+)
+# dev.off()
+```
+
+I added the stats for within cell type comparisons. I think it is unwise -- even impossible? -- to compare the AUC between cell types, because of the different cell sizes.
+
+\newpage
+
+### Figure 4
+
+Multivariate analysis of the mutant spectra. This will in the end be a compound figure of: 
+
+**A** PCA of spectra. Instead of partitioning the PCA analyses into different subfigures, I took all spectra we have and simply coloured them by cell type. As far as I understand, our goal here is simply to show the variation (a) between lignified and unlignified tissues and (b) within our mutant cell types. Both of these are illustrated nicely here I think. I also tested the robustness of the model: the outliers (epidermis and pith) alter neither axis direction nor contributions.
+
+**B** Heatmap of pairwise OPLSDAs
+
+**C** OPLSDA summary plot
+
+```{r iterative opls-da, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+# rmn_data_spread <- rmn_data_corrected %>%
+#   pivot_wider(
+#     id_cols = c(genotype, cell.type, replicate, technical),
+#     names_from = wavenumber,
+#     values_from = scaled
+#   ) %>%
+#   unite("genocell", genotype, cell.type, remove = F) %>%
+#   ungroup()
+# 
+# celltype_list <- list(
+#   "IF",
+#   "VB"
+# )
+# geno_list <- list(
+#   "Col-0",
+#   "4cl1",
+#   "4cl2",
+#   "4cl1x4cl2",
+#   "ccoaomt1",
+#   "fah1",
+#   "omt1",
+#   "ccr1-3",
+#   "cad4",
+#   "cad5",
+#   "cad4xcad5"
+# )
+# 
+# genocell_list <- expand.grid(geno_list, celltype_list) %>%
+#   unite(genocell_1, Var1, Var2) %>%
+#   mutate(genocell_2 = genocell_1) %>%
+#   expand(genocell_1, genocell_2) %>%
+#   filter(genocell_1 != genocell_2) %>%
+#   unite("comb", genocell_1, genocell_2, sep = ",") %>%
+#   lst() %>%
+#   unlist()
+# 
+# ### compute and save OPLS-DA iterations ####
+# oplsda_iter <- function(x, y) {
+#   splinter <- str_split(y, fixed(","))
+#   genocell_1 <- splinter[[1]][[1]]
+#   genocell_2 <- splinter[[1]][[2]]
+#   rmn_mat <- data.matrix(x %>%
+#     filter(genocell %in% c(genocell_1, genocell_2)) %>%
+#     select(-genotype, -cell.type, -replicate, -technical, -genocell))
+#   rwnms <- x %>%
+#     filter(genocell %in% c(genocell_1, genocell_2)) %>%
+#     select(genotype, cell.type, replicate, technical) %>%
+#     unite("ID", genotype, cell.type, replicate, technical, sep = "_")
+#   rownames(rmn_mat) <- rwnms$ID
+#   rmn_meta <- as.matrix(x %>%
+#     filter(genocell %in% c(genocell_1, genocell_2)) %>%
+#     select(genotype, cell.type, replicate, technical, genocell))
+# 
+#   genocell <- rmn_meta[, "genocell"]
+#   if (nrow(rmn_mat) < 7) {
+#     rmn_oplsda <- opls(rmn_mat, genocell, predI = 1, orthoI = 1, crossvalI = nrow(rmn_mat))
+#   } else {
+#     rmn_oplsda <- opls(rmn_mat, genocell, predI = 1, orthoI = 1, crossvalI = 7)
+#   }
+# 
+#   loading <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
+#     rename(loading = p1) %>%
+#     mutate(wavenumber = as.numeric(wavenumber))
+#   return(loading)
+# }
+# 
+# loadings <- vector("list", 1)
+# for (i in genocell_list) {
+#   loadings[[i]] <- oplsda_iter(rmn_data_spread, i)
+# }
+# 
+# loadings_df <- loadings[-1] %>%
+#   enframe() %>%
+#   unnest() %>%
+#   spread(key = wavenumber, value = loading) %>%
+#   separate(name, sep = ",", into = c("genocell_1", "genocell_2")) %>%
+#   separate(genocell_1, sep = "_", into = c("genotype_1", "cell.type_1")) %>%
+#   separate(genocell_2, sep = "_", into = c("genotype_2", "cell.type_2"))
+# 
+# loadings_df <- loadings_df[!duplicated(t(apply(loadings_df[c("genotype_1", "cell.type_1", "genotype_2", "cell.type_2")], 1, sort))), ]
+# 
+# write_csv(loadings_df, "loadings_df.csv")
+# 
+# loadings_df_mean <- loadings_df %>%
+#   pivot_longer(cols = -c(cell.type_1, cell.type_2, genotype_1, genotype_2),
+#                names_to = "wavenumber",
+#                values_to = "loading", ) %>%
+#   mutate(wavenumber = as.numeric(wavenumber)) %>%
+#   group_by(wavenumber) %>%
+#   summarise(loading.mean = mean(abs(loading)))
+# 
+# write_csv(loadings_df_mean, "loadings_df_mean.csv")
+# 
+# rmn_data_loading <- rmn_data_corrected %>%
+#   group_by(wavenumber) %>%
+#   summarise(
+#     mean.scaled = mean(scaled, na.rm = TRUE)
+#   ) %>%
+#   left_join(loadings_df_mean)
+# 
+# write_csv(rmn_data_loading, "rmn_data_loading.csv")
+
+#### read in OPLS-DA iterations if previously computed ####
+loadings_df <- read_csv("loadings_df.csv")
+rmn_data_loading <- read_csv("rmn_data_loading.csv")
+loadings_df_mean <- read_csv("loadings_df_mean.csv")
+```
+
+#### Figure 4 A -- PCA and PCA loading supplement
+
+```{r PCA, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+rmn_data_all_wide <- rmn_data_all %>%
+  complete(wavenumber = 400:1700) %>%
+  mutate(genotype = "Col-0",
+         technical = "1") %>%
+  filter(cell.type %in% c("Epidermis", "Pith")) %>%
+  group_by(cell.type, replicate, replicate, technical, wavenumber) %>%
+  mutate(scaled = corrected.intensity / total_auc) 
+
+rmn_data_all_wide <- na.locf(rmn_data_all_wide) 
+
+pca_data <- rmn_data_corrected %>%
+  filter(wavenumber > 402) %>%
+  full_join(rmn_data_all_wide) %>%
+  ungroup() %>%
+  # filter(cell.type %in% c("IF", "VB")) %>%
+  select(genotype:wavenumber, scaled) %>%
+  unite("ID", genotype, cell.type, replicate, technical) %>%
+  drop_na() %>%
+  pivot_wider(
+    names_from = wavenumber,
+    values_from = scaled
+  ) %>%
+  select_if(~ !any(is.na(.))) %>%
+  ungroup()
+  
+#### make PCA ####
+pca_result <- prcomp(pca_data[, -1], center = TRUE, scale. = TRUE)
+rownames(pca_result$x) <- pca_data$ID
+
+gg_pca <- as_tibble(pca_result$x, rownames = NA) %>%
+  rownames_to_column(var = "ID") %>%
+  separate(ID, sep = "_", into = c("genotype", "cell.type", "replicate", "technical"))
+
+pca <- ggplot(gg_pca, aes(x = PC1, y = PC2, colour = cell.type)) + 
+  geom_hline(yintercept = 0, linetype = 1) +
+  geom_vline(xintercept = 0, linetype = 1) +
+  # stat_ellipse(geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
+  stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2) +
+  geom_point(size = 4,
+             stroke = 0.5,
+             alpha = 0.75) +
+  labs(x = "PC 1",
+       y = "PC 2") +
+  scale_colour_few() +
+  theme_minimal() +
+  annotate("segment",
+           x = 0,
+           xend = -20,
+           y = 0,
+           yend = 20,
+           arrow = arrow(length = unit(10, "pt"))) +
+  annotate("segment",
+           x = 0,
+           xend = 23,
+           y = 0,
+           yend = -10,
+           arrow = arrow(length = unit(10, "pt"))) +
+  annotate("text",
+           x = -20,
+           y = 20,
+           label = "Cellulose",
+           family = "Helvetica",
+           size = 8 / (14 / 5),
+           hjust = 1,
+           vjust = 0) +
+  annotate("text",
+           x = 23,
+           y = -10,
+           label = "Lignin",
+           family = "Helvetica",
+           size = 8 / (14 / 5),
+           hjust = 0,
+           vjust = 1) +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank()
+    # text = element_text(family = "Helvetica"),
+    # axis.ticks = element_line(size = 0.5, lineend = "square", color = "black"),
+    # axis.title = element_text(size = 20),
+    # axis.text.y = element_text(size = 20, colour = "black"),
+    # axis.text.x = element_text(
+    #   size = 20,
+    #   colour = "black",
+    #   angle = 0,
+    #   vjust = 0.5,
+    #   hjust = 0.5
+    # ),
+    # panel.grid.major = element_blank(),
+    # panel.grid.minor = element_blank(),
+    # panel.border = element_rect(fill = NA, color = "black", size = 0.5),
+    # legend.position = "bottom",
+    # legend.title = element_blank(),
+    # legend.text = element_text(size = 15, colour = "black"),
+    # plot.margin = unit(c(2,2,2,2), "mm")
+  ) 
+
+# pdf("PCA_raman.pdf")
+pca
+# dev.off()
+
+top <- plot_grid(
+  fviz_pca_var(pca_result,
+               select.var = list(contrib = 10),
+               repel = TRUE,
+               title = "",
+               font.family = "Helvetica",
+               col.var = "black",
+               alpha.var = 0.4,
+               ggtheme = theme_few()
+  ),
+  fviz_eig(pca_result, 
+           main = "", 
+           font.family = "Helvetica",
+           ggtheme = theme_few(),
+           barcolor = NA,
+           barfill = "#1d91c0"
+           
+  ),
+  labels = c("A", "B"),
+  label_fontfamily = "Helvetica",
+  rel_widths = c(2,1),
+  nrow = 1,
+  align = "h"
+)
+
+mid <- plot_grid(
+  fviz_contrib(pca_result, 
+               choice = "var", 
+               axes = 1, 
+               top = 12, 
+               title = "", 
+               font.family = "Helvetica",
+               ggtheme = theme_few(),
+               color = NA,
+               fill = "#1d91c0"
+  ),
+  fviz_contrib(pca_result, 
+               choice = "var", 
+               axes = 2, 
+               top = 12, 
+               title = "", 
+               font.family = "Helvetica",
+               ggtheme = theme_few(),
+               color = NA,
+               fill = "#1d91c0"
+  ),
+  labels = c("C", "D"),
+  label_fontfamily = "Helvetica"
+)
+
+# pdf("supp_poplar.pdf")
+plot_grid(
+top,
+mid,
+nrow = 2,
+rel_heights = c(2,1)
+)
+# dev.off()
+
+```
+
+\newpage
+
+#### Figure 4 B -- OPLS-DA clustering
+
+```{r opls-da clustering, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+rmn_data_load_cluster <- loadings_df %>%
+  mutate_if(is.numeric, abs) %>%
+  unite("ID", c(genotype_1:cell.type_2)) %>%
+  column_to_rownames("ID") %>%
+  as.matrix()
+
+labvec <- c(rep(NA, 697))
+labvec[c(10,340, 687)] <- c(300, 700, 1700)
+
+heatmap.2(rmn_data_load_cluster,
+          Colv = F,
+          trace = "none",
+          col = "viridis",
+          labRow = NA,
+          labCol = labvec,
+          srtCol = 0,
+          adjCol = c(0.5, 0),
+          key.title = NA)
+
+```
+
+#### Table 1 and figure 4 C -- OPLS-DA average
+
+Candidate peaks based on figs. 1 and 4 and the literature.
+
+```{r peak loading mean, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+options(knitr.kable.NA = "")
+
+selected_peaks <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/raman_peak_detection_2.csv")
+
+kable(selected_peaks,
+  "latex",
+  caption = "Peaks crucial for mutant distinction.",
+  col.names = c(
+    "Peak",
+    "Wavenumber",
+    "Closest reported peak",
+    "Assigned bond",
+    "Assigned polymer",
+    "Assigned structure",
+    "Reference"
+  ),
+  booktabs = T,
+  escape = F,
+  linesep = ""
+) %>%
+  kable_styling(latex_options = c("striped", "hold_position", "scale_down"))
+
+rmn_data_loading <- rmn_data_corrected %>%
+  group_by(wavenumber) %>%
+  summarise(
+    mean.scaled = mean(scaled, na.rm = TRUE)
+  ) %>%
+  left_join(loadings_df_mean) %>%
+  left_join(select(selected_peaks, peak, wavenumber) %>%
+    mutate(wavenumber = as.numeric(wavenumber)))
+
+ggplot(data = rmn_data_loading, aes(
+  y = rollmean(mean.scaled, 3, na.pad = TRUE),
+  x = wavenumber
+)) +
+  geom_ridgeline_gradient(aes(
+    height = 0.01 - rollmean(mean.scaled, 3, na.pad = TRUE),
+    fill = loading.mean
+  ),
+  colour = "white"
+  ) +
+  geom_line(size = 0.25) +
+  scale_x_reverse() +
+  labs(
+    x = expression(paste("Wavenumber [cm"^-1, "]")),
+    y = "Normalised intensity"
+  ) +
+  scale_fill_viridis_c() +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    legend.key.width = unit(4, "mm"),
+    panel.border = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank()
+  ) +
+  guides(fill = guide_legend(title = " Mean absolute\n loading")) +
+  geom_label_repel(aes(label = peak),
+    nudge_y = 0.0025,
+    family = "Helvetica",
+    segment.colour = "black",
+    size = 6 / (14 / 5),
+    label.size = 0,
+    label.r = 0,
+    alpha = 0.95,
+    segment.alpha = 1,
+    segment.size = 0.25
+  )
+```
+
+\newpage
+
+### Figure 5
+
+Here are two correlation matrices. 5 **A** is between the raman peak heights scaled to total AUC and the Py-GC/MS peaks scaled to total pyrolysate. 5 **B** is between the raman peak heights scaled to the lignin band at \textasciitilde1600 cm\textsuperscript{-1} and the Py-GC/MS peaks scaled to total lignin pyrolysates.
+
+#### Figure 5 A -- polymer amount
+
+The value at \textbf{1601 cm\textsuperscript{-1}} represents the respective peak value between 1580--1620 cm\textsuperscript{-1}.
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, fig.asp = 1.5, fig.cap = "Correlation analysis between a weighed average of AUC-scaled Raman measurements and bulk lignin amount determined by pyrolysis-GC/MS."}
+
+py <- read.csv("/home/leonard/Documents/Uni/PhD/Raman/pyrolysis_2018_amount.csv")
+
+py$`G-OH` <- ifelse(
+  py$variable == "mean",
+  py$X17 + py$X19 + py$X23,
+  sqrt(
+    py$X17^2 + py$X19^2 + py$X23^2
+  )
+)
+py$H <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:9]), sqrt(rowSums(py[, 7:9]^
+    2)))
+py$G <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:19]), sqrt(rowSums(py[, 7:19]^
+    2)))
+py$S <-
+  ifelse(py$variable == "mean", rowSums(py[, 21:28]), sqrt(rowSums(py[, 21:28]^
+    2)))
+py$Coniferaldehyde <- py$X22
+py$Vanillin <- py$X18
+py$Sinapaldehyde <- py$X32
+py$Syringaldehyde <- py$X29
+py$Aldehydes <-
+  ifelse(
+    py$variable == "mean",
+    py$Coniferaldehyde + py$Sinapaldehyde + py$Vanillin + py$Syringaldehyde,
+    sqrt(
+      py$Coniferaldehyde^2 + py$Sinapaldehyde^2 + py$Vanillin^2 + py$Syringaldehyde^2
+    )
+  )
+py$Lignin <-
+  ifelse(py$variable == "mean", rowSums(py[, 3:28]), sqrt(rowSums(py[, 3:28]^
+    2)))
+
+py <- py %>%
+  select(genotype, variable, Lignin, G, `G-OH`, S, Aldehydes) %>%
+  pivot_longer(-c(genotype, variable), names_to = "unit", values_to = "value") 
+
+py_rmn <- rmn_data_avg %>%
+  filter(wavenumber %in% c(1099, 1276, 1334, 1601, 1603, 1625, 1664)) %>%
+  group_by(genotype, wavenumber) %>%
+  mutate(mean.scaled = case_when(wavenumber == 1601 ~ mean.lig_peak,
+                                 TRUE ~ mean.scaled)) %>%
+  summarise(total.mean.scaled = mean(mean.scaled))
+  
+
+# pdf("rmn_covariance.pdf")
+# corrplot(cor(spread(py_rmn, key = wavenumber, value = total.mean.scaled)[,-1]))
+# dev.off()
+
+py_rmn_corr <- left_join(py, py_rmn)
+
+py_rmn_corr_mat <- py_rmn_corr %>%
+  filter(variable == "mean") %>%
+  group_by(unit, wavenumber) %>%
+  nest() %>%
+  mutate(
+    cor = map(data, ~ cor.test(.x$value, .x$total.mean.scaled)),
+    tidied = map(cor, tidy)
+  ) %>%
+  unnest(tidied)
+
+py_rmn_corr <- py_rmn_corr %>%
+  filter(variable == "mean") %>%
+  ungroup() %>%
+  mutate(value = scale_range(value),
+         total.mean.scaled = scale_range(total.mean.scaled))
+
+# pdf("pyro_correlations.pdf", height = 20, width = 20)
+ggplot(data = py_rmn_corr) +
+  geom_rect(
+    data = py_rmn_corr_mat,
+    xmin = -Inf,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf,
+    aes(fill = if_else(p.value < 0.05, estimate, NULL))
+  ) +
+  geom_point(aes(
+    x = value,
+    y = total.mean.scaled
+  ),
+  size = 2,
+  alpha = 0.5
+  ) +
+  scale_fill_distiller(palette = "RdYlBu", na.value = "white", name = "Pearson's r (if p < 0.05)") +
+  labs(
+    x = expression(paste("Pyrolysate * total pyrolysate"^"-1")),
+    y = "Raman average (IF:VB 1:1)"
+  ) +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    axis.ticks = element_blank(),
+    axis.text = element_blank(),
+    strip.text = element_text(size = 6)
+  ) +
+  facet_grid(unit ~ wavenumber) +
+  coord_fixed()
+# dev.off()
+```
+
+\newpage
+
+#### Figure 5 B -- lignin composition
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, fig.asp = 1.5, fig.cap = "Correlation analysis between a weighed average of Raman measurements and bulk lignin composition analysis by pyrolysis-GC/MS."}
+
+py <- read.csv("/home/leonard/Documents/Uni/PhD/Raman/pyrolysis_2018_amount.csv")
+
+py$Lignin <-
+  ifelse(py$variable == "mean", rowSums(py[, 3:28]), sqrt(rowSums(py[, 3:28]^
+    2)))
+py <- py %>%
+  group_by(genotype) %>%
+  mutate_if(is.numeric, funs(. / Lignin))
+py$`G-OH` <- ifelse(
+  py$variable == "mean",
+  py$X17 + py$X19 + py$X23,
+  sqrt(
+    py$X17^2 + py$X19^2 + py$X23^2
+  )
+)
+py$H <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:9]), sqrt(rowSums(py[, 7:9]^
+    2)))
+py$G <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:19]), sqrt(rowSums(py[, 7:19]^
+    2)))
+py$S <-
+  ifelse(py$variable == "mean", rowSums(py[, 21:28]), sqrt(rowSums(py[, 21:28]^
+    2)))
+py$`G-CHO` <- py$X22
+py$Vanillin <- py$X18
+py$Sinapaldehyde <- py$X32
+py$Syringaldehyde <- py$X29
+py$Aldehydes <-
+  ifelse(
+    py$variable == "mean",
+    py$`G-CHO` + py$Sinapaldehyde + py$Vanillin + py$Syringaldehyde,
+    sqrt(
+      py$`G-CHO`^2 + py$Sinapaldehyde^2 + py$Vanillin^2 + py$Syringaldehyde^2
+    )
+  )
+
+py <- py %>%
+  select(-c(3:28, Lignin, Sinapaldehyde, Syringaldehyde, Vanillin)) %>%
+  pivot_longer(-c(genotype, variable), names_to = "unit", values_to = "value") 
+
+py_rmn <- rmn_data_avg %>%
+  filter(wavenumber %in% selected_peaks$wavenumber) %>%
+  group_by(genotype, wavenumber) %>%
+  summarise(total.mean.scaled = mean(mean.scaled_max))
+
+# pdf("rmn_covariance.pdf")
+# corrplot(cor(spread(py_rmn, key = wavenumber, value = total.mean.scaled)[,-1]))
+# dev.off()
+
+py_rmn_corr <- left_join(py, py_rmn)
+
+py_rmn_corr_mat <- py_rmn_corr %>%
+  filter(variable == "mean") %>%
+  group_by(unit, wavenumber) %>%
+  nest() %>%
+  mutate(
+    cor = map(data, ~ cor.test(.x$value, .x$total.mean.scaled)),
+    tidied = map(cor, tidy)
+  ) %>%
+  unnest(tidied)
+
+# pdf("pyro_correlations.pdf", height = 20, width = 20)
+ggplot(data = filter(py_rmn_corr, variable == "mean")) +
+  geom_rect(
+    data = py_rmn_corr_mat,
+    xmin = -Inf,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf,
+    aes(fill = if_else(p.value < 0.05, estimate, NULL))
+  ) +
+  geom_point(aes(
+    x = value,
+    y = total.mean.scaled
+  ),
+  size = 0.5
+  ) +
+  scale_fill_distiller(palette = "RdYlBu", na.value = "white", name = "Pearson's r (if p < 0.05)") +
+  labs(
+    x = expression(paste("Pyrolysate * total lignin"^"-1")),
+    y = "Raman average (IF:VB 1:1)"
+  ) +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    axis.ticks = element_blank(),
+    axis.text = element_blank(),
+    strip.text = element_text(size = 6)
+  ) +
+  facet_grid(unit ~ wavenumber) +
+  coord_fixed()
+# dev.off()
+```
+
+\newpage
+
+### Table 2 -- Raman bands validated by Py-GC/MS
+
+```{r validated peaks, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+options(knitr.kable.NA = "")
+
+validated_peaks <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/validated_peaks.csv")
+
+kable(validated_peaks,
+  "latex",
+  caption = "Raman bands validated by Py--GC/MS.",
+  col.names = c(
+    "Peak",
+    "Wavenumber",
+    "Assigned polymer",
+    "Assigned structure",
+    "Pearson's r",
+    "P-value",
+    "Pearson's r",
+    "P-value"
+  ),
+  booktabs = TRUE,
+  linesep = ""
+) %>%
+  kable_styling(latex_options = c("hold_position", "striped")) %>%
+  add_header_above(c(" " = 4, "Relative to AUC" = 2, "Relative to lignin" = 2))
+```
+
+\newpage
+
+### Figure 5 -- mutational impact on different tissues
+
+The values in these last figures are transformed quite a bit. Starting with the baseline corrected absolute peak height (abs.), I divided abs. at each wavelength by the respective spectra's peak height of the lignin peak (abs.~lignin~). I then z-scaled each wavenumber across genotypes and cell types to bring everything on the same scale. After that, the z-score of the WT is subtracted from the Z-score of each mutant and cell type for each wavenumber of interest. In short: 
+
+Normalised Intensity $x =  \frac{abs.}{abs._{Lignin}}$
+
+z-scaled intensity $x_{z} = x - \frac{\overline{x}}{\sigma_{x}}$
+
+Plotted difference from the WT $\Delta x_{z} = x_{z} - x_{z}^{WT}$
+
+#### Relative to total lignin
+
+```{r change correlations composition, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+
+rmn_data_corr <- rmn_data_corrected %>%
+  filter(wavenumber %in% c(validated_peaks$wavenumber, 381, 1099) &
+    wavenumber != 1603) %>%
+  ungroup() %>%
+  group_by(wavenumber) %>%
+  mutate(scaled.z = scale_z(scaled_max)) %>%
+  select(genotype, cell.type, replicate, technical, scaled.z)
+
+# %>%
+#   ungroup() %>%
+#   group_by(genotype, cell.type, wavenumber) %>%
+#   summarise(mean.scaled = mean(scaled.z))
+
+rmn_data_corr <- rmn_data_corr %>%
+  left_join(filter(rmn_data_corr, genotype == "Col-0") %>%
+    ungroup() %>%
+    select(wavenumber, cell.type, scaled.z, replicate, technical) %>%
+    group_by(wavenumber, cell.type) %>%
+    summarise(scaled.WT = mean(scaled.z))) %>%
+  mutate(diff = scaled.z - scaled.WT) %>%
+  select(-scaled.z, -scaled.WT) %>%
+  spread(key = cell.type, value = diff)
+
+rmn_data_corr <- left_join(rmn_data_corr, (validated_peaks %>%
+  rbind(list(13, 381, "Cellulose", "Cellulose", 0, 0, 0, 0)) %>%
+  rbind(list(10, 1099, "Cellulose", "Cellulose", 0, 0, 0, 0))))
+
+# pdf("IF_MX_corr.pdf")
+ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
+  annotate("rect",
+           xmin = -Inf,
+           xmax = 0,
+           ymin = -Inf,
+           ymax = 0,
+           fill = "grey95") +
+  annotate("rect",
+           xmin = Inf,
+           xmax = 0,
+           ymin = Inf,
+           ymax = 0,
+           fill = "grey95") +
+  geom_abline(slope = 1, intercept = 0, linetype = 2) +
+  geom_point(aes(
+    x = VB,
+    y = IF,
+    fill = assigned.structure,
+    colour = assigned.structure
+  ),
+  size = 1,
+  shape = 21,
+  alpha = 0.5
+  ) +
+  stat_ellipse(aes(
+    x = VB,
+    y = IF,
+    fill = assigned.structure,
+  ), geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
+  stat_ellipse(aes(
+    x = VB,
+    y = IF,
+    colour = assigned.structure,
+  ), alpha = 0.85, type = "t", level = 0.4) +
+  # geom_label_repel(data = filter(rmn_data_corr,
+  #                                IF - PMX > 1 | IF -PMX < -1),
+  #                  aes(x = PMX,
+  #                      y = IF,
+  #                      label = wavenumber),
+  #   nudge_y = 0.25,
+  #   family = "Helvetica",
+  #   segment.colour = "red",
+  #   size = 2.5
+  # ) +
+  theme_leo() +
+  theme(
+    axis.title = element_text(),
+    axis.text.x = element_text(angle = 0),
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.title = element_blank()
+  ) +
+  labs(
+    x = "Vascular bundle",
+    y = "Interfascicular fibres"
+  ) +
+  scale_fill_manual(values = c("Aldehydes" = "#5DA5DA", 
+                               "Cellulose" = "#FAA43A",
+                               "G-OH" = "#60BD68",
+                               "S-units" = "#F17CB0",
+                               "Total lignin" = "#B2912F")) +
+  scale_colour_manual(values = c("Aldehydes" = "#5DA5DA", 
+                               "Cellulose" = "#FAA43A",
+                               "G-OH" = "#60BD68",
+                               "S-units" = "#F17CB0",
+                               "Total lignin" = "#B2912F")) +
+  scale_x_continuous(limits = c(-4, 4)) +
+  scale_y_continuous(limits = c(-4, 4)) +
+  coord_fixed() +
+  facet_wrap(~genotype, ncol = 5)
+# dev.off()
+```
+
+\newpage
+
+#### Relative to AUC
+
+```{r change correlations absolute, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+
+rmn_data_corr <- rmn_data_corrected %>%
+  filter(wavenumber %in% c(validated_peaks$wavenumber, 381, 1099) &
+    wavenumber != 1625) %>%
+  ungroup() %>%
+  group_by(wavenumber) %>%
+  mutate(scaled.z = scale_z(scaled)) %>%
+  select(genotype, cell.type, replicate, technical, scaled.z)
+
+# %>%
+#   ungroup() %>%
+#   group_by(genotype, cell.type, wavenumber) %>%
+#   summarise(mean.scaled = mean(scaled.z))
+
+rmn_data_corr <- rmn_data_corr %>%
+  left_join(filter(rmn_data_corr, genotype == "Col-0") %>%
+    ungroup() %>%
+    select(wavenumber, cell.type, scaled.z, replicate, technical) %>%
+    group_by(wavenumber, cell.type) %>%
+    summarise(scaled.WT = mean(scaled.z))) %>%
+  mutate(diff = scaled.z - scaled.WT) %>%
+  select(-scaled.z, -scaled.WT) %>%
+  spread(key = cell.type, value = diff)
+
+rmn_data_corr <- left_join(rmn_data_corr, (validated_peaks %>%
+  rbind(list(13, 381, "Cellulose", "Cellulose", 0, 0, 0, 0)) %>%
+  rbind(list(10, 1099, "Cellulose", "Cellulose", 0, 0, 0, 0))))
+
+# pdf("IF_MX_corr.pdf")
+ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
+  annotate("rect",
+           xmin = -Inf,
+           xmax = 0,
+           ymin = -Inf,
+           ymax = 0,
+           fill = "grey95") +
+  annotate("rect",
+           xmin = Inf,
+           xmax = 0,
+           ymin = Inf,
+           ymax = 0,
+           fill = "grey95") +
+  geom_abline(slope = 1, intercept = 0, linetype = 2) +
+  geom_point(aes(
+    x = VB,
+    y = IF,
+    fill = assigned.structure,
+    colour = assigned.structure
+  ),
+  size = 1,
+  shape = 21,
+  alpha = 0.5
+  ) +
+  stat_ellipse(aes(
+    x = VB,
+    y = IF,
+    fill = assigned.structure,
+  ), geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
+  stat_ellipse(aes(
+    x = VB,
+    y = IF,
+    colour = assigned.structure,
+  ), alpha = 0.85, type = "t", level = 0.4) +
+  # geom_label_repel(data = filter(rmn_data_corr,
+  #                                IF - PMX > 1 | IF -PMX < -1),
+  #                  aes(x = PMX,
+  #                      y = IF,
+  #                      label = wavenumber),
+  #   nudge_y = 0.25,
+  #   family = "Helvetica",
+  #   segment.colour = "red",
+  #   size = 2.5
+  # ) +
+  theme_leo() +
+  theme(
+    axis.title = element_text(),
+    axis.text.x = element_text(angle = 0),
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.title = element_blank()
+  ) +
+  labs(
+    x = "Vascular bundle",
+    y = "Interfascicular fibres"
+  ) +
+  scale_fill_manual(values = c("Aldehydes" = "#5DA5DA", 
+                               "Cellulose" = "#FAA43A",
+                               "G-OH" = "#60BD68",
+                               "S-units" = "#F17CB0",
+                               "Total lignin" = "#B2912F")) +
+  scale_colour_manual(values = c("Aldehydes" = "#5DA5DA", 
+                               "Cellulose" = "#FAA43A",
+                               "G-OH" = "#60BD68",
+                               "S-units" = "#F17CB0",
+                               "Total lignin" = "#B2912F")) +
+  scale_x_continuous(limits = c(-4, 4)) +
+  scale_y_continuous(limits = c(-4, 4)) +
+  coord_fixed() +
+  facet_wrap(~genotype, ncol = 5)
+# dev.off()
+```
+
+Main take-aways:
+
+* *4cl1x4cl2* shows compensation via increased absolute cellulose deposition in both fibres and bundles, *ccr1-3* does not
+* *4cl1x4cl2* has increased relative S-lingin specifically in the bundle
+* S-units are decreased both absolute and relative to lignin in *fah1* and *omt1*, more in the fibres than in the bundles
+* In turn, *fah1* is specifically increased in G-OH, while *omt1* is **not**
+* Both are increased in total lignin, but I believe that is due to the lack of a strong \textasciitilde1600 cm\textsuperscript{-1} signal from S-units, *i. e.* the lower the S/G ratio, the stronger the "total lignin" signal. This is substantiated by the fact that *fah1* does not show increased G-OH relative to "total lignin".
+* We cannot use the aldehyde signal to quantify total aldehydes (see table 2), so we connot make comparisons to the Wiesner test. Instead, Raman (aldehydes/lignin) and Wiesner (total coniferaldehyde) complement each other nicely in this respect.
+
+
