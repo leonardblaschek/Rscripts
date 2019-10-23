@@ -270,23 +270,28 @@ rmn_data_corrected <- rmn_data_corrected %>%
     )
   )
 
-lig_peak <- rmn_data_corrected %>%
-  group_by(genotype, cell.type, replicate, technical) %>%
-  filter(wavenumber %in% c(1580:1620)) %>%
-  mutate(
-    peak.pos = wavenumber[which.max(corrected.intensity)],
-    peak.height = corrected.intensity[which(wavenumber == peak.pos)]
-  ) %>%
-  filter(wavenumber == 1580) %>%
-  select(genotype:technical, peak.pos, peak.height)
+# lig_peak <- rmn_data_corrected %>%
+#   group_by(genotype, cell.type, replicate, technical) %>%
+#   filter(wavenumber %in% c(1580:1620)) %>%
+#   mutate(
+#     peak.pos = wavenumber[which.max(corrected.intensity)],
+#     peak.height = corrected.intensity[which(wavenumber == peak.pos)]
+#   ) %>%
+#   filter(wavenumber == 1580) %>%
+#   select(genotype:technical, peak.pos, peak.height)
 
-rmn_data_corrected <- left_join(rmn_data_corrected, lig_peak) %>%
+rmn_data_corrected <- rmn_data_corrected %>%
+  # left_join(lig_peak) %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   mutate(
     AUC = MESS::auc(wavenumber, intensity),
     scaled = corrected.intensity / AUC,
-    scaled_max = corrected.intensity / peak.height,
-    lig_peak = peak.height / AUC
+    scaled_max = case_when(wavenumber == 1625 ~ corrected.intensity / corrected.intensity[wavenumber == 1603],
+                           TRUE ~ corrected.intensity / (
+                             corrected.intensity[wavenumber == 1603] + 4.6 * corrected.intensity[wavenumber == 1334]
+                             )
+                           ),
+    # lig_peak = peak.height / AUC
   )
 
 rmn_data_pre <- rmn_data_corrected %>%
@@ -295,7 +300,7 @@ rmn_data_pre <- rmn_data_corrected %>%
     samples.pre = length(corrected.intensity),
     mean.scaled = mean(scaled, na.rm = TRUE),
     mean.scaled_max = mean(scaled_max, na.rm = TRUE),
-    mean.lig_peak = mean(lig_peak, na.rm = TRUE)
+    # mean.lig_peak = mean(lig_peak, na.rm = TRUE)
   )
 
 rmn_data_avg <- rmn_data_pre %>%
@@ -308,19 +313,22 @@ rmn_data_avg <- rmn_data_pre %>%
     ),
     mean.scaled = mean(mean.scaled, na.rm = TRUE),
     mean.scaled_max = mean(mean.scaled_max, na.rm = TRUE),
-    mean.lig_peak = mean(mean.lig_peak, na.rm = TRUE)
+    # mean.lig_peak = mean(mean.lig_peak, na.rm = TRUE)
   )
 
 #### average Raman data, calculate integrals and detect peaks ####
 rmn_sum <- rmn_data_corrected %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   summarise(
-    "total_lignin" = mean(lig_peak),
-    "G_rel" = scaled_max[wavenumber == 1664],
-    "G_tot" = scaled[wavenumber == 1664],
-    "CHO_rel" = scaled_max[wavenumber == 1625],
-    "S_rel" = scaled_max[wavenumber == 1340],
-    "S_tot" = scaled[wavenumber == 1340],
+    "total_lignin" = scaled[wavenumber == 1603] + 4.6 * scaled[wavenumber == 1334],
+    "GOH_rel" = scaled_max[wavenumber == 1664],
+    "GOH_tot" = scaled[wavenumber == 1664],
+    "G_tot" = scaled[wavenumber == 1603],
+    "G_rel" = scaled_max[wavenumber == 1603],
+    "S.G" = scaled[wavenumber == 1334] / scaled[wavenumber == 1603],
+    "GCHO.G" = scaled_max[wavenumber == 1625],
+    "S_rel" = scaled_max[wavenumber == 1334],
+    "S_tot" = scaled[wavenumber == 1334],
     "cellulose" = scaled[wavenumber == 1099] + scaled[wavenumber == 381],
     "AUC" = mean(AUC)
   )
@@ -335,7 +343,7 @@ rmn_sum_long <- rmn_sum %>%
     Cellulose = cellulose,
     `G-lignin` = G_rel,
     `S-lignin` = S_rel,
-    `CHO-lignin` = CHO_rel
+    `CHO-lignin` = GCHO.G
   ) %>%
   left_join(rmn_irx %>%
     filter(genotype == "Col-0") %>%
@@ -387,7 +395,9 @@ irx.summary.letters <- letter_groups(filter(rmn_sum_long, variable %in% c(
     cell.type,
     "tukey",
     variable,
-    print_position = 0)
+    print_position = "below",
+    print_adjust = 1
+    )
 
 irx.summary <- ggplot(
   data =
@@ -417,7 +427,7 @@ irx.summary <- ggplot(
   #           hjust = 1,
   #           family = "Helvetica") +
   # scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow", limits = c(-10, 10)) +
-  geom_label(data = irx.summary.letters,
+  geom_text(data = irx.summary.letters,
             aes(label = groups),
             size = 6 / (14 / 5),
             family = "Helvetica") +
@@ -447,7 +457,8 @@ lig.summary.letters <- letter_groups(filter(rmn_sum_long, variable %in% c(
     cell.type,
     "tukey",
     variable,
-    # print_position = "above"
+    print_position = "below",
+    print_adjust = 1
     )
 
 lig.summary <- ggplot(
@@ -475,7 +486,7 @@ lig.summary <- ggplot(
   #           hjust = 1,
   #           family = "Helvetica") +
   # scale_fill_distiller(palette = "RdBu", name = "Z-score by\nrow", limits = c(-10, 10)) +
-  geom_label(data = lig.summary.letters,
+  geom_text(data = lig.summary.letters,
             aes(label = groups),
             size = 6 / (14 / 5),
             family = "Helvetica") +
@@ -612,12 +623,13 @@ irx_str <- irx_str %>%
       "cad4",
       "cad5",
       "cad4xcad5"
-    )))
+    )),
+    cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX")))
 
 # pdf("sf_ROIs.pdf")
 ggplot() +
   geom_sf(data = irx_str,
-          aes(colour = area),
+          aes(colour = circularity),
           # colour = "black",
           fill = NA,
           lwd = 0.1) +
@@ -628,7 +640,8 @@ ggplot() +
         axis.text = element_blank(),
         axis.title = element_blank(),
         axis.ticks = element_blank()) +
-  scale_colour_viridis_c() +
+  # scale_colour_distiller(palette = "YlGnBu", direction = -1) +
+  scale_colour_viridis_c(direction = 1) +
   facet_grid(cell.type ~ genotype)
 # dev.off()
 
@@ -844,16 +857,14 @@ TM.multigroup <- function(x) {
       # n_f +
       mean.OD1 +
       Perim. +
+      # S.G +
       G_rel +
+      # G_tot +
+      # GOH_rel +
+      # GOH_tot +
       S_rel +
-      # X1383.1603 +
-      # X1131.1603 +
-      # X1457.1340 +
-      CHO_rel +
-      cellulose +
-      # total_auc +
-      # lig.peak.pos +
-      # X1603.1099,
+      # S_tot +
+      GCHO.G +
       total_lignin,
     data = filter(drop_na(raman.irx), cell.type == x)
     ),
@@ -946,5 +957,4 @@ negative (weakening) factors:
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 summary(TM.multigroup("SMX"), .progressBar = FALSE)
 plot(TM.multigroup("SMX"))
-```
 ```

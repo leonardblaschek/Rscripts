@@ -14,6 +14,9 @@ library(ggthemes)
 library(nlme)
 library(piecewiseSEM)
 library(cowplot)
+library(ggridges)
+library(ggbeeswarm)
+library(tukeygrps)
 
 font_add(
   "Helvetica",
@@ -108,6 +111,13 @@ pop_irx$Distance <-
       d
     }
   )
+
+pop_irx <- pop_irx %>%
+  mutate(bin = cut(
+    Distance,
+    breaks = c(-Inf, 50, 100, Inf),
+    labels = c("I", "II", "III")
+  ))
 
 summary(lm(Circ. ~ n_v +
   n_f +
@@ -300,5 +310,79 @@ pdf("irx_neighbours_pop.pdf", width = 7, height = 5)
     geom_density_ridges(aes(x = n_v, y = type, fill = type), alpha = 0.5) +
     theme_leo() 
   dev.off()
+```
+
+```{r}
+pop_irx_overview <- pop_irx %>%
+  ungroup() %>%
+  select(
+    genotype,
+    bin,
+    n_v,
+    Area,
+    Circ.,
+    Distance,
+    convexity) %>%
+  pivot_longer(n_v:convexity, names_to = "variable", values_to = "value") %>%
+  drop_na()
+
+pop_letters <- letter_groups(pop_irx_overview, value, genotype, "tukey", bin, variable, print_position = "above")
+
+pop_overview <- ggplot(pop_irx_overview,
+                       aes(x = genotype,
+                           y = value)) +
+  geom_quasirandom() +
+  geom_boxplot(alpha = 0.75,
+               outlier.alpha = 0) +
+  facet_grid(variable ~ bin, scales = "free_y") +
+  theme_leo() +
+  geom_label(data = pop_letters,
+            aes(label = groups),
+            label.size = 0,
+            alpha = 0.5)
+
+pop_neighbourhood <- ggplot(pop_irx, aes(x = n_v, y = convexity)) +
+  geom_point(aes(fill = genotype),
+    shape = 21,
+    size = 2,
+    alpha = 0.75,
+    stroke = 0.2
+  ) +
+  scale_fill_few() +
+  scale_y_continuous(limits = c(0.7,1)) +
+  labs(x = "Fraction of perimeter adjacent to other vessels") +
+  theme_leo() +
+  geom_smooth(
+    method = "loess",
+    span = 1,
+    colour = "black",
+    linetype = 2
+  ) +
+  facet_wrap(~ bin, ncol = 1)
+
+pop_distance <- ggplot(pop_irx, aes(x = Distance, y = convexity)) +
+  geom_point(aes(fill = genotype),
+    shape = 21,
+    size = 2,
+    alpha = 0.75,
+    stroke = 0.2
+  ) +
+  scale_fill_few() +
+  scale_y_continuous(limits = c(0.7,1)) +
+  labs(x = "Distance from the cambium [µm]") +
+  theme_leo() +
+  geom_smooth(
+    method = "loess",
+    span = 1,
+    colour = "black",
+    linetype = 2
+  ) +
+  facet_wrap(~ bin, ncol = 1)
+
+pdf("pop_overview.pdf")
+pop_overview
+pop_neighbourhood
+pop_distance
+dev.off()
 ```
 
