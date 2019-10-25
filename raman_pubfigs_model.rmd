@@ -1692,9 +1692,7 @@ Here are two correlation matrices. 5 **A** is between the raman peak heights sca
 
 #### Figure Sx -- correlations between peaks
 
-This shows the strong correlation between the cellulose peaks and the "H"-peak. I believe this is the only point we can 
-
-```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, fig.asp = 1.5}
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
 
 py_rmn <- rmn_data_avg %>%
   filter(wavenumber %in% selected_peaks$wavenumber) %>%
@@ -1713,7 +1711,7 @@ chart.Correlation(py_rmn, histogram=TRUE, pch=21)
 #### Figure 5 A -- polymer amount
 
 
-```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, fig.asp = 1.5}
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
 
 py <- read.csv("/home/leonard/Documents/Uni/PhD/Raman/pyrolysis_2018_amount.csv")
 
@@ -1831,7 +1829,7 @@ ggplot(data = py_rmn_corr) +
 # dev.off()
 ```
 
-```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, fig.asp = 1.5}
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
 
 py <- read.csv("/home/leonard/Documents/Uni/PhD/Raman/pyrolysis_2018_amount.csv")
 
@@ -1953,7 +1951,7 @@ ggplot(data = py_rmn_corr) +
 
 **NOTE:** 1625 is relative to total G-units.
 
-```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, fig.asp = 1.5}
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
 
 py <- read.csv("/home/leonard/Documents/Uni/PhD/Raman/pyrolysis_2018_amount.csv")
 
