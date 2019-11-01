@@ -58,13 +58,14 @@ print.HSD.hue <- function(x) {
 #### import measurements ####
 phlog.monol <-
   read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
-           skip = 2)
+           skip = 2) %>%
+  mutate(genotype = recode(genotype, "col-0" = "WT"))
 
 phlog.monol$genotype <-
   ordered(
     phlog.monol$genotype,
     levels = c(
-      "col-0",
+      "WT",
       "4cl1",
       "4cl2",
       "4cl1x2",
@@ -263,7 +264,7 @@ h_plot <- ggplot() +
   ) +
   scale_x_discrete(
     labels = c(
-      "Col-0",
+      "WT",
       expression(italic("4cl1")),
       expression(italic("4cl2")),
       expression(paste(italic("4cl1"), "x", italic("4cl2"))),
@@ -300,7 +301,7 @@ h_plot <- ggplot() +
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
     panel.spacing.x = unit(1.5, "mm"),
     strip.text = element_text(
-      vjust = 0.1,
+      # vjust = 0.1,
       hjust = 0,
       face = "italic",
       size = 6
@@ -394,7 +395,7 @@ h_g <- ggplot() +
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
     panel.spacing.x = unit(1.5, "mm"),
     strip.text = element_text(
-      vjust = 0.1,
+      # vjust = 0.1,
       hjust = 0,
       face = "italic",
       size = 6
@@ -511,7 +512,7 @@ a <- ggplot() +
   ) +
   scale_x_discrete(
     labels = c(
-      "Col-0",
+      "WT",
       expression(italic("4cl1")),
       expression(italic("4cl2")),
       expression(paste(italic("4cl1"), "x", italic("4cl2"))),
@@ -548,7 +549,7 @@ a <- ggplot() +
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
     panel.spacing.x = unit(1.5, "mm"),
     strip.text = element_text(
-      vjust = 0.1,
+      # vjust = 0.1,
       hjust = 0,
       face = "italic",
       size = 6
@@ -637,7 +638,7 @@ a_g <- ggplot() +
     panel.border = element_rect(fill = NA, color = "black", size = 0.25),
     panel.spacing.x = unit(1.5, "mm"),
     strip.text = element_text(
-      vjust = 0.1,
+      # vjust = 1,
       hjust = 0,
       face = "italic",
       size = 6
@@ -659,7 +660,7 @@ pdf("OD_monol_rev_g.pdf", height = 4, width = 5)
 a_g
 dev.off()
 
-### import images ####
+## import images ####
 # WTstained <-
 #   rasterGrob(
 #     readPNG(
@@ -833,7 +834,7 @@ stained_pre <- plot_grid(
 stained <- plot_grid(
   WTstained,
   stained_pre,
-  labels = c("Col-0", ""),
+  labels = c("WT", ""),
   label_fontfamily = "Helvetica",
   label_fontface = 1,
   scale = 0.99,
@@ -886,7 +887,7 @@ unstained_pre <- plot_grid(
 unstained <- plot_grid(
   WTunstained,
   unstained_pre,
-  labels = c("Col-0", ""),
+  labels = c("WT", ""),
   label_fontfamily = "Helvetica",
   label_fontface = 1,
   scale = 0.99,
@@ -921,7 +922,7 @@ plot_grid(
 )
 dev.off()
 
-pdf("genotype_grid_supplemental.pdf", height = 6, width = 6.7)
+pdf("genotype_grid_supplemental.pdf", height = 6.5, width = 6.7)
 plot_grid(
   a_g,
   h_plot,

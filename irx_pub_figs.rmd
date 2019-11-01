@@ -464,16 +464,17 @@ irx.summary <- ggplot(
 ) +
   geom_quasirandom(
     aes(fill = cell.type,
-        colour = cell.type),
+        # colour = cell.type
+        ),
     shape = 21,
     # width = 0.1,
     # colour = NA,
     alpha = 0.75,
     size = 2,
-    stroke = 0.1
+    stroke = 0.25
   ) +
   geom_boxplot(
-    fill = rgb(1, 1, 1, 0.5),
+    fill = rgb(1, 1, 1, 0.75),
     outlier.alpha = 0,
     lwd = 0.25,
     fatten = 1,
@@ -485,8 +486,10 @@ irx.summary <- ggplot(
     size = 6 / (14 / 5),
     family = "Helvetica"
   ) +
-  scale_fill_manual(values = pal_ostwald[c(3, 4, 6)]) +
-  scale_colour_manual(values = pal_ostwald[c(3, 4, 6)]) +
+  # scale_fill_grey(start = 1, end = 0) +
+  scale_fill_brewer(palette = "Greys") +
+  # scale_fill_manual(values = pal_ostwald[c(3, 4, 6)]) +
+  # scale_colour_manual(values = pal_ostwald[c(3, 4, 6)]) +
   scale_y_continuous(
     limits = my_limits,
     # expand = expand_scale(mult = c(0.2, 0.05)),
@@ -532,16 +535,17 @@ lig.summary <- ggplot(
 ) +
   geom_quasirandom(
     aes(fill = cell.type,
-        colour = cell.type),
+        # colour = cell.type
+        ),
     shape = 21,
     # width = 0.1,
     # colour = NA,
     alpha = 0.75,
     size = 2,
-    stroke = 0.1
+    stroke = 0.25
   ) +
   geom_boxplot(
-    fill = rgb(1, 1, 1, 0.5),
+    fill = rgb(1, 1, 1, 0.75),
     outlier.alpha = 0,
     lwd = 0.25,
     fatten = 1,
@@ -553,8 +557,10 @@ lig.summary <- ggplot(
     size = 6 / (14 / 5),
     family = "Helvetica"
   ) +
-  scale_fill_manual(values = pal_ostwald[c(3, 4, 6)]) +
-  scale_colour_manual(values = pal_ostwald[c(3, 4, 6)]) +
+  # scale_fill_grey(start = 1, end = 0) +
+  scale_fill_brewer(palette = "Greys") +
+  # scale_fill_manual(values = pal_ostwald[c(3, 4, 6)]) +
+  # scale_colour_manual(values = pal_ostwald[c(3, 4, 6)]) +
   scale_y_continuous(
     limits = c(0, NA),
     # expand = expand_scale(mult = c(0.2, 0.05)),
@@ -583,7 +589,7 @@ plot_grid(irx.summary,
   lig.summary,
   labels = c("A", "B"),
   nrow = 1,
-  rel_widths = c(1, 0.4)
+  rel_widths = c(1, 0.45)
 )
 ```
 
@@ -1100,4 +1106,28 @@ negative (weakening) factors:
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 summary(TM.multigroup("SMX"), .progressBar = FALSE)
 plot(TM.multigroup("SMX"))
+```
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+raman.irx.scaled <- raman.irx %>%
+  select(-c(1:4)) %>%
+  as.matrix() %>%
+  scale() %>%
+  as_tibble() %>%
+  cbind(raman.irx[, c(1:4)])
+
+model <- lme4::lmer(convexity ~
+    n_v +
+      mean.OD1 +
+      Perim. +
+      S_rel +
+      GCHO.G +
+      total_lignin +
+      (1 + Perim.|cell.type),
+    data = raman.irx.scaled)
+
+summary(model)
+
+MuMIn::r.squaredGLMM(model)
+reghelper::beta(model)
 ```

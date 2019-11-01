@@ -104,8 +104,9 @@ cml_data <- read_csv(
     ROI = str_replace(ROI, "ROI_", ""),
     absorbance = na_if(absorbance, 0) / 255,
     replicate = as.character(replicate),
+    genotype = recode(genotype, "Col-0" = "WT"),
     genotype = ordered(genotype, levels = c(
-      "Col-0",
+      "WT",
       "4cl1",
       "4cl2",
       "4cl1x4cl2",
@@ -136,7 +137,7 @@ cml_data_avg <- cml_data %>%
 cml_data <- cml_data %>%
   left_join(cml_data_avg, by = "genotype") %>%
   mutate(
-    a.median.wt = filter(cml_data_avg, genotype == "Col-0")$a.median,
+    a.median.wt = filter(cml_data_avg, genotype == "WT")$a.median,
     absorbance.rescaled = absorbance.scaled * (a.median / a.median.wt)
   )
 
@@ -181,7 +182,7 @@ ggplot(
   ) +
   scale_x_discrete(
     labels = c(
-      "Col-0",
+      "WT",
       expression(italic("4cl1")),
       expression(italic("4cl2")),
       expression(paste(italic("4cl1"), "x", italic("4cl2"))),
@@ -268,7 +269,7 @@ ggplot(
   ) +
   scale_x_discrete(
     labels = c(
-      "Col-0",
+      "WT",
       expression(italic("4cl1")),
       expression(italic("4cl2")),
       expression(paste(italic("4cl1"), "x", italic("4cl2"))),
@@ -650,7 +651,7 @@ layer_boxes <- ggplot(
   labs(y = "Absorbance") +
   scale_x_discrete(
     labels = c(
-      "Col-0",
+      "WT",
       expression(italic("4cl1")),
       expression(italic("4cl2")),
       expression(paste(italic("4cl1"), "x", italic("4cl2"))),
@@ -676,7 +677,7 @@ layer_boxes <- ggplot(
       size = 0.25,
       lineend = "square"
     ),
-    axis.title.y = element_text(size = 6),
+    axis.title.y = element_text(size = 6, margin = margin(t = 0, r = 0, b = 0, l = 0)),
     axis.text.y = element_text(size = 6),
     strip.text = element_text(
       vjust = 0.1,
@@ -808,7 +809,7 @@ prfl <- function(x, y, z) {
 }
 
 pdf("profiles.pdf", height = 0.75, width = 1.94)
-prfl("Col-0", "12", "1")
+prfl("WT", "12", "1")
 prfl("cad4xcad5", "9", "1")
 prfl("4cl1x4cl2", "8", "1")
 dev.off()
@@ -874,7 +875,7 @@ layer_boxes_avg <- ggplot(
   labs(y = "Absorbance") +
   scale_x_discrete(
     labels = c(
-      "Col-0",
+      "WT",
       expression(italic("4cl1")),
       expression(italic("4cl2")),
       expression(paste(italic("4cl1"), "x", italic("4cl2"))),

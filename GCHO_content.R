@@ -63,7 +63,7 @@ ggplot(py, aes(x = genotype, y = mean, ymin = mean - st_dev, ymax = mean + st_de
            colour = NA) +
   scale_x_discrete(
     labels = c(
-      "Col-0",
+      expression(paste(italic("A. thaliana"), " WT")),
       expression(italic("4cl1")),
       expression(italic("4cl2")),
       expression(paste(italic("4cl1"), "x", italic("4cl2"))),
@@ -74,8 +74,8 @@ ggplot(py, aes(x = genotype, y = mean, ymin = mean - st_dev, ymax = mean + st_de
       expression(italic("cad4")),
       expression(italic("cad5")),
       expression(paste(italic("cad4"), "x", italic("cad5"))),
-      "Hybrid aspen",
-      "Norway spruce"
+      expression(paste(italic("Aspen"), " WT")),
+      expression(paste(italic("Spruce"), " WT"))
     )
   ) +
   scale_fill_manual(values = c( "At" = "#04253a", "Pt" = "#836616", "Pa" = "#833216")) +
