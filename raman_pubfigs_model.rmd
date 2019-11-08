@@ -6,7 +6,6 @@ output:
   pdf_document:
     latex_engine: lualatex
     fig_caption: yes
-    fig_height: 6
     includes:
       in_header: rmd_temp.tex
 sansfont: IBM Plex Sans
@@ -43,7 +42,7 @@ library(tukeygrps)
 library(cowplot)
 library(ggbeeswarm)
 
-#### import CooperHewitt ####
+#import Helvetica
 font_add(
   "Helvetica",
   regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
@@ -53,7 +52,7 @@ font_add(
 )
 showtext_auto()
 
-#### generating plot theme ####
+#generating plot theme
 theme_leo <- function(base_size = 6,
                       base_family = "Helvetica") {
   theme_minimal(
@@ -118,7 +117,6 @@ twocol <- 18 / 2.54
 onecol <- 9 / 2.54
 text6 <- 6 / (14 / 5)
 ```
-
 
 ### Figure 1 -- spectra of the monomers and DHPs
 
@@ -383,6 +381,8 @@ plot_grid(spectra_plot,
 )
 dev.off()
 ```
+
+![testcaption](Raman_figure1.pdf)
 
 \newpage
 
@@ -1022,7 +1022,7 @@ kable(selected_peaks,
   col.names = c(
     "Peak",
     "Wavenumber",
-    "Closest reported peak",
+    "Lit. peak",
     "Assigned bond",
     "Assigned polymer",
     "Assigned structure",
@@ -1191,7 +1191,7 @@ heatmap <- ggplot(loadings_long) +
         legend.direction = "horizontal",
         legend.key.width = unit(4, "mm"),
         legend.key.height = unit(4, "mm"),
-    # plot.margin = unit(c(2, 2, 0, 2), "mm")
+    plot.margin = unit(c(2, 2, 0, 2), "mm")
     )
 
 # pdf("heatmap.pdf")
@@ -1201,7 +1201,7 @@ heatmap <- ggplot(loadings_long) +
 
 #### Figure 4 B -- OPLS-DA average
 
-```{r peak loading mean, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
 
 rmn_data_loading <- rmn_data_corrected %>%
   group_by(wavenumber) %>%
@@ -1231,6 +1231,18 @@ loadings_avg <- ggplot(data = rmn_data_loading, aes(
   ) +
   scale_fill_viridis_c() +
   theme_leo() +
+  guides(fill = guide_legend(title = "Mean absolute\nloading")) +
+  geom_label_repel(aes(label = peak),
+    nudge_y = 0.0025,
+    family = "Helvetica",
+    segment.colour = "black",
+    size = text6,
+    label.size = 0.2,
+    label.r = 0,
+    alpha = 0.95,
+    segment.alpha = 1,
+    segment.size = 0.2
+  ) +
   theme(
     legend.position = c(0.8375, 0.935),
     legend.background = element_rect(fill = rgb(1, 1, 1, 0.75),
@@ -1243,19 +1255,7 @@ loadings_avg <- ggplot(data = rmn_data_loading, aes(
     axis.ticks.y = element_blank(),
     # axis.title.x = element_blank(),
     # plot.margin = unit(c(0, 2, 2, 2), "mm")
-  ) +
-  guides(fill = guide_legend(title = "Mean absolute\nloading")) +
-  geom_label_repel(aes(label = peak),
-    nudge_y = 0.0025,
-    family = "Helvetica",
-    segment.colour = "black",
-    size = text6,
-    label.size = 0.2,
-    label.r = 0,
-    alpha = 0.95,
-    segment.alpha = 1,
-    segment.size = 0.2
-  )
+  ) 
 
 # pdf("heatmap_avg.pdf")
 # loadings_avg
@@ -1278,7 +1278,7 @@ dev.off()
 
 ### Figure 5 -- correlation analysis with pyrolysis/GC-MS
 
-#### Figure 5 A -- polymer amount
+#### Figure 5 A -- normalised to AUC
 
 ```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
 
@@ -1366,7 +1366,7 @@ total_corr <- ggplot(data = py_rmn_corr) +
     x = value,
     y = total.mean.scaled
   ),
-  size = 1,
+  size = 0.5,
   alpha = 0.75,
   shape = 16
   ) +
@@ -1395,6 +1395,8 @@ pdf("pyro_correlations.pdf", height = 6, width = onecol)
 total_corr
 dev.off()
 ```
+
+#### Figure 5 B -- ratios
 
 ```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
 
@@ -1435,7 +1437,8 @@ py$Lignin <-
   ifelse(py$variable == "mean", rowSums(py[, 3:28]), sqrt(rowSums(py[, 3:28]^
     2)))
 py$`GCHO/G` <- py$GCHO / py$G
-py$`GCHO/GOH` <- py$GCHO / py$GOH
+py$`GOH/G` <- py$GOH / py$G
+py$`GCHO/GOH` <- py$Coniferaldehyde / py$GOH
 py$`GCHO/lig` <- py$GCHO / py$Lignin
 py$`Aldehydes/lig` <- py$Aldehydes / py$Lignin
 py$`S/G` <- py$S / py$G
@@ -1457,6 +1460,7 @@ py_rmn <- rmn_data_corrected %>%
   transmute(
     "1603/4.6 + 1334" = (`1603` / 4.6) + `1334`,
     "1334/1603" = `1334` / `1603`,
+    "1664/1603" = `1664` / `1603`,
     "1334/1276" = `1334` / `1276`,
     "1625/1603" = `1625` / `1603`,
     "1625/1664" = `1625` / `1664`,
@@ -1536,10 +1540,11 @@ ggplot(data = filter(py_rmn_corr, unit == x & wavenumber == y & genotype != z),
              alpha = 0.75,
              shape = 16) +
   geom_smooth(method = "lm",
-                fullrange = T,
-                size = 0.2,
+                fullrange = F,
+                size = 0.4,
                 se = F,
-                linetype = 2) +
+                linetype = 2,
+              colour = "white") +
   scale_colour_manual(values = c("yes" = "white", no = "black")) +
   scale_fill_distiller(
     palette = "RdYlBu",
@@ -1556,7 +1561,8 @@ ggplot(data = filter(py_rmn_corr, unit == x & wavenumber == y & genotype != z),
            size = text6,
            family = "Helvetica",
            hjust = 0,
-           vjust = 0) +
+           vjust = 0,
+              colour = "white") +
   theme_leo() +
   theme(axis.text.y = element_text(angle = 90,
                                    hjust = 0.5),
@@ -1569,8 +1575,8 @@ ggplot(data = filter(py_rmn_corr, unit == x & wavenumber == y & genotype != z),
 
 py_plot_lig <- py_plot("Lignin", "1603/4.6 + 1334") +
   labs(x = expression(paste("Total lignin * total pyrolysate"^-1)),
-    y = expression(paste("Composite lignin band [AU * AUC"^-1,"]"))) +
-  scale_y_continuous(breaks = c(0, 0.0015, 0.003, 0.0045))
+    y = expression(paste("CLB [AU * AUC"^-1,"]"))) +
+  scale_y_continuous(breaks = c(0, 0.0025, 0.005))
 
 py_plot_sg <- py_plot("S/G", "1334/1276") +
   labs(x = expression(paste("Total S-lignin * total G-lignin"^-1)),
@@ -1579,15 +1585,40 @@ py_plot_sg <- py_plot("S/G", "1334/1276") +
 
 py_plot_cho <- py_plot("GCHO/lig", "1625/lig", "cad4xcad5") +
   labs(x = expression(paste("Total G-aldehydes * total lignin"^-1)),
-    y = expression(paste("1625 cm"^-1,"/ composite lignin band"))) +
-  scale_y_continuous(breaks = c(0, 0.5, 1))
+    y = expression(paste("1625 cm"^-1,"/ CLB"))) +
+  scale_y_continuous(breaks = c(0, 0.5, 1)) +
+  geom_point(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig" & genotype == "cad4xcad5"),
+             aes(colour = WT),
+             size = 1,
+             alpha = 0.75,
+             shape = 16) +
+  geom_errorbar(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig" & genotype == "cad4xcad5"),
+                aes(ymin = total.mean.scaled - total.sd.scaled,
+                    ymax = total.mean.scaled + total.sd.scaled),
+                size = 0.2,
+                width = 0,
+                alpha = 0.75) +
+  geom_smooth(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig"),
+              method = "lm",
+              colour = "black",
+                fullrange = T,
+                size = 0.4,
+                se = F,
+                linetype = 2) 
+
+py_plot_goh <- py_plot("GOH/G", "1664/1603") +
+  labs(x = expression(paste("G-OH * total G-lignin"^-1)),
+    y = expression(paste("1664 cm"^-1,"/ 1603 cm"^-1))) 
+  # scale_y_continuous(breaks = c(0, 1, 2, 3))
+
 
 pdf("Raman_figure5.pdf", width = onecol, height = 6)
 right <- plot_grid(py_plot_lig, 
                     py_plot_sg, 
                     py_plot_cho,
+                   py_plot_goh,
   ncol = 1,
-  labels = c("", "C", "D"),
+  labels = c("", "C", "D", "E"),
   label_size = 10,
   label_fontfamily = "Helvetica"
   # label_x = -0.02,
@@ -1787,7 +1818,7 @@ rel_auc <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
 ```{r change correlations composition, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
 
 rmn_data_corr <- rmn_data_corrected %>%
-  filter(wavenumber %in% c(1664, 1625, 1334)) %>%
+  filter(wavenumber %in% c(1664, 1603, 1334)) %>%
   # group_by(genotype, cell.type, replicate, technical) %>%
   mutate(wavenumber = as.character(wavenumber)) %>%
   ungroup() %>%
@@ -1908,13 +1939,13 @@ rel_lig <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
     y = "Change in the interfascicular fibres"
   ) +
   scale_fill_manual(values = c(
-    "G-CHO" = "#5DA5DA",
+    "G-units" = "#5DA5DA",
     "G-OH" = "#60BD68",
     "S-units" = "#F17CB0"
   ),
   name = "Relative\namount") +
   scale_colour_manual(values = c(
-    "G-CHO" = "#5DA5DA",
+    "G-units" = "#5DA5DA",
     "G-OH" = "#60BD68",
     "S-units" = "#F17CB0"
   ),
@@ -1947,127 +1978,6 @@ dev.off()
 ### Figure 7 -- Schematic representation of cell wall metabolic flow 
 ### Supplemental figures
 
-#### Band contributions to total AUC
-
-
-```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
-rmn_auc_contrib <- rmn_data_corrected %>%
-  group_by(genotype, cell.type, replicate, technical) %>%
-  select(genotype, cell.type, replicate, technical, AUC:AUC_381) %>%
-  distinct() %>%
-  pivot_longer(cols = c(AUC_1603:AUC_381), names_to = "band", values_to = "proportion") %>%
-  group_by(genotype, cell.type, replicate, technical, band) %>%
-  mutate(proportion = proportion / AUC)
-
-ggplot(rmn_auc_contrib, aes(x = band, y = proportion)) +
-  geom_quasirandom(aes(fill = band),
-    shape = 21,
-    alpha = 0.5,
-    stroke = 0.1
-  ) +
-  geom_boxplot(
-    alpha = 0.75,
-    outlier.alpha = 0
-  ) +
-  scale_fill_viridis_d() +
-  # geom_label(aes(label = paste(mean(proportion)))) +
-  theme_leo()
-```
-
-#### Including the 381 peak
-
-```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
-
-rmn_auc <- rmn_data_corrected %>%
-  group_by(genotype, cell.type, replicate, technical) %>%
-  filter(wavenumber %in% c(1603, 1334, 1099, 381)) %>%
-  select(genotype:technical, wavenumber, corrected.intensity, AUC) %>%
-  pivot_wider(
-    id_cols = c(genotype, cell.type, replicate, technical, AUC),
-    names_from = wavenumber,
-    values_from = corrected.intensity,
-    names_prefix = "X"
-  )
-
-rmn_auc_lm <- broom::glance(lm(AUC ~ X1603 + X1334 + X1099 + X381, data = rmn_auc))
-rmn_auc_lm_full <- broom::tidy(lm(AUC ~ X1603 + X1334 + X1099 + X381, data = rmn_auc))
-
-ggplot(rmn_auc, aes(
-  x = AUC,
-  y = X1603 + X1334 + X1099 + X381
-)) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(
-    method = "lm",
-    se = FALSE
-  ) +
-  geom_text(
-    x = 750000,
-    y = 45000,
-    aes(label = paste("R² =", round(adj.r.squared, digits = 2))),
-    hjust = 1,
-    data = rmn_auc_lm
-  ) +
-  theme_leo()
-```
-
-#### Without the 381 peak
-
-```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
-
-rmn_auc <- rmn_data_corrected %>%
-  group_by(genotype, cell.type, replicate, technical) %>%
-  filter(wavenumber %in% c(1603, 1334, 1099, 381)) %>%
-  select(genotype:technical, wavenumber, corrected.intensity, AUC) %>%
-  pivot_wider(
-    id_cols = c(genotype, cell.type, replicate, technical, AUC),
-    names_from = wavenumber,
-    values_from = corrected.intensity,
-    names_prefix = "X"
-  )
-
-rmn_auc_lm <- broom::glance(lm(AUC ~ X1603 + X1334 + X1099, data = rmn_auc))
-rmn_auc_lm_full <- broom::tidy(lm(AUC ~ X1603 + X1334 + X1099, data = rmn_auc))
-
-ggplot(rmn_auc, aes(
-  x = AUC,
-  y = X1603 + X1334 + X1099
-)) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(
-    method = "lm",
-    se = FALSE
-  ) +
-  geom_text(
-    x = 750000,
-    y = 40000,
-    aes(label = paste("R² =", round(adj.r.squared, digits = 2))),
-    hjust = 1,
-    data = rmn_auc_lm
-  ) +
-  theme_leo()
-```
-
-#### Figure Sx -- correlations between peaks
-
-```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
-
-py_rmn <- rmn_data_avg %>%
-  filter(wavenumber %in% selected_peaks$wavenumber) %>%
-  group_by(genotype, wavenumber) %>%
-  pivot_wider(
-    id_cols = c(genotype, cell.type), names_from = wavenumber,
-    values_from = mean.scaled
-  ) %>%
-  mutate("1603/4.6 + 1334" = (`1603` / 4.6) + `1334`) %>%
-  group_by(genotype) %>%
-  summarise_if(is.numeric, mean) %>%
-  select(-genotype) %>%
-  as.matrix()
-
-chart.Correlation(py_rmn, histogram = TRUE, pch = 21)
-```
-
 #### PCA supplement
 
 ```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
@@ -2090,8 +2000,9 @@ top <- plot_grid(
   ),
   labels = c("A", "B"),
   label_fontfamily = "Helvetica",
-  rel_widths = c(2, 1),
-  nrow = 1,
+  label_size = 10,
+  # rel_widths = c(2, 1),
+  nrow = 2,
   align = "h"
 )
 
@@ -2124,28 +2035,453 @@ pca_load <- as_tibble(pca_result$rotation, rownames = "wavenumber") %>%
   mutate(wavenumber = as.numeric(wavenumber))
 bottom_PC1 <- ggplot(pca_load, aes(x = wavenumber, y = PC1)) +
   geom_line() +
-  labs(title = "PC1") +
+  labs(title = "PC1",
+       x = expression(paste("Wavenumber [cm"^-1, "]"))) +
   # geom_text_repel(data = filter(pca_load, PC1 > 0.07),
   #           aes(label = wavenumber)) +
   # geom_text_repel(data = filter(pca_load, PC1 < - 0.065),
   #           aes(label = wavenumber)) +
-  theme_leo()
+  theme_leo() +
+  theme(axis.title.y = element_blank())
 
 bottom_PC2 <- ggplot(pca_load, aes(x = wavenumber, y = PC2)) +
   geom_line() +
-  labs(title = "PC2") +
+  labs(title = "PC2",
+       x = expression(paste("Wavenumber [cm"^-1, "]"))) +
   # geom_text_repel(data = filter(pca_load, PC2 > 0.08),
   #           aes(label = wavenumber)) +
   # geom_text_repel(data = filter(pca_load, PC2 < - 0.07),
   #           aes(label = wavenumber)) +
-  theme_leo()
+  theme_leo()+
+  theme(axis.title.y = element_blank())
 
+pdf("Raman_figureS1.pdf", width = twocol, height = 3)
 plot_grid(
-  top,
-  mid,
+  fviz_pca_var(pca_result,
+    select.var = list(name = c(1300, 1119, 1664, 1603, 1276, 1099, 1334)),
+    repel = TRUE,
+    title = "",
+    font.family = "Helvetica",
+    col.var = "black",
+    alpha.var = 0.4,
+    ggtheme = theme_leo()
+  ),
+  plot_grid(
   bottom_PC1,
   bottom_PC2,
-  nrow = 4,
-  rel_heights = c(2, 1, 1, 1)
+  nrow = 2,
+  labels = c("B", "C"),
+  label_fontfamily = "Helvetica",
+  label_size = 10),
+  nrow = 1,
+  labels = c("A", ""),
+  rel_widths = c(0.75,1),
+  label_fontfamily = "Helvetica",
+  label_size = 10
 )
+dev.off()
+```
+
+#### Band contributions to total AUC
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+rmn_auc_contrib <- rmn_data_corrected %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  select(genotype, cell.type, replicate, technical, AUC:AUC_381) %>%
+  distinct() %>%
+  pivot_longer(cols = c(AUC_1603:AUC_381), names_to = "band", values_to = "proportion") %>%
+  group_by(genotype, cell.type, replicate, technical, band) %>%
+  mutate(proportion = proportion / AUC)
+
+pdf("Raman_figureS2.pdf", width = onecol, height = 3)
+ggplot(rmn_auc_contrib, aes(x = band, y = proportion)) +
+  geom_quasirandom(aes(fill = band),
+    shape = 21,
+    alpha = 0.5,
+    stroke = 0.1
+  ) +
+  geom_boxplot(
+    alpha = 0.5,
+    outlier.alpha = 0,
+    fatten = 1,
+    size = 0.4
+  ) +
+  labs(x = expression(paste("Raman band [cm"^-1, "]")),
+       y = expression(paste("Band AUC * total AUC"^-1))) +
+  scale_fill_viridis_d() +
+  scale_x_discrete(labels = c("1099", "1334", "1603", "381")) +
+  # geom_label(aes(label = paste(mean(proportion)))) +
+  theme_leo()
+dev.off()
+```
+
+#### Including the 381 peak
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+
+rmn_auc <- rmn_data_corrected %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  filter(wavenumber %in% c(1603, 1334, 1099, 381)) %>%
+  select(genotype:technical, wavenumber, corrected.intensity, AUC) %>%
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical, AUC),
+    names_from = wavenumber,
+    values_from = corrected.intensity,
+    names_prefix = "X"
+  )
+
+rmn_auc_lm <- broom::glance(lm(AUC ~ X1603 + X1334 + X1099 + X381, data = rmn_auc))
+rmn_auc_lm_full <- broom::tidy(lm(AUC ~ X1603 + X1334 + X1099 + X381, data = rmn_auc))
+
+pdf("Raman_figureS3.pdf", width = onecol, height = onecol)
+ggplot(rmn_auc, aes(
+  x = AUC,
+  y = X1603 + X1334 + X1099 + X381
+)) +
+  geom_point(alpha = 0.5,
+             shape = 16,
+             size = 0.75) +
+  geom_smooth(
+    method = "lm",
+    se = FALSE,
+    size = 0.4
+  ) +
+  labs(y = expression(paste("Added peak intensities at 1603, 1334, 1099 and 381 cm"^-1)),
+       x = "Total AUC") +
+  geom_text(
+    x = 750000,
+    y = 45000,
+    aes(label = paste("R² =", round(adj.r.squared, digits = 2))),
+    hjust = 1,
+    size = text6,
+    data = rmn_auc_lm
+  ) +
+  theme_leo()
+dev.off()
+```
+
+#### Spurious correlations
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+
+theme_leo <- function(base_size = 6,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.2,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        size = 6,
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        size = 6,
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.title = element_text(
+        colour = "black",
+        size = 6
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.2),
+      legend.position = "none",
+      plot.margin = unit(c(2, 2, 2, 2), "mm"),
+      complete = TRUE
+    )
+}
+
+py <- read.csv("/home/leonard/Documents/Uni/PhD/Raman/pyrolysis_2018_amount.csv")
+  
+py$Coniferaldehyde <- py$X22
+py$Vanillin <- py$X18
+py$Sinapaldehyde <- py$X32
+py$Syringaldehyde <- py$X29
+py$GOH <- ifelse(
+  py$variable == "mean",
+  py$X17 + py$X19 + py$X23,
+  sqrt(py$X17^2 + py$X19^2 + py$X23^2)
+)
+py$GCHO <- ifelse(
+  py$variable == "mean",
+  py$X18 + py$X22,
+  sqrt(py$X18^2 + py$X22^2)
+)
+py$Aldehydes <-
+  ifelse(
+    py$variable == "mean",
+    py$Coniferaldehyde + py$Sinapaldehyde + py$Vanillin + py$Syringaldehyde,
+    sqrt(
+      py$Coniferaldehyde^2 + py$Sinapaldehyde^2 + py$Vanillin^2 + py$Syringaldehyde^2
+    )
+  )
+py$H <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:9]), sqrt(rowSums(py[, 7:9]^
+    2)))
+py$G <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:19]), sqrt(rowSums(py[, 7:19]^
+    2)))
+py$S <-
+  ifelse(py$variable == "mean", rowSums(py[, 21:28]), sqrt(rowSums(py[, 21:28]^
+    2)))
+py$Lignin <-
+  ifelse(py$variable == "mean", rowSums(py[, 3:28]), sqrt(rowSums(py[, 3:28]^
+    2)))
+py$`GCHO/G` <- py$GCHO / py$G
+py$`GOH/G` <- py$GOH / py$G
+py$`GCHO/GOH` <- py$Coniferaldehyde / py$GOH
+py$`GCHO/lig` <- py$GCHO / py$Lignin
+py$`Aldehydes/lig` <- py$Aldehydes / py$Lignin
+py$`S/G` <- py$S / py$G
+py$`H/G` <- py$H / py$G
+py$`H/S` <- py$H / py$S
+
+py <- py %>%
+  select(-starts_with("X")) %>%
+  pivot_longer(-c(genotype, variable), names_to = "unit", values_to = "value") %>%
+  pivot_wider(id_cols = c( "genotype", "unit"), names_from = variable, values_from = value)
+
+py_rmn <- rmn_data_corrected %>%
+  filter(wavenumber %in% selected_peaks$wavenumber) %>%
+  group_by(cell.type, genotype, wavenumber, replicate, technical) %>%
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical), names_from = wavenumber,
+    values_from = scaled
+  ) %>%
+  transmute(
+    "1383/1276" = `1383` / `1276`,
+    "1383/1334" = `1383` / `1334`
+  ) %>%
+  pivot_longer(cols = -c(genotype, cell.type, replicate, technical), names_to = "wavenumber", values_to = "scaled") %>%
+  group_by(genotype, wavenumber, cell.type) %>%
+  summarise(mean.scaled = mean(scaled),
+            sd.scaled = sd(scaled) / mean.scaled) %>%
+  group_by(genotype, wavenumber) %>%
+  summarise(total.mean.scaled = mean(mean.scaled),
+            total.sd.scaled = total.mean.scaled * sqrt(sum(sd.scaled^2)))
+
+py_rmn_corr <- left_join(py, py_rmn) %>%
+  mutate(WT = case_when(genotype == "Col-0" ~ "yes",
+                        TRUE ~ "no"))
+
+py_rmn_corr_mat <- py_rmn_corr %>%
+  # filter(variable == "mean") %>%
+  group_by(unit, wavenumber) %>%
+  nest() %>%
+  mutate(
+    cor = map(data, ~ cor.test(.x$mean, .x$total.mean.scaled)),
+    tidied = map(cor, tidy)
+  ) %>%
+  unnest(tidied)
+
+py_plot <- function(x, y, z = "bork", colr = "white") {
+  
+tidycor <- broom::tidy(cor.test(
+  as.matrix(filter(py_rmn_corr, unit == x &
+                     wavenumber == y &
+                     genotype != z)[ ,"mean"]),
+  as.matrix(filter(py_rmn_corr, unit == x &
+                     wavenumber == y &
+                     genotype != z)[ ,"total.mean.scaled"])
+  ))
+print(tidycor)
+  
+regr <- broom::glance(lm(mean ~ total.mean.scaled, data = filter(py_rmn_corr, unit == x & 
+                                                           wavenumber == y &
+                                                           genotype != z)))
+
+ggplot(data = filter(py_rmn_corr, unit == x & wavenumber == y & genotype != z),
+       aes(x = mean, y = total.mean.scaled)) +
+  geom_rect(data = tidycor,
+            xmax = Inf,
+            ymax = Inf,
+            xmin = -Inf,
+            ymin = -Inf,
+            aes(fill = estimate,
+                x = 0,
+                y = 0)) +
+  geom_errorbar(aes(ymin = total.mean.scaled - total.sd.scaled,
+                    ymax = total.mean.scaled + total.sd.scaled),
+                size = 0.2,
+                width = 0,
+                alpha = 0.75) +
+  # geom_errorbarh(aes(xmin = mean - sd,
+  #                   xmax = mean + sd),
+  #               size = 0.2,
+  #               height = 0) +
+  geom_point(aes(colour = WT),
+             size = 1,
+             alpha = 0.75,
+             shape = 16) +
+  geom_smooth(method = "lm",
+                fullrange = F,
+                size = 0.4,
+                se = F,
+                linetype = 2,
+              colour = colr) +
+  scale_colour_manual(values = c("yes" = "white", no = "black"), guide = "none") +
+  scale_fill_distiller(
+    palette = "RdYlBu",
+    na.value = "white",
+    name = "Pearson's r",
+    limits = c(-1, 1),
+    guide = "legend"
+  ) +
+  scale_x_continuous(limits = c(0, NA)) +
+  scale_y_continuous(limits = c(0, NA)) +
+  annotate("text",
+           label = paste("R² = ",round(regr$adj.r.squared, digits = 2)),
+           x = 0,
+           y = 0,
+           size = text6,
+           family = "Helvetica",
+           hjust = 0,
+           vjust = 0,
+           colour = colr) +
+  theme_leo() +
+  theme(axis.text.y = element_text(angle = 90,
+                                   hjust = 0.5),
+        plot.margin = unit(c(4, 2, 4, 2), "mm"))
+  # geom_label_repel(aes(label = genotype),
+  #                  size = 1,
+  #                  segment.size = 0.2)
+  
+}
+py_plot_hg <- py_plot("H/G", "1383/1276") +
+  labs(x = expression(paste("Total H-lignin * total G-lignin"^-1)),
+    y = expression(paste("1383 cm"^-1,"/ 1276 cm"^-1))) +
+  theme(legend.position = c(0.175, 0.8),
+        legend.key.size = unit(2, "mm"),
+        legend.background = element_rect(fill = rgb(1, 1, 1, 0.5), colour = NA),
+        legend.margin = unit(c(0, 0, 0, 0), "mm"))
+
+py_plot_hs <- py_plot("H/S", "1383/1334", colr = "black") +
+  labs(x = expression(paste("Total H-lignin * total S-lignin"^-1)),
+    y = expression(paste("1383 cm"^-1,"/ 1334 cm"^-1))) 
+  # scale_y_continuous(breaks = c(0, 1, 2, 3))
+
+pdf("Raman_figureS4.pdf", width = onecol, height = 2)
+plot_grid(py_plot_hg,
+          py_plot_hs,
+  labels = c("A", "B"),
+  label_size = 10,
+  label_fontfamily = "Helvetica",
+  ncol = 2
+)
+dev.off()
+```
+
+#### Correlations between peaks
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+
+py_rmn <- rmn_data_avg %>%
+  filter(wavenumber %in% selected_peaks$wavenumber) %>%
+  group_by(genotype, wavenumber) %>%
+  pivot_wider(
+    id_cols = c(genotype, cell.type), names_from = wavenumber,
+    values_from = mean.scaled
+  ) %>%
+  mutate("CLB" = (`1603` / 4.6) + `1334`) %>%
+  group_by(genotype) %>%
+  summarise_if(is.numeric, mean) %>%
+  select(-genotype) %>%
+  as.matrix()
+
+pdf("Raman_figureS5.pdf")
+chart.Correlation(py_rmn, histogram = T)
+dev.off()
+```
+
+#### CHO to OH modelling
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, eval=FALSE}
+rmn_mod <- rmn_models %>%
+  filter(filename %in% c("poly-g-oh", "poly-g-cho") &
+           wavenumber %in% c(1565:1700)) %>%
+  droplevels() %>%
+  select(filename, wavenumber, intensity) %>%
+  complete(filename, wavenumber) %>%
+  group_by(filename) %>%
+  fill(intensity) %>%
+  mutate(intensity = scale_range(intensity) * 1000)
+
+ggplot(rmn_mod) +
+  geom_line(aes(x = wavenumber, y = intensity, colour = filename)) +
+  theme_leo() +
+  scale_colour_few() +
+  theme(legend.position = "right")
+
+rmn_mod_count <- rmn_mod %>%
+  uncount(intensity)
+  # pivot_wider(id_cols = "filename", names_from = wavenumber, values_from = intensity)
+
+ggplot(rmn_mod_count) + 
+  geom_histogram(aes(x = wavenumber, fill = filename), binwidth = 1, position = "identity", alpha = 0.5) +
+  scale_fill_few() 
+
+mod_oh <- rmn_mod_count %>%
+  filter(filename == "poly-g-oh")
+
+mod_cho <- rmn_mod_count %>%
+  filter(filename == "poly-g-cho")
+
+library(mixtools)
+
+mix_oh <- normalmixEM(mod_oh$wavenumber, k = 3, epsilon = 1e-10, maxit = 10000)
+
+mix_cho <- normalmixEM(mod_cho$wavenumber, k = 3, epsilon = 1e-10, maxit = 10000)
+
+plot(mix_oh, which = 2)
+
+plot(mix_cho, which = 2)
+
+proportional_gauss <- function(x, mean, sd, lambda, n, binwidth) {
+        (dnorm(x, mean = mean, sd = sd)) * n * binwidth * lambda
+}
+
+
+proportional_gauss_sum <- function(x, mean, sd, lambda, n, binwidth) {
+  apply(mapply(proportional_gauss,
+               x = x,
+               MoreArgs = list( mean, sd, lambda, n, binwidth)
+               ), 
+        2, sum)
+}
+
+ggplot(mod_oh, aes(x = wavenumber)) +
+  geom_histogram(binwidth = 1) +
+  stat_function(
+    fun = proportional_gauss_sum,
+    args = list(
+      mean = mix_oh[["mu"]],
+      sd = mix_oh[["sigma"]],
+      lambda = mix_oh[["lambda"]],
+      n = length(mod_oh$wavenumber),
+      binwidth = 1
+    ))
+
+ggplot(mod_cho, aes(x = wavenumber)) +
+  geom_histogram(binwidth = 1) +
+  stat_function(
+    fun = proportional_gauss_sum,
+    args = list(
+      mean = mix_cho[["mu"]],
+      sd = mix_cho[["sigma"]],
+      lambda = mix_cho[["lambda"]],
+      n = length(mod_cho$wavenumber),
+      binwidth = 1
+    ))
 ```
