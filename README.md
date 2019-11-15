@@ -4,32 +4,35 @@
 Listed are all scripts that I used to create figures in published or submitted manuscripts. All scripts are independent of each other. For the used data files, see the respective supplementary files on the journal page. Subfigures that are not listed were done outside of R or by co-authors. Do not hesitate to contact me if something is unclear or missing.  
 
 ### Wiesner Test Manuscript, Blaschek _et al._, 2019
-#### Figure 1
-**(b,c)** biblio.R
 
-#### Figure 2 
-**(c)** spectra_peaks.R
+#### Figure 1 
+**D** spectra_peaks.R
+
+#### Figure 2
+**B** spectra_DHPs
 
 #### Figure 3
-**(b)** spectra_DHPs
+**B, S4** fig4.R
 
 #### Figure 4
-**(b--d)** fig4.R
+**A** pyro_corr.R  
+**B** RAMAN_spec_corr.R  
 
 #### Figure 5
-**(a)** pyro_corr.R  
-**(b)** RAMAN_spec_corr.R  
+**C, S7** genotypes_grid.R  
+**D** clustering_phlog_absorbance.R  
+**E** PCA_wiesner.R  
 
-#### Figure 6, S5
-**(c,d)** genotypes_grid.R  
-**(e)** clustering_phlog_absorbance.R  
-**(f)** PCA_wiesner.R  
+#### Figure 6
+**B, S9** poplar_distance.R  
+**C** clustering_poplar.R  
+**D** PCA_poplar.R  
 
-#### Figure 7, S6
-**(b,c)** poplar_distance.R  
-**(d)** clustering_poplar.R  
-**(e)** PCA_poplar.R  
+#### Figure 7
+**A, B** cml_wiesner.rmd
 
-#### Figure 8, S7, S8
-**(a,b)** ArabidopsisFW.R  
-**(c)** PoplarFW_dev.R
+#### Figure 8
+**A, B, S10, S11** FW_reworked.R
+
+#### Figure S5
+GCHO_content.R
