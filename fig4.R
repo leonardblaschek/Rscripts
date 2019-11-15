@@ -441,7 +441,7 @@ dev.off()
 
 
 #### plot the whole figure ####
-pdf("fig4.pdf", height = 4.1, width = 5)
+pdf("fig3.pdf", height = 4.1, width = 5)
 plot_grid(
   timeline_imgs,
   # thick.ellipse,
@@ -457,7 +457,7 @@ plot_grid(
 )
 dev.off()
 
-pdf("figS5.pdf", height = 4.1, width = 5)
+pdf("figS4.pdf", height = 4.1, width = 5)
 plot_grid(
   thick.ellipse,
   tl.hue,

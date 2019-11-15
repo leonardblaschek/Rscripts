@@ -21,6 +21,7 @@ citecolor: blue
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(grid)
+library(png)
 library(magick)
 library(baseline)
 library(PerformanceAnalytics)
@@ -251,6 +252,7 @@ spectra_plot <- ggplot(filter(rmn_models, unit %in% c("G", "S"))) +
   theme(
     # panel.spacing = unit(5, "mm"),
     axis.title.y = element_blank(),
+    strip.text = element_text(size = 8),
     axis.text.x.top = element_text(
       angle = 90,
       vjust = 0.5,
@@ -566,23 +568,25 @@ auc_boxes <- ggplot(data = rmn_data_all_auc, aes(x = cell.type, y = auc / 1000))
     shape = 21,
     alpha = 0.75,
     size = 3,
-    stroke = 0.4
+    stroke = 0.2
   ) +
   geom_boxplot(
     alpha = 0.5,
     outlier.alpha = 0,
     fatten = 1,
-    size = 0.4,
+    size = 0.2,
     # width = 0.25
   ) +
   scale_fill_viridis_d() +
   theme_leo() +
-  labs(y = expression(paste("AUC per 490 µm"^2, " [AU]"))) +
-  scale_y_continuous(expand = expand_scale(mult = 0.07)) +
+  labs(y = expression(paste("AUC per 490 µm"^2))) +
+  scale_y_continuous(expand = expand_scale(mult = 0.07),
+                     breaks = c(0, 200, 400)) +
   theme(
     axis.text.y = element_blank(),
     axis.title.y = element_blank(),
-    axis.ticks.y = element_blank()
+    axis.ticks.y = element_blank(),
+    plot.margin = unit(c(2, 0, 2, 0), "mm")
   ) +
   coord_flip()
 ```
@@ -929,14 +933,16 @@ spectra <- function(x) {
     expression(italic("cad4")),
     expression(italic("cad5")),
     expression(paste(italic("cad4"), "x", italic("cad5")))
-  )) +
+  ), 
+  expand = expand_scale(mult = c(0.05, 0.175))) +
   labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
   theme_leo() +
   theme(
     panel.spacing = unit(1, "mm"),
     axis.title.y = element_blank(),
-    plot.margin = unit(c(2, 0, 2, 0), "mm")
-  ) +
+    strip.text = element_text(size = 8),
+    plot.margin = unit(c(2, 0, 2, 2), "mm")
+  )  +
   facet_wrap(~cell.type, ncol = 2)
   
 if(x == "Vascular bundle") {
@@ -958,7 +964,8 @@ mutant_ridge_letters <- letter_groups(filter(rmn_data_auc, cell.type == x),
   AUC,
   genotype,
   "tukey",
-  print_position = "above"
+  print_position = "above",
+  print_adjust = 1.5
 )
 
 ggplot(data = filter(rmn_data_auc, cell.type == x), aes(x = genotype, y = AUC / 10000)) +
@@ -966,23 +973,25 @@ ggplot(data = filter(rmn_data_auc, cell.type == x), aes(x = genotype, y = AUC / 
     shape = 21,
     alpha = 0.75,
     size = 1,
-    stroke = 0.4
+    stroke = 0.2
   ) +
   geom_boxplot(
     alpha = 0.5,
+    colour = "black",
     outlier.alpha = 0,
     fatten = 1,
-    size = 0.4
+    size = 0.2
   ) +
   scale_fill_viridis_d() +
   theme_leo() +
   labs(y = expression(paste("AUC per 490 µm"^2))) +
   scale_y_continuous(limits = c(0, 500), breaks = c(0, 200, 400)) +
+  scale_x_discrete(expand = expand_scale(mult = c(0.09, 0.135))) +
   theme(
     axis.text.y = element_blank(),
     axis.title.y = element_blank(),
     axis.ticks.y = element_blank(),
-    plot.margin = unit(c(2, 2, 2, 0), "mm"),
+    plot.margin = unit(c(2, 0.85, 2, 0), "mm"),
     strip.text = element_blank()
   ) +
   geom_text(
@@ -995,15 +1004,127 @@ ggplot(data = filter(rmn_data_auc, cell.type == x), aes(x = genotype, y = AUC / 
   facet_wrap(~cell.type)
 }
 
-pdf("Raman_figure3.pdf", width = twocol , height = 4)
-plot_grid(spectra("Interfascicular fibre"),
-  auc_boxes("IF"),
-  spectra("Vascular bundle"),
-  auc_boxes("VB"),
-  rel_widths = c(0.75, 0.2, 0.8, 0.2),
-  ncol = 4,
-  align = "h"
+segOH <- 11 + 200 *  rmn_data_ridge_full$mean.scaled[rmn_data_ridge_full$genotype == "cad4xcad5" & rmn_data_ridge_full$cell.type == "Interfascicular fibre" & rmn_data_ridge_full$wavenumber == 1664]
+segCHO <- 11 + 200 * rmn_data_ridge_full$mean.scaled[rmn_data_ridge_full$genotype == "cad4xcad5" & rmn_data_ridge_full$cell.type == "Interfascicular fibre" & rmn_data_ridge_full$wavenumber == 1625]
+segS <- 11 + 200 *   rmn_data_ridge_full$mean.scaled[rmn_data_ridge_full$genotype == "cad4xcad5" & rmn_data_ridge_full$cell.type == "Interfascicular fibre" & rmn_data_ridge_full$wavenumber == 1334]
+
+segOH_VB <- 11 + 200 *  rmn_data_ridge_full$mean.scaled[rmn_data_ridge_full$genotype == "cad4xcad5" & rmn_data_ridge_full$cell.type == "Vascular bundle" & rmn_data_ridge_full$wavenumber == 1664]
+segCHO_VB <- 11 + 200 * rmn_data_ridge_full$mean.scaled[rmn_data_ridge_full$genotype == "cad4xcad5" & rmn_data_ridge_full$cell.type == "Vascular bundle" & rmn_data_ridge_full$wavenumber == 1625]
+segS_VB <- 11 + 200 *   rmn_data_ridge_full$mean.scaled[rmn_data_ridge_full$genotype == "cad4xcad5" & rmn_data_ridge_full$cell.type == "Vascular bundle" & rmn_data_ridge_full$wavenumber == 1334]
+
+spectra_IF <- spectra("Interfascicular fibre") +
+  annotate("segment",
+      x = c(1664, 1625, 1334),
+      xend = c(1664, 1625, 1334),
+      y = c(segOH, segCHO, segS),
+    yend = c(12, 12, 12)
+  )  + geom_text_repel(
+    data = tibble(
+      wavenumber = c(1664, 1625, 1334),
+      cell.type = rep("Interfascicular fibre", 3),
+      genotype = rep("cad4xcad5", 3),
+      label = c("1664", "1625", "1335")
+    ),
+    aes(
+      label = label,
+      x = wavenumber,
+      y = 12
+    ),
+    # angle = 90,
+    # hjust = 0.5,
+    direction = "x",
+    min.segment.length = 0,
+    segment.size = 0.2,
+    nudge_y = 1,
+    segment.colour = "black",
+    family = "Helvetica",
+    size = text6
+  )
+  
+spectra_VB <- spectra("Vascular bundle") +
+  annotate("segment",
+      x = c(1664, 1625, 1334),
+      xend = c(1664, 1625, 1334),
+      y = c(segOH_VB, segCHO_VB, segS_VB),
+    yend = c(12, 12, 12)
+  )  + geom_text_repel(
+    data = tibble(
+      wavenumber = c(1664, 1625, 1334),
+      cell.type = rep("Vascular bundle", 3),
+      genotype = rep("cad4xcad5", 3),
+      label = c("1664", "1625", "1335")
+    ),
+    aes(
+      label = label,
+      x = wavenumber,
+      y = 12
+    ),
+    # angle = 90,
+    # hjust = 0.5,
+    direction = "x",
+    min.segment.length = 0,
+    segment.size = 0.2,
+    nudge_y = 1,
+    segment.colour = "black",
+    family = "Helvetica",
+    size = text6
+  )
+
+WT_IF <-
+  rasterGrob(readPNG(
+    "/home/leonard/Documents/Uni/PhD/Raman/Figures/WT_IF.png"
+  ))
+WT_VB <-
+  rasterGrob(readPNG(
+    "/home/leonard/Documents/Uni/PhD/Raman/Figures/WT_VB.png"
+  ))
+cl_IF <-
+  rasterGrob(readPNG(
+    "/home/leonard/Documents/Uni/PhD/Raman/Figures/4cl1x2_IF.png"
+  ))
+cl_VB <-
+  rasterGrob(readPNG(
+    "/home/leonard/Documents/Uni/PhD/Raman/Figures/4cl1x2_VB.png"
+  ))
+
+left <- plot_grid(
+WT_IF,
+WT_VB,
+cl_IF,
+cl_VB,
+ncol = 1,
+label_size = 6,
+label_fontfamily = "Helvetica",
+label_fontface = 3,
+label_x = 0.975,
+label_y = 0.95,
+hjust = 1,
+vjust = 1,
+labels = c("WT IF",
+           "WT VB",
+           "4cl1x4cl2 IF",
+           "4cl1x4cl2 VB"
 )
+)
+
+right <- plot_grid(
+spectra_IF,
+auc_boxes("IF"),
+spectra_VB,
+auc_boxes("VB"),
+rel_widths = c(0.75, 0.2, 0.8, 0.2),
+ncol = 4,
+align = "h"
+)
+
+pdf("Raman_figure3.pdf", width = twocol, height = 4)
+plot_grid(left,
+          right,
+          ncol = 2,
+          rel_widths = c(0.1575, 1),
+          label_size = 10,
+          label_fontfamily = "Helvetica",
+          labels = c("A", "B"))
 dev.off()
 ```
 
@@ -1650,27 +1771,27 @@ validated_peaks <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/validated_pea
   filter(assigned.structure != "H-units")
   
 
-kable(validated_peaks,
-  "latex",
-  align = "lllllcccc",
-  caption = "Raman bands validated by Py--GC/MS.",
-  col.names = c(
-    "Band no.",
-    "Band intensity at",
-    "Normalised to",
-    "Assigned polymer",
-    "Assigned structure",
-    "Pearson's r",
-    "P-value",
-    "Pearson's r",
-    "P-value"
-  ),
-  booktabs = TRUE,
-  linesep = ""
-) %>%
-  kable_styling(latex_options = c("hold_position", "striped", "scale_down")) %>%
-  add_header_above(c(" " = 5, "Total pyrolysate" = 2, "Total lignin" = 2)) %>%
-  save_kable("Raman_table2.pdf")
+# kable(validated_peaks,
+#   "latex",
+#   align = "lllllcccc",
+#   caption = "Raman bands validated by Py--GC/MS.",
+#   col.names = c(
+#     "Band no.",
+#     "Band intensity at",
+#     "Normalised to",
+#     "Assigned polymer",
+#     "Assigned structure",
+#     "Pearson's r",
+#     "P-value",
+#     "Pearson's r",
+#     "P-value"
+#   ),
+#   booktabs = TRUE,
+#   linesep = ""
+# ) %>%
+#   kable_styling(latex_options = c("hold_position", "striped", "scale_down")) %>%
+#   add_header_above(c(" " = 5, "Total pyrolysate" = 2, "Total lignin" = 2)) %>%
+#   save_kable("Raman_table2.pdf")
 ```
 
 \newpage
@@ -1684,6 +1805,103 @@ Normalised Intensity $x =  \frac{abs.}{abs._{Lignin}}$
 z-scaled intensity $x_{z} = x - \frac{\overline{x}}{\sigma_{x}}$
 
 Plotted difference from the WT $\Delta x_{z} = x_{z} - x_{z}^{WT}$
+
+#### AUC
+
+```{r change correlations absolute, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+
+rmn_data_corr <- rmn_data_corrected %>%
+  ungroup() %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  summarise(AUC = mean(AUC, na.rm = T)) %>%
+  ungroup() %>%
+  mutate(scaled.z = scale_z(AUC))
+
+rmn_data_corr <- rmn_data_corr %>%
+  left_join(filter(rmn_data_corr, genotype == "Col-0") %>%
+    ungroup() %>%
+    select(cell.type, scaled.z) %>%
+    group_by(cell.type) %>%
+    summarise(scaled.WT = mean(scaled.z))) %>%
+  mutate(diff = scaled.z - scaled.WT) %>%
+  group_by(genotype, cell.type) %>%
+  summarise(AUC.mean = mean(diff, na.rm = T),
+            AUC.sd = sd(diff, na.rm = T)) %>%
+  pivot_wider(id_cols = genotype, names_from = cell.type, values_from = c(AUC.mean, AUC.sd))
+
+pdf("AUC_celltypes.pdf")
+ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
+  annotate("rect",
+    xmin = -Inf,
+    xmax = 0,
+    ymin = -Inf,
+    ymax = 0,
+    fill = "grey95"
+  ) +
+  annotate("rect",
+    xmin = Inf,
+    xmax = 0,
+    ymin = Inf,
+    ymax = 0,
+    fill = "grey95"
+  ) +
+  geom_abline(slope = 1, intercept = 0, linetype = 2, size = 0.2) +
+  geom_rect(aes(xmin = AUC.mean_VB - AUC.sd_VB,
+                xmax = AUC.mean_VB + AUC.sd_VB,
+                ymin = AUC.mean_IF - AUC.sd_IF,
+                ymax = AUC.mean_IF + AUC.sd_IF)) +
+  # geom_point(aes(
+  #   x = VB,
+  #   y = IF,
+  #   # fill = assigned.structure,
+  #   # colour = assigned.structure
+  # ),
+  # size = 1,
+  # shape = 16,
+  # alpha = 0.5
+  # ) +
+  # stat_ellipse(aes(
+  #   x = VB,
+  #   y = IF,
+  #   # fill = assigned.structure,
+  # ), geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
+  # stat_ellipse(aes(
+  #   x = VB,
+  #   y = IF,
+  #   # colour = assigned.structure,
+  # ), alpha = 0.85, type = "t", level = 0.4) +
+  # geom_label_repel(data = filter(rmn_data_corr,
+  #                                IF - PMX > 1 | IF -PMX < -1),
+  #                  aes(x = PMX,
+  #                      y = IF,
+  #                      label = wavenumber),
+  #   nudge_y = 0.25,
+  #   family = "Helvetica",
+  #   segment.colour = "red",
+  #   size = 2.5
+  # ) +
+  theme_leo() +
+  theme(
+    axis.title = element_text(),
+    axis.text.x = element_text(angle = 0),
+    legend.position = c(1.005, 0),
+    legend.justification = c(0,0),
+    legend.direction = "vertical",
+    legend.key.width = unit(4, "mm"),
+    strip.text = element_text(size = 8),
+    # legend.title = element_blank(),
+    plot.margin = unit(c(2, 18, 2, 2), "mm")
+  ) +
+  labs(
+    x = "Change in the vascular bundle",
+    y = "Change in the interfascicular fibres"
+  ) +
+  scale_x_continuous(limits = c(-4, 4)) +
+  scale_y_continuous(limits = c(-4, 4)) +
+  coord_fixed() +
+  facet_wrap(~genotype, ncol = 5)
+dev.off()
+```
 
 #### Relative to AUC
 
@@ -1720,13 +1938,24 @@ rmn_data_corr <- rmn_data_corr %>%
   mutate(diff = scaled.z - scaled.WT) %>%
   select(-scaled.z, -scaled.WT) %>%
   spread(key = cell.type, value = diff) %>%
-  ungroup()
+  ungroup() 
 
 rmn_data_corr <- left_join(rmn_data_corr, (validated_peaks %>%
+                                             mutate(wavenumber = recode(wavenumber, "1603, 1334" = "1603/4.6 + 1334")) %>%
   rbind(list(13, "381", "AUC", "Cellulose", "Cellulose", 0, 0, 0, 0)) %>%
-  rbind(list(10, "1099", "AUC", "Cellulose", "Cellulose", 0, 0, 0, 0))))
+  rbind(list(10, "1099", "AUC", "Cellulose", "Cellulose", 0, 0, 0, 0)))) %>%
+  drop_na() %>%
+  group_by(genotype, replicate, technical, assigned.structure) %>%
+  summarise(IF = mean(IF),
+            VB = mean(VB))
 
-# pdf("IF_MX_corr.pdf")
+rmn_data_corr_it <- rmn_data_corr %>%
+  ungroup()%>%
+  select(genotype, assigned.structure, IF, VB) %>%
+  group_by(genotype, assigned.structure) %>%
+  expand(IF, VB)
+
+
 rel_auc <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
   annotate("rect",
     xmin = -Inf,
@@ -1743,26 +1972,37 @@ rel_auc <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
     fill = "grey95"
   ) +
   geom_abline(slope = 1, intercept = 0, linetype = 2, size = 0.2) +
-  geom_point(aes(
-    x = VB,
-    y = IF,
-    fill = assigned.structure,
-    colour = assigned.structure
-  ),
-  size = 1,
-  shape = 21,
-  alpha = 0.5
-  ) +
-  stat_ellipse(aes(
-    x = VB,
-    y = IF,
-    fill = assigned.structure,
-  ), geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
-  stat_ellipse(aes(
-    x = VB,
-    y = IF,
-    colour = assigned.structure,
-  ), alpha = 0.85, type = "t", level = 0.4) +
+  stat_density2d(data = filter(rmn_data_corr_it, genotype != "Col-0"),
+                  aes(x = VB,
+                      y = IF,
+                      alpha = stat(nlevel),
+                      fill = assigned.structure),
+                 geom = "polygon",
+                 h = c(2,2),
+                 bins = 6
+                 ) +
+  scale_alpha(range = c(0, 0.7)) +
+  guides(alpha = "none") +
+  # geom_point(aes(
+  #   x = VB,
+  #   y = IF,
+  #   # fill = assigned.structure,
+  #   colour = assigned.structure
+  # ),
+  # size = 1,
+  # shape = 16,
+  # alpha = 0.5
+  # ) +
+  # stat_ellipse(aes(
+  #   x = VB,
+  #   y = IF,
+  #   fill = assigned.structure,
+  # ), geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
+  # stat_ellipse(aes(
+  #   x = VB,
+  #   y = IF,
+  #   colour = assigned.structure,
+  # ), alpha = 0.85, type = "t", level = 0.4) +
   # geom_label_repel(data = filter(rmn_data_corr,
   #                                IF - PMX > 1 | IF -PMX < -1),
   #                  aes(x = PMX,
@@ -1781,6 +2021,7 @@ rel_auc <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
     legend.justification = c(0,0),
     legend.direction = "vertical",
     legend.key.width = unit(4, "mm"),
+    strip.text = element_text(size = 8),
     # legend.title = element_blank(),
     plot.margin = unit(c(2, 18, 2, 2), "mm")
   ) +
@@ -1796,19 +2037,22 @@ rel_auc <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
     "Total lignin" = "#B2912F"
   ),
   name = "Total\namount") +
-  scale_colour_manual(values = c(
-    "G-units" = "#5DA5DA",
-    "Cellulose" = "#FAA43A",
-    "G-OH" = "#60BD68",
-    "S-units" = "#F17CB0",
-    "Total lignin" = "#B2912F"
-  ),
-  name = "Total\namount") +
+  # scale_colour_manual(values = c(
+  #   "G-units" = "#5DA5DA",
+  #   "Cellulose" = "#FAA43A",
+  #   "G-OH" = "#60BD68",
+  #   "S-units" = "#F17CB0",
+  #   "Total lignin" = "#B2912F"
+  # ),
+  # name = "Total\namount") +
   scale_x_continuous(limits = c(-4, 4)) +
   scale_y_continuous(limits = c(-4, 4)) +
   coord_fixed() +
   facet_wrap(~genotype, ncol = 5)
-# dev.off()
+
+pdf("IF_MX_corr.pdf")
+rel_auc
+dev.off()
 ```
 
 \newpage
@@ -1821,20 +2065,20 @@ rmn_data_corr <- rmn_data_corrected %>%
   filter(wavenumber %in% c(1664, 1603, 1334)) %>%
   # group_by(genotype, cell.type, replicate, technical) %>%
   mutate(wavenumber = as.character(wavenumber)) %>%
-  ungroup() %>%
-  pivot_wider(
-    id_cols = c(genotype:technical),
-    names_from = wavenumber,
-    values_from = scaled_max
-  ) %>%
-  group_by(genotype, cell.type, replicate, technical) %>%
-  # mutate("1625 / 1603" = `1625`) %>%
-  # select(-`1603`) %>%
-  pivot_longer(
-    cols = -c(genotype, cell.type, replicate, technical),
-    names_to = "wavenumber",
-    values_to = "scaled_max"
-  ) %>%
+  # ungroup() %>%
+  # pivot_wider(
+  #   id_cols = c(genotype:technical),
+  #   names_from = wavenumber,
+  #   values_from = scaled_max
+  # ) %>%
+  # group_by(genotype, cell.type, replicate, technical) %>%
+  # # mutate("1625 / 1603" = `1625`) %>%
+  # # select(-`1603`) %>%
+  # pivot_longer(
+  #   cols = -c(genotype, cell.type, replicate, technical),
+  #   names_to = "wavenumber",
+  #   values_to = "scaled_max"
+  # ) %>%
   ungroup() %>%
   group_by(wavenumber) %>%
   mutate(scaled.z = scale_z(scaled_max)) %>%
@@ -1862,6 +2106,12 @@ rmn_data_corr <- left_join(rmn_data_corr, validated_peaks)
 #   rbind(list(13, "381", "Total lignin", "Cellulose", "Cellulose", 0, 0, 0, 0, 0, 0)) %>%
 #   rbind(list(10, "1099", "Total lignin",  "Cellulose", "Cellulose", 0, 0, 0, 0, 0, 0))))
 
+rmn_data_corr_it <- rmn_data_corr %>%
+  ungroup()%>%
+  select(genotype, assigned.structure, IF, VB) %>%
+  group_by(genotype, assigned.structure) %>%
+  expand(IF, VB)
+
 # pdf("IF_MX_corr.pdf")
 rel_lig <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
   annotate("rect",
@@ -1879,40 +2129,51 @@ rel_lig <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
     fill = "grey95"
   ) +
   geom_abline(slope = 1, intercept = 0, linetype = 2, size = 0.2) +
-  geom_point(aes(
-    x = VB,
-    y = IF,
-    fill = assigned.structure,
-    colour = assigned.structure
-  ),
-  size = 1,
-  shape = 21,
-  alpha = 0.5
-  ) +
-  stat_ellipse(
-    data = filter(rmn_data_corr, genotype != "Col-0" & wavenumber != 1383),
-    aes(
-      x = VB,
-      y = IF,
-      fill = assigned.structure,
-    ), geom = "polygon", alpha = 0.5, type = "t", level = 0.4
-  ) +
-  stat_ellipse(
-    data = filter(rmn_data_corr, genotype != "Col-0" & wavenumber == 1383),
-    aes(
-      x = VB,
-      y = IF,
-      colour = assigned.structure,
-    ), alpha = 0.85, type = "t", level = 0.4, linetype = 2, size = 0.25
-  ) +
-  stat_ellipse(
-    data = filter(rmn_data_corr, genotype != "Col-0" & wavenumber != 1383),
-    aes(
-      x = VB,
-      y = IF,
-      colour = assigned.structure,
-    ), alpha = 0.85, type = "t", level = 0.4
-  ) +
+  stat_density2d(data = filter(rmn_data_corr_it, genotype != "Col-0"),
+                  aes(x = VB,
+                      y = IF,
+                      alpha = stat(nlevel),
+                      fill = assigned.structure),
+                 geom = "polygon",
+                 h = c(2,2),
+                 bins = 6
+                 ) +
+  scale_alpha(range = c(0, 0.75)) +
+  guides(alpha = "none") +
+  # geom_point(aes(
+  #   x = VB,
+  #   y = IF,
+  #   # fill = assigned.structure,
+  #   colour = assigned.structure
+  # ),
+  # size = 1,
+  # shape = 16,
+  # alpha = 0.5
+  # ) +
+  # stat_ellipse(
+  #   data = filter(rmn_data_corr, genotype != "Col-0" & wavenumber != 1383),
+  #   aes(
+  #     x = VB,
+  #     y = IF,
+  #     fill = assigned.structure,
+  #   ), geom = "polygon", alpha = 0.5, type = "t", level = 0.4
+  # ) +
+  # stat_ellipse(
+  #   data = filter(rmn_data_corr, genotype != "Col-0" & wavenumber == 1383),
+  #   aes(
+  #     x = VB,
+  #     y = IF,
+  #     colour = assigned.structure,
+  #   ), alpha = 0.85, type = "t", level = 0.4, linetype = 2, size = 0.25
+  # ) +
+  # stat_ellipse(
+  #   data = filter(rmn_data_corr, genotype != "Col-0" & wavenumber != 1383),
+  #   aes(
+  #     x = VB,
+  #     y = IF,
+  #     colour = assigned.structure,
+  #   ), alpha = 0.85, type = "t", level = 0.4
+  # ) +
   # geom_label_repel(data = filter(rmn_data_corr,
   #                                IF - PMX > 1 | IF -PMX < -1),
   #                  aes(x = PMX,
@@ -1929,6 +2190,7 @@ rel_lig <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
     axis.text.x = element_text(angle = 0),
     legend.position = c(1.005, 0),
     legend.justification = c(0,0),
+    strip.text = element_text(size = 8),
     legend.direction = "vertical",
     legend.key.width = unit(4, "mm"),
     # legend.title = element_blank(),
@@ -2091,28 +2353,32 @@ rmn_auc_contrib <- rmn_data_corrected %>%
   distinct() %>%
   pivot_longer(cols = c(AUC_1603:AUC_381), names_to = "band", values_to = "proportion") %>%
   group_by(genotype, cell.type, replicate, technical, band) %>%
-  mutate(proportion = proportion / AUC)
+  mutate(proportion = proportion / AUC) %>%
+  ungroup() %>%
+  mutate(band = ordered(as.factor(band), levels = rev(c("AUC_381", "AUC_1099", "AUC_1334", "AUC_1603"))))
 
-pdf("Raman_figureS2.pdf", width = onecol, height = 3)
-ggplot(rmn_auc_contrib, aes(x = band, y = proportion)) +
-  geom_quasirandom(aes(fill = band),
-    shape = 21,
+# pdf("Raman_figureS2.pdf", width = onecol, height = 3)
+band_contribs <- ggplot(rmn_auc_contrib, aes(x = band, y = proportion)) +
+  geom_quasirandom(
+    aes(colour = band),
+    shape = 16,
     alpha = 0.5,
-    stroke = 0.1
+    size = 0.5
   ) +
   geom_boxplot(
     alpha = 0.5,
     outlier.alpha = 0,
     fatten = 1,
-    size = 0.4
+    size = 0.2,
+    colour = "black"
   ) +
   labs(x = expression(paste("Raman band [cm"^-1, "]")),
        y = expression(paste("Band AUC * total AUC"^-1))) +
-  scale_fill_viridis_d() +
-  scale_x_discrete(labels = c("1099", "1334", "1603", "381")) +
+  scale_x_discrete(labels = c("1603", "1334", "1099", "381")) +
+  scale_colour_grey() +
   # geom_label(aes(label = paste(mean(proportion)))) +
   theme_leo()
-dev.off()
+# dev.off()
 ```
 
 #### Including the 381 peak
@@ -2133,30 +2399,40 @@ rmn_auc <- rmn_data_corrected %>%
 rmn_auc_lm <- broom::glance(lm(AUC ~ X1603 + X1334 + X1099 + X381, data = rmn_auc))
 rmn_auc_lm_full <- broom::tidy(lm(AUC ~ X1603 + X1334 + X1099 + X381, data = rmn_auc))
 
-pdf("Raman_figureS3.pdf", width = onecol, height = onecol)
-ggplot(rmn_auc, aes(
-  x = AUC,
-  y = X1603 + X1334 + X1099 + X381
+
+auc_corr <- ggplot(rmn_auc, aes(
+  x = AUC / 1000,
+  y = (X1603 + X1334 + X1099 + X381) / 1000
 )) +
   geom_point(alpha = 0.5,
              shape = 16,
-             size = 0.75) +
+             size = 0.5) +
   geom_smooth(
     method = "lm",
     se = FALSE,
     size = 0.4
   ) +
-  labs(y = expression(paste("Added peak intensities at 1603, 1334, 1099 and 381 cm"^-1)),
+  labs(y = "Sum of lignin and cellulose bands",
        x = "Total AUC") +
   geom_text(
-    x = 750000,
-    y = 45000,
+    x = 500,
+    y = 42,
     aes(label = paste("R² =", round(adj.r.squared, digits = 2))),
-    hjust = 1,
+    hjust = 0,
+    family = "Helvetica",
     size = text6,
     data = rmn_auc_lm
   ) +
   theme_leo()
+
+pdf("Raman_figureS3.pdf", width = onecol, height = onecol / 2)
+plot_grid(band_contribs,
+          auc_corr,
+          labels = c("A", "B"),
+  nrow = 1,
+  label_fontfamily = "Helvetica",
+  label_size = 10
+          )
 dev.off()
 ```
 
@@ -2400,8 +2676,86 @@ py_rmn <- rmn_data_avg %>%
   select(-genotype) %>%
   as.matrix()
 
-pdf("Raman_figureS5.pdf")
+pdf("Raman_figureS5.pdf", height = twocol, width = twocol)
 chart.Correlation(py_rmn, histogram = T)
+dev.off()
+```
+
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+rmn_data_ridge <- rmn_data_corrected %>%
+  filter(
+    wavenumber > 1550 &
+      wavenumber < 1650 &
+      genotype != "ccr1xfah1" &
+      cell.type %in% c("IF", "VB")
+  ) %>%
+  ungroup() %>%
+  mutate(genotype = ordered(genotype, levels = c(
+    "Col-0",
+    "4cl1",
+    "4cl2",
+    "4cl1x4cl2",
+    "ccoaomt1",
+    "fah1",
+    "omt1",
+    "ccr1-3",
+    "ccr1xfah1",
+    "cad4",
+    "cad5",
+    "cad4xcad5"
+  )))
+
+# pdf("peak1600_ridge.pdf")
+s6 <- ggplot(data = rmn_data_ridge) +
+  geom_ridgeline(aes(
+    x = wavenumber,
+    y = genotype,
+    height = rollmean(scaled, 10, na.pad = TRUE),
+    fill = genotype,
+    group = interaction(genotype, replicate, technical)
+  ),
+  alpha = 0.25,
+  size = 0.2,
+  # colour = NA,
+  scale = 150
+  ) +
+  scale_fill_viridis_d() +
+  scale_y_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  scale_x_reverse() +
+  labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
+  theme_leo() +
+  theme(
+    panel.spacing = unit(5, "mm"),
+    strip.text = element_text(size = 8),
+    axis.title.y = element_blank()
+  ) +
+  geom_vline(xintercept = 1603, colour = "black", alpha = 1, size = 0.4, linetype = 2) +
+  annotate("text",
+           x = 1603,
+           y = 0.75,
+           label = expression(paste(" 1603 cm"^-1)),
+           hjust = 0,
+           family = "Helvetica",
+           size = text6) +
+  facet_wrap(~cell.type, ncol = 2)
+
+pdf("Raman_figureS6.pdf", width = onecol, height = onecol)
+s6
 dev.off()
 ```
 

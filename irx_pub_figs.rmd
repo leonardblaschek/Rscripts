@@ -36,8 +36,41 @@ library(tukeygrps)
 library(wesanderson)
 library(scales)
 
-pal_wes <- wes_palette("Zissou1", 100, type = "continuous")
-pal_ostwald <- c("#155DA7", "#0A75B9", "#0C89C9", "#FED32F", "#F8A63A", "#EF663A", "#ED4137")
+pal_ostwald_cont <- c("#155DA7", 
+                 "#0A75B9", 
+                 # "#0C89C9", 
+                 "#FED32F", 
+                 # "#F8A63A", 
+                 "#EF663A", 
+                 "#ED4137")
+pal_ostwald_cont2 <- c("#275d95", 
+                       "#286e9b",
+                       "#e8c245",
+                       "#d37456",
+                       "#d25952")
+pal_ostwald_disc <- c("#275d95", 
+                      "#e8c245", 
+                      "#d25952")
+pal_ostwald_disc2 <- c("#8fab1d", 
+                  "#2d7d73", 
+                  "#1d566f")
+pal_flame <- c("#1F265D", 
+               "#203F8F", 
+               "#404678", 
+               "#897B88", 
+               "#E7BBA2", 
+               "#FFEDC3", 
+               "#FEFEFE")
+pal_flame_disc <- c("#ffedc3", 
+                    "#897b88", 
+                    "#1f265d")
+pal_ylgnbu <- c("#c7e9b4",
+                "#7fcdbb",
+                "#41b6c4",
+                "#1d91c0",
+                "#225ea8",
+                "#253494",
+                "#081d58")
 
 #### import CooperHewitt ####
 font_add(
@@ -487,7 +520,8 @@ irx.summary <- ggplot(
     family = "Helvetica"
   ) +
   # scale_fill_grey(start = 1, end = 0) +
-  scale_fill_brewer(palette = "Greys") +
+  # scale_fill_brewer(palette = "Greys") +
+  scale_fill_manual(values = pal_ostwald2) +
   # scale_fill_manual(values = pal_ostwald[c(3, 4, 6)]) +
   # scale_colour_manual(values = pal_ostwald[c(3, 4, 6)]) +
   scale_y_continuous(
@@ -558,8 +592,8 @@ lig.summary <- ggplot(
     family = "Helvetica"
   ) +
   # scale_fill_grey(start = 1, end = 0) +
-  scale_fill_brewer(palette = "Greys") +
-  # scale_fill_manual(values = pal_ostwald[c(3, 4, 6)]) +
+  # scale_fill_brewer(palette = "Greys") +
+  scale_fill_manual(values = pal_ostwald2) +
   # scale_colour_manual(values = pal_ostwald[c(3, 4, 6)]) +
   scale_y_continuous(
     limits = c(0, NA),
@@ -585,12 +619,14 @@ lig.summary <- ggplot(
 # lig.summary
 # dev.off()
 
+# pdf("test.pdf")
 plot_grid(irx.summary,
   lig.summary,
   labels = c("A", "B"),
   nrow = 1,
   rel_widths = c(1, 0.45)
 )
+# dev.off()
 ```
 
 ## Visual vessel overview
@@ -714,7 +750,7 @@ irx_str <- irx_str %>%
     cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX"))
   )
 
-# pdf("sf_ROIs.pdf")
+pdf("sf_ROIs.pdf")
 ggplot() +
   geom_sf(
     data = irx_str,
@@ -723,11 +759,18 @@ ggplot() +
     fill = NA,
     lwd = 0.1
   ) +
+  # geom_quasirandom(data = irx_str,
+  #                  aes(x = 2, 
+  #                      y = convexity,
+  #                      fill = convexity),
+  #                  shape = 21, 
+  #                  colour = "white") +
   theme_leo() +
   theme(
     text = element_text(family = "Helvetica"),
     legend.position = "none",
     panel.border = element_blank(),
+    # panel.background = element_rect(fill = "black"),
     axis.text = element_blank(),
     axis.title = element_blank(),
     axis.ticks = element_blank()
@@ -735,9 +778,11 @@ ggplot() +
   # scale_colour_distiller(palette = "YlGnBu", direction = -1) +
   # scale_colour_gradientn(colours = pal_wes, trans = "reverse") +
   scale_colour_gradientn(colours = pal_ostwald, trans = "reverse") +
+  # scale_colour_gradientn(colours = pal_flame, trans = "reverse") +
+  # scale_fill_gradientn(colours = pal_flame, trans = "reverse") +
   # scale_colour_viridis_c(direction = 1) +
   facet_grid(cell.type ~ genotype)
-# dev.off()
+dev.off()
 
 # irx_sample <- irx_str %>%
 #   mutate(circularity = ordered(as.character(round(circularity, digits = 1)),
