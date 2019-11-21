@@ -36,3 +36,15 @@ Listed are all scripts that I used to create figures in published or submitted m
 
 #### Figure S5
 GCHO_content.R
+
+
+### Raman Manuscript, Blaschek _et al._, 2019
+
+#### All figures and supplementals
+raman_pubfigs_model.rmd
+
+
+### IRX Manuscript, Ménard _et al._, 2019
+
+#### Figures 2--4 and supplementals
+irx_pub_figs.rmd
