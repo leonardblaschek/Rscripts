@@ -46,5 +46,5 @@ raman_pubfigs_model.rmd
 
 ### IRX Manuscript, Ménard _et al._, 2019
 
-#### Figures 2--4 and supplementals
+#### Figures 2&ndash;4 and supplementals
 irx_pub_figs.rmd
