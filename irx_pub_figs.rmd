@@ -37,12 +37,12 @@ library(wesanderson)
 library(scales)
 
 pal_ostwald_cont <- c("#155DA7", 
-                 "#0A75B9", 
-                 # "#0C89C9", 
-                 "#FED32F", 
-                 # "#F8A63A", 
-                 "#EF663A", 
-                 "#ED4137")
+                      "#0A75B9", 
+                      # "#0C89C9", 
+                      "#FED32F", 
+                      # "#F8A63A", 
+                      "#EF663A", 
+                      "#ED4137")
 pal_ostwald_cont2 <- c("#275d95", 
                        "#286e9b",
                        "#e8c245",
@@ -52,8 +52,8 @@ pal_ostwald_disc <- c("#275d95",
                       "#e8c245", 
                       "#d25952")
 pal_ostwald_disc2 <- c("#8fab1d", 
-                  "#2d7d73", 
-                  "#1d566f")
+                       "#2d7d73", 
+                       "#1d566f")
 pal_flame <- c("#1F265D", 
                "#203F8F", 
                "#404678", 
@@ -71,6 +71,7 @@ pal_ylgnbu <- c("#c7e9b4",
                 "#225ea8",
                 "#253494",
                 "#081d58")
+
 
 #### import CooperHewitt ####
 font_add(
@@ -161,13 +162,11 @@ my_limits <- function(value) {
     c(-10, 120)
   }
 }
+
+ggtext_size <- 6 / (14 / 5)
 ```
 
 ## Wild type vessel overview
-
-Panel **A** is shape data and lignin and cellulose relative to toal AUC,
-
-Panel **B** is lignin composition data, *i.e.* relative to the total lignin peak.
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 #### import and tidy shape data of the vessels from the Raman measurements ####
@@ -367,7 +366,7 @@ rmn_data_corrected <- rmn_data_corrected %>%
     AUC = MESS::auc(wavenumber, intensity),
     scaled = corrected.intensity / AUC,
     scaled_max = case_when(
-      wavenumber == 1625 ~ corrected.intensity / corrected.intensity[wavenumber == 1603],
+      wavenumber == 1664 ~ corrected.intensity / corrected.intensity[wavenumber == 1603],
       TRUE ~ corrected.intensity / (
         corrected.intensity[wavenumber == 1603] + 4.6 * corrected.intensity[wavenumber == 1334]
       )
@@ -403,13 +402,13 @@ rmn_sum <- rmn_data_corrected %>%
   summarise(
     "total_lignin" = scaled[wavenumber == 1603] + 4.6 * scaled[wavenumber == 1334],
     "GOH_rel" = scaled_max[wavenumber == 1664],
-    "GOH_tot" = scaled[wavenumber == 1664],
-    "G_tot" = scaled[wavenumber == 1603],
+    # "GOH_tot" = scaled[wavenumber == 1664],
+    # "G_tot" = scaled[wavenumber == 1603],
     "G_rel" = scaled_max[wavenumber == 1603],
     "S.G" = scaled[wavenumber == 1334] / scaled[wavenumber == 1276],
-    "GCHO.G" = scaled_max[wavenumber == 1625],
+    # "GCHO.G" = scaled_max[wavenumber == 1625],
     "S_rel" = scaled_max[wavenumber == 1334],
-    "S_tot" = scaled[wavenumber == 1334],
+    # "S_tot" = scaled[wavenumber == 1334],
     "cellulose" = scaled[wavenumber == 1099] + scaled[wavenumber == 381],
     "AUC" = mean(AUC)
   )
@@ -419,25 +418,19 @@ rmn_sum <- rmn_data_corrected %>%
 rmn_sum_long <- rmn_sum %>%
   filter(cell.type != "IF" & genotype == "Col-0") %>%
   group_by(cell.type, replicate, technical) %>%
-  transmute(
-    `Lignin band intensity` = total_lignin,
-    `Cellulose band intensity` = cellulose,
-    `Relative G-lignin` = G_rel,
-    `Relative S-lignin` = S_rel,
-    `Relative CHO-lignin` = GCHO.G
-  ) %>%
+  select(-genotype) %>%
   left_join(rmn_irx %>%
-    filter(genotype == "Col-0") %>%
-    select(
-      cell.type,
-      replicate,
-      technical,
-      Area,
-      # Perim.,
-      n_v,
-      n_p,
-      n_f
-    )) %>%
+              filter(genotype == "Col-0") %>%
+              select(
+                cell.type,
+                replicate,
+                technical,
+                Area,
+                # Perim.,
+                n_v,
+                n_p,
+                n_f
+              )) %>%
   pivot_longer(
     cols = -c(cell.type:technical),
     names_to = "variable",
@@ -445,60 +438,50 @@ rmn_sum_long <- rmn_sum %>%
   ) %>%
   ungroup() %>%
   mutate(
-    variable = ordered(recode(variable,
-      "n_v" = "Adjacent vessels",
-      "n_f" = "Adjacent fibres",
-      "n_p" = "Adjacent parenchyma",
-      # "Perim." = "Perimeter"
-    ),
-    levels = c(
-      "Area",
-      # "Perimeter",
-      "Adjacent vessels",
-      "Adjacent fibres",
-      "Adjacent parenchyma",
-      "Cellulose band intensity",
-      "Lignin band intensity",
-      "Relative G-lignin",
-      "Relative S-lignin",
-      "Relative CHO-lignin"
-    )
-    ),
+    # variable = ordered(recode(variable,
+    #                           "n_v" = "Adjacent vessels",
+    #                           "n_f" = "Adjacent fibres",
+    #                           "n_p" = "Adjacent parenchyma",
+    #                           # "Perim." = "Perimeter"
+    # ),
+    # levels = c(
+    #   "Area",
+    #   # "Perimeter",
+    #   "Adjacent vessels",
+    #   "Adjacent fibres",
+    #   "Adjacent parenchyma",
+    #   "Cellulose band intensity",
+    #   "Lignin band intensity",
+    #   "Relative G-lignin",
+    #   "Relative S-lignin",
+    #   "Relative CHO-lignin"
+    # )
+    # ),
     cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX"))
-  )
+  ) 
 
-irx.summary.letters <- letter_groups(filter(rmn_sum_long, variable %in% c(
-  "Area",
-  "Adjacent vessels",
-  "Adjacent fibres",
-  "Adjacent parenchyma",
-  "Cellulose band intensity",
-  "Lignin band intensity"
-)),
+rmn_adj <- rmn_sum_long %>%
+  filter(variable %in% c("n_v", "n_f", "n_p")) %>%
+  mutate(variable = ordered(as.factor(variable), levels = c("n_p", "n_f", "n_v")))
+
+rmn_adj_letters <- letter_groups(rmn_adj,
 value,
 cell.type,
 "tukey",
 variable,
 print_position = "below",
-print_adjust = 0.75
-)
+print_adjust = 0.5
+) %>%
+  mutate(cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX")))
 
-irx.summary <- ggplot(
-  data =
-    filter(rmn_sum_long, variable %in% c(
-      "Area",
-      "Adjacent vessels",
-      "Adjacent fibres",
-      "Adjacent parenchyma",
-      "Cellulose band intensity",
-      "Lignin band intensity"
-    )),
-  aes(x = cell.type, y = value)
+rmn_adj_box <- ggplot(
+  data = rmn_adj,
+  aes(x = variable, y = value * 100)
 ) +
   geom_quasirandom(
-    aes(fill = cell.type,
-        # colour = cell.type
-        ),
+    aes(group = interaction(cell.type, variable),
+        fill = cell.type),
+    dodge.width = 0.6,
     shape = 21,
     # width = 0.1,
     # colour = NA,
@@ -506,127 +489,164 @@ irx.summary <- ggplot(
     size = 2,
     stroke = 0.25
   ) +
-  geom_boxplot(
-    fill = rgb(1, 1, 1, 0.75),
-    outlier.alpha = 0,
-    lwd = 0.25,
-    fatten = 1,
-    width = 0.25
-  ) +
+  # geom_boxplot(
+  #   aes(group = interaction(cell.type, variable), fill = cell.type),
+  #   # fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   position = position_dodge2(width = 1),
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_violin(aes(group = interaction(cell.type, variable),
+                  # fill = cell.type
+                  ),
+              draw_quantiles = 0.5,
+              fill = "white",
+              colour = "black",
+              alpha = 0.85,
+              width = 0.2,
+              position = position_dodge(width = 0.6),
+              size = 0.2,
+              scale = "width"
+              ) +
   geom_text(
-    data = irx.summary.letters,
-    aes(label = groups),
+    data = rmn_adj_letters,
+    aes(group = interaction(cell.type, variable),
+        label = groups),
     size = 6 / (14 / 5),
-    family = "Helvetica"
+    family = "Helvetica",
+    position = position_dodge(width = 0.6)
   ) +
+  annotate("text",
+           x = c(0.8, 1, 1.2),
+           y = c(100, 90, 25),
+           label = c("PX", "PMX", "SMX"),
+           family = "Helvetica",
+           size = ggtext_size) +
+  annotate("segment",
+    x = c(0.8, 1, 1.2),
+    xend = c(0.8, 1, 1.2),
+    y = c(95, 85, 20),
+    yend = c(85, 75, 5),
+    colour = "black",
+    size = 0.2
+  ) +
+  scale_x_discrete(labels = c("Parenchyma", "Fibres", "Vessels")) +
   # scale_fill_grey(start = 1, end = 0) +
   # scale_fill_brewer(palette = "Greys") +
-  scale_fill_manual(values = pal_ostwald2) +
+  scale_fill_manual(values = pal_flame_disc) +
   # scale_fill_manual(values = pal_ostwald[c(3, 4, 6)]) +
   # scale_colour_manual(values = pal_ostwald[c(3, 4, 6)]) +
-  scale_y_continuous(
-    limits = my_limits,
-    # expand = expand_scale(mult = c(0.2, 0.05)),
-    # breaks = pretty_breaks(n = 4, min.n = 4)
-    breaks = my_breaks
-  ) +
   labs(
-    x = "",
-    y = ""
+    x = "Neighbouring cell type",
+    y = "Cell walls adjacent [%]"
   ) +
   theme_leo() +
   theme(
     text = element_text(family = "Helvetica"),
     legend.position = "none"
-  ) +
-  facet_wrap(~variable, ncol = 2, scales = "free_y")
+  ) 
 
-# pdf("irx_summary.pdf", width = 3, height = 3)
-# irx.summary
-# dev.off()
+pdf("rmn_adj_box.pdf", width = 9 / 2.54, height = 1.5)
+rmn_adj_box
+dev.off()
 
-lig.summary.letters <- letter_groups(filter(rmn_sum_long, variable %in% c(
-  "Relative G-lignin",
-  "Relative S-lignin",
-  "Relative CHO-lignin"
-)),
-value,
-cell.type,
-"tukey",
-variable,
-print_position = "below",
-print_adjust = 1.25
-)
+rmn_area_letters <- letter_groups(rmn_sum_long %>% filter(variable == "Area"),
+                                 value,
+                                 cell.type,
+                                 "tukey",
+                                 print_position = "below",
+                                 print_adjust = 0.5
+) %>%
+  mutate(cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX")))
 
-lig.summary <- ggplot(
-  data =
-    filter(rmn_sum_long, variable %in% c(
-      "Relative G-lignin",
-      "Relative S-lignin",
-      "Relative CHO-lignin"
-    )),
+rmn_violin <- function(x) { 
+  ggplot(
+  data = rmn_sum_long %>% filter(variable == x),
   aes(x = cell.type, y = value)
 ) +
   geom_quasirandom(
-    aes(fill = cell.type,
-        # colour = cell.type
-        ),
+    aes(fill = cell.type),
+    dodge.width = 0.6,
     shape = 21,
     # width = 0.1,
     # colour = NA,
     alpha = 0.75,
     size = 2,
-    stroke = 0.25
+    stroke = 0.2
   ) +
-  geom_boxplot(
-    fill = rgb(1, 1, 1, 0.75),
-    outlier.alpha = 0,
-    lwd = 0.25,
-    fatten = 1,
-    width = 0.25
-  ) +
+  # geom_boxplot(
+  #   aes(group = interaction(cell.type, variable), fill = cell.type),
+  #   # fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   position = position_dodge2(width = 1),
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+geom_violin(aes(group = cell.type,
+                # fill = cell.type
+),
+draw_quantiles = 0.5,
+fill = "white",
+colour = "black",
+alpha = 0.85,
+width = 0.2,
+position = position_dodge(width = 0.6),
+size = 0.2,
+scale = "width"
+) +
   geom_text(
-    data = lig.summary.letters,
+    data = rmn_area_letters,
     aes(label = groups),
-    size = 6 / (14 / 5),
-    family = "Helvetica"
+    size = ggtext_size,
+    family = "Helvetica",
+    position = position_dodge(width = 0.6)
   ) +
-  # scale_fill_grey(start = 1, end = 0) +
-  # scale_fill_brewer(palette = "Greys") +
-  scale_fill_manual(values = pal_ostwald2) +
-  # scale_colour_manual(values = pal_ostwald[c(3, 4, 6)]) +
-  scale_y_continuous(
-    limits = c(0, NA),
-    # expand = expand_scale(mult = c(0.2, 0.05)),
-    # breaks = function(value){seq(floor(min(value)), ceiling(max(value)), length = 4)}
-    # breaks = equal_breaks(n = 4, s = 0.05)
-    breaks = pretty_breaks(n = 4)
-  ) +
-  labs(
-    x = "",
-    y = ""
-  ) +
+  scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
+  scale_fill_manual(values = pal_flame_disc) +
   theme_leo() +
   theme(
     text = element_text(family = "Helvetica"),
     legend.position = "none",
-    axis.text.y = element_blank(),
-    axis.ticks.y = element_blank()
-  ) +
-  facet_wrap(~variable, ncol = 1, scales = "free_y")
+  ) 
+}
 
-# pdf("lig_summary.pdf", width = 1.5, height = 3)
-# lig.summary
-# dev.off()
+rmn_area <- rmn_violin("Area") +
+  labs(
+    x = "",
+    y = expression(paste("Area [µm"^2,"]"))
+  )
 
-# pdf("test.pdf")
-plot_grid(irx.summary,
-  lig.summary,
-  labels = c("A", "B"),
+rmn_lig <- rmn_violin("total_lignin") +
+  labs(
+    x = "",
+    y = expression(paste("Lignin band intensity [AU]"))
+  )
+
+rmn_cellu <- rmn_violin("cellulose") +
+  labs(
+    x = "",
+    y = expression(paste("Cellulose band intensity [AU]"))
+  )
+
+rmn_area
+
+pdf("IRX_Figure2.pdf")
+plot_grid(rmn_area,
+  rmn_lig,
+  rmn_cellu,
+  labels = c("A", "B", "C"),
   nrow = 1,
-  rel_widths = c(1, 0.45)
+  label_size = 10,
+  label_fontfamily = "Helvetica"
 )
-# dev.off()
+dev.off()
 ```
 
 ## Visual vessel overview
@@ -1052,12 +1072,12 @@ TM.multigroup <- function(x) {
       Perim. +
       # S.G +
       # G_tot +
-      # GOH_rel +
-      # G_rel +
+      GOH_rel +
+      G_rel +
       # GOH_tot +
       S_rel +
       # S_tot +
-      GCHO.G +
+      # GCHO.G +
       total_lignin,
     data = filter(drop_na(raman.irx), cell.type == x)
     ),
@@ -1154,25 +1174,25 @@ plot(TM.multigroup("SMX"))
 ```
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-raman.irx.scaled <- raman.irx %>%
-  select(-c(1:4)) %>%
-  as.matrix() %>%
-  scale() %>%
-  as_tibble() %>%
-  cbind(raman.irx[, c(1:4)])
-
-model <- lme4::lmer(convexity ~
-    n_v +
-      mean.OD1 +
-      Perim. +
-      S_rel +
-      GCHO.G +
-      total_lignin +
-      (1 + Perim.|cell.type),
-    data = raman.irx.scaled)
-
-summary(model)
-
-MuMIn::r.squaredGLMM(model)
-reghelper::beta(model)
+# raman.irx.scaled <- raman.irx %>%
+#   select(-c(1:4)) %>%
+#   as.matrix() %>%
+#   scale() %>%
+#   as_tibble() %>%
+#   cbind(raman.irx[, c(1:4)])
+# 
+# model <- lme4::lmer(convexity ~
+#     n_v +
+#       mean.OD1 +
+#       Perim. +
+#       S_rel +
+#       GCHO.G +
+#       total_lignin +
+#       (1 + Perim.|cell.type),
+#     data = raman.irx.scaled)
+# 
+# summary(model)
+# 
+# MuMIn::r.squaredGLMM(model)
+# reghelper::beta(model)
 ```

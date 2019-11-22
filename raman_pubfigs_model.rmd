@@ -54,7 +54,7 @@ font_add(
 showtext_auto()
 
 #generating plot theme
-theme_leo <- function(base_size = 6,
+theme_leo <- function(base_size = 8,
                       base_family = "Helvetica") {
   theme_minimal(
     base_size = base_size,
@@ -68,13 +68,13 @@ theme_leo <- function(base_size = 6,
         color = "black"
       ),
       axis.text.x = element_text(
-        size = 6,
+        size = 8,
         colour = "black", # flipped coords
         margin = margin(1, 1, 1, 1)
       ),
       axis.text.y = element_text(
         colour = "black",
-        size = 6,
+        size = 8,
         angle = 0,
         vjust = 0.5,
         hjust = 1,
@@ -82,14 +82,14 @@ theme_leo <- function(base_size = 6,
       ),
       axis.title = element_text(
         colour = "black",
-        size = 6
+        size = 8
       ),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
       panel.border = element_rect(fill = NA, color = "black", size = 0.2),
       panel.spacing = unit(1.5, "mm"),
       legend.position = "none",
-      legend.text = element_text(size = 6),
+      legend.text = element_text(size = 8),
       legend.key.height = unit(4, "mm"),
       legend.margin = unit(c(0, 0, 0, 0), "mm"),
       plot.margin = unit(c(2, 2, 2, 2), "mm"),
@@ -113,10 +113,11 @@ scale_max <- function(x) {
 #   x / max(x[wavenumber > 1590 & wavenumber < 1610])
 # }
 
-# JXB dimensions
-twocol <- 18 / 2.54
-onecol <- 9 / 2.54
-text6 <- 6 / (14 / 5)
+# Physiologia dimensions
+twocol <- 16.6 / 2.54
+onehalfcol <- 12.5 / 2.54
+onecol <- 8 / 2.54
+ggtext_size <- 8 / (14 / 5)
 ```
 
 ### Figure 1 -- spectra of the monomers and DHPs
@@ -166,8 +167,11 @@ rmn_models <- rmn_models %>%
   mutate(
     AUC = MESS::auc(wavenumber, intensity),
     # AUC_1600_prop = MESS::auc(wavenumber, intensity, from = 1580, to = 1615) / AUC,
+    # scaled = intensity
     scaled = intensity / AUC
-  )
+  ) %>%
+  ungroup() %>%
+  mutate(scaled = scale_max(scaled))
 
 rmn_models <- rmn_models %>%
   ungroup() %>%
@@ -184,7 +188,9 @@ rmn_models <- rmn_models %>%
         "mono-s-cho",
         "mono-s-cooh",
         "mono-h-cooh",
-        "mono-c-cooh"
+        "mono-c-cooh",
+        "mono-gsat-oh",
+        "mono-5h-cooh"
       ))
   ), gamma = ordered(gamma, levels = rev(c("oh", "cho", "cooh"))))
 
@@ -192,7 +198,7 @@ rmn_models <- rmn_models %>%
 spectra_plot <- ggplot(filter(rmn_models, unit %in% c("G", "S"))) +
   geom_text_repel(
     data = tibble(
-      wavenumber = rep(c(1656, 1620, 1600, 1335, 1276), 2),
+      wavenumber = rep(c(1656, 1620, 1600, 1334, 1276), 2),
       unit = rep(c("G", "S"), each = 5, len = 10),
       gamma = rep("COOH", 10),
       scaled = rep(1, 10)
@@ -210,11 +216,11 @@ spectra_plot <- ggplot(filter(rmn_models, unit %in% c("G", "S"))) +
     nudge_y = -0.25,
     segment.colour = "grey85",
     family = "Helvetica",
-    size = text6
+    size = ggtext_size
   ) +
   annotate("segment",
-    x = c(1656, 1620, 1600, 1335, 1276),
-    xend = c(1656, 1620, 1600, 1335, 1276),
+    x = c(1656, 1620, 1600, 1334, 1276),
+    xend = c(1656, 1620, 1600, 1334, 1276),
     y = 1,
     yend = Inf,
     colour = "grey85",
@@ -231,7 +237,7 @@ spectra_plot <- ggplot(filter(rmn_models, unit %in% c("G", "S"))) +
   size = 0.2,
   # colour = NA,
   fill = NA,
-  scale = 100,
+  scale = 2.5,
   min_height = -0.002
   ) +
   scale_fill_manual(values = c("poly" = "#d73027", "mono" = "#4575b4")) +
@@ -272,15 +278,17 @@ peak_pres <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/synth_peak_presence
         rev(c(
           "poly-g-oh",
           "mono-g-oh",
+          "mono-gsat-oh",
           "poly-g-cho",
           "mono-g-cho",
           "mono-g-cooh",
+          "mono-5h-cooh",
           "mono-s-oh",
           "poly-s-cho",
           "mono-s-cho",
           "mono-s-cooh",
-          "mono-h-cooh",
-          "mono-c-cooh"
+          "mono-c-cooh",
+          "mono-h-cooh"
         ))
     ),
     unit = recode(unit,
@@ -335,15 +343,17 @@ peak_upset <- ggplot(peak_pres) +
   scale_y_discrete(labels = rev(c(
     "G-OH",
     "G-OH",
+    expression(paste("G"[sat],"-OH")),
     "G-CHO",
     "G-CHO",
     "G-COOH",
+    "5H-COOH",
     "S-OH",
     "S-CHO",
     "S-CHO",
     "S-COOH",
-    "H-COOH",
-    "C-COOH"
+    "C-COOH",
+    "H-COOH"
   ))) +
   scale_colour_manual(values = c(
     "poly" = "#d73027",
@@ -375,7 +385,7 @@ plot_grid(spectra_plot,
   peak_upset,
   labels = c("A", "B"),
   nrow = 2,
-  rel_heights = c(1, 0.4),
+  rel_heights = c(1, 0.6),
   label_size = 10,
   label_fontfamily = "Helvetica",
   label_x = - 0.005,
@@ -531,7 +541,7 @@ spectra <- ggplot(data = rmn_data_all_avg) +
     hjust = 0,
     nudge_y = -0.1,
     family = "Helvetica",
-    size = text6
+    size = ggtext_size
   ) +
   # geom_text(
   #   data = filter(rmn_data_all_avg, wavenumber == 403), aes(
@@ -545,7 +555,7 @@ spectra <- ggplot(data = rmn_data_all_avg) +
   #   hjust = 1,
   #   nudge_y = -0.1,
   #   family = "Helvetica",
-  #   size = text6
+  #   size = ggtext_size
   # ) +
   scale_fill_viridis_d() +
   scale_x_reverse() +
@@ -634,11 +644,11 @@ pca <- ggplot(gg_pca, aes(x = PC1, y = PC2, fill = cell.type)) +
     shape = 21
   ) +
   annotate("text",
-           x = c(-35, 18, 20, 5),
-           y = c(18, 20, -5, -25),
-           label = c("Epidermis", "Vascular bundle", "Interfascicular\nfibre", "Pith"),
+           x = c(-35, 18, 7, -25),
+           y = c(18, 25, -17, -25),
+           label = c("Epidermis", "Vascular\nbundle", "Interfascicular\nfibre", "Pith"),
            family = "Helvetica",
-           size = text6,
+           size = ggtext_size,
            hjust = 0) +
   labs(
     x = "PC 1 [36.4 %]",
@@ -984,21 +994,22 @@ ggplot(data = filter(rmn_data_auc, cell.type == x), aes(x = genotype, y = AUC / 
   ) +
   scale_fill_viridis_d() +
   theme_leo() +
-  labs(y = expression(paste("AUC per 490 µm"^2))) +
+  # labs(y = expression(paste("AUC per 490 µm"^2))) +
+  labs(y = "AUC") +
   scale_y_continuous(limits = c(0, 500), breaks = c(0, 200, 400)) +
   scale_x_discrete(expand = expand_scale(mult = c(0.09, 0.135))) +
   theme(
     axis.text.y = element_blank(),
     axis.title.y = element_blank(),
     axis.ticks.y = element_blank(),
-    plot.margin = unit(c(2, 0.85, 2, 0), "mm"),
+    plot.margin = unit(c(2, 0, 2, 0), "mm"),
     strip.text = element_blank()
   ) +
   geom_text(
     data = mutant_ridge_letters,
     aes(label = groups),
     family = "Helvetica",
-    size = text6
+    size = ggtext_size
   ) +
   coord_flip() +
   facet_wrap(~cell.type)
@@ -1038,7 +1049,7 @@ spectra_IF <- spectra("Interfascicular fibre") +
     nudge_y = 1,
     segment.colour = "black",
     family = "Helvetica",
-    size = text6
+    size = ggtext_size
   )
   
 spectra_VB <- spectra("Vascular bundle") +
@@ -1067,7 +1078,7 @@ spectra_VB <- spectra("Vascular bundle") +
     nudge_y = 1,
     segment.colour = "black",
     family = "Helvetica",
-    size = text6
+    size = ggtext_size
   )
 
 WT_IF <-
@@ -1093,7 +1104,7 @@ WT_VB,
 cl_IF,
 cl_VB,
 ncol = 1,
-label_size = 6,
+label_size = 8,
 label_fontfamily = "Helvetica",
 label_fontface = 3,
 label_x = 0.975,
@@ -1121,7 +1132,7 @@ pdf("Raman_figure3.pdf", width = twocol, height = 4)
 plot_grid(left,
           right,
           ncol = 2,
-          rel_widths = c(0.1575, 1),
+          rel_widths = c(0.175, 1),
           label_size = 10,
           label_fontfamily = "Helvetica",
           labels = c("A", "B"))
@@ -1306,13 +1317,13 @@ heatmap <- ggplot(loadings_long) +
   theme(axis.text = element_blank(),
         axis.title.x = element_blank(),
         axis.ticks = element_blank(),
-        legend.position = c(0.855, 0.885),
+        legend.position = c(0.8075, 0.865),
         legend.background = element_rect(fill = rgb(1, 1, 1, 0.75),
                                      colour = NA),
         legend.direction = "horizontal",
         legend.key.width = unit(4, "mm"),
         legend.key.height = unit(4, "mm"),
-    plot.margin = unit(c(2, 2, 0, 2), "mm")
+    plot.margin = unit(c(2, 0, 0, 3), "mm")
     )
 
 # pdf("heatmap.pdf")
@@ -1357,7 +1368,7 @@ loadings_avg <- ggplot(data = rmn_data_loading, aes(
     nudge_y = 0.0025,
     family = "Helvetica",
     segment.colour = "black",
-    size = text6,
+    size = ggtext_size,
     label.size = 0.2,
     label.r = 0,
     alpha = 0.95,
@@ -1365,7 +1376,7 @@ loadings_avg <- ggplot(data = rmn_data_loading, aes(
     segment.size = 0.2
   ) +
   theme(
-    legend.position = c(0.8375, 0.935),
+    legend.position = c(0.785, 0.92),
     legend.background = element_rect(fill = rgb(1, 1, 1, 0.75),
                                      colour = NA),
     legend.direction = "horizontal",
@@ -1375,7 +1386,7 @@ loadings_avg <- ggplot(data = rmn_data_loading, aes(
     axis.text.y = element_blank(),
     axis.ticks.y = element_blank(),
     # axis.title.x = element_blank(),
-    # plot.margin = unit(c(0, 2, 2, 2), "mm")
+    plot.margin = unit(c(2, 0, 2, 3), "mm")
   ) 
 
 # pdf("heatmap_avg.pdf")
@@ -1412,6 +1423,7 @@ py$`G-OH` <- ifelse(
     py$X17^2 + py$X19^2 + py$X23^2
   )
 )
+py$`S-OH` <- py$X33
 py$H <-
   ifelse(py$variable == "mean", rowSums(py[, 7:9]), sqrt(rowSums(py[, 7:9]^
     2)))
@@ -1440,7 +1452,7 @@ py$Lignin <-
     2)))
 
 py <- py %>%
-  select(genotype, variable, G, H, `G-OH`, S, CHO) %>%
+  select(genotype, variable, G, H, `G-OH`, Lignin, S, `S-OH`, CHO) %>%
   pivot_longer(-c(genotype, variable), names_to = "unit", values_to = "value")
 
 py_rmn <- rmn_data_avg %>%
@@ -1453,7 +1465,9 @@ py_rmn <- rmn_data_avg %>%
 # corrplot(cor(spread(py_rmn, key = wavenumber, value = total.mean.scaled)[,-1]))
 # dev.off()
 
-py_rmn_corr <- left_join(py, py_rmn)
+py_rmn_corr <- left_join(py, py_rmn) %>%
+  ungroup() %>%
+  mutate(unit = ordered(unit, levels = c("Lignin", "G", "G-OH", "S", "S-OH", "H", "CHO")))
 
 
 py_rmn_corr_mat <- py_rmn_corr %>%
@@ -1507,7 +1521,7 @@ total_corr <- ggplot(data = py_rmn_corr) +
     legend.position = "bottom",
     axis.ticks = element_blank(),
     axis.text = element_blank(),
-    strip.text = element_text(size = 6),
+    strip.text = element_text(size = 8),
     legend.key.width = unit(4, "mm")
   ) +
   facet_grid(reorder(wavenumber, as.numeric(wavenumber)) ~ unit) 
@@ -1532,6 +1546,18 @@ py$GOH <- ifelse(
   py$X17 + py$X19 + py$X23,
   sqrt(py$X17^2 + py$X19^2 + py$X23^2)
 )
+py$`S-OH` <- py$X33
+py$`S-CHO` <- py$X32
+py$`S-CHOs` <- ifelse(
+  py$variable == "mean",
+  py$X32 + py$X30 + py$X29,
+  sqrt(py$X32^2 + py$X30^2 + py$X29^2)
+)
+py$`SnoCHO` <- ifelse(
+  py$variable == "mean",
+  py$X26 + py$X27 + py$X31 + py$X28 + py$X33,
+  sqrt(py$X27^2 + py$X31^2 + py$X28^2 + py$X26^2 + py$X33^2)
+)
 py$GCHO <- ifelse(
   py$variable == "mean",
   py$X18 + py$X22,
@@ -1553,6 +1579,9 @@ py$G <-
     2)))
 py$S <-
   ifelse(py$variable == "mean", rowSums(py[, 21:28]), sqrt(rowSums(py[, 21:28]^
+    2)))
+py$SnoOH <-
+  ifelse(py$variable == "mean", rowSums(py[, 21:27]), sqrt(rowSums(py[, 21:27]^
     2)))
 py$Lignin <-
   ifelse(py$variable == "mean", rowSums(py[, 3:28]), sqrt(rowSums(py[, 3:28]^
@@ -1586,7 +1615,8 @@ py_rmn <- rmn_data_corrected %>%
     "1625/1603" = `1625` / `1603`,
     "1625/1664" = `1625` / `1664`,
     "1625/lig" = `1625` / ((`1603` / 4.6) + `1334`),
-    "1625" = `1625`
+    "1625" = `1625`,
+    "1334" = `1334`
   ) %>%
   pivot_longer(cols = -c(genotype, cell.type, replicate, technical), names_to = "wavenumber", values_to = "scaled") %>%
   group_by(genotype, wavenumber, cell.type) %>%
@@ -1679,7 +1709,7 @@ ggplot(data = filter(py_rmn_corr, unit == x & wavenumber == y & genotype != z),
            label = paste("R² = ",round(regr$adj.r.squared, digits = 2)),
            x = 0,
            y = 0,
-           size = text6,
+           size = ggtext_size,
            family = "Helvetica",
            hjust = 0,
            vjust = 0,
@@ -1687,7 +1717,7 @@ ggplot(data = filter(py_rmn_corr, unit == x & wavenumber == y & genotype != z),
   theme_leo() +
   theme(axis.text.y = element_text(angle = 90,
                                    hjust = 0.5),
-        plot.margin = unit(c(4, 2, 4, 2), "mm"))
+        plot.margin = unit(c(4, 2, 4, 4), "mm"))
   # geom_label_repel(aes(label = genotype),
   #                  size = 1,
   #                  segment.size = 0.2)
@@ -1697,7 +1727,7 @@ ggplot(data = filter(py_rmn_corr, unit == x & wavenumber == y & genotype != z),
 py_plot_lig <- py_plot("Lignin", "1603/4.6 + 1334") +
   labs(x = expression(paste("Total lignin * total pyrolysate"^-1)),
     y = expression(paste("CLB [AU * AUC"^-1,"]"))) +
-  scale_y_continuous(breaks = c(0, 0.0025, 0.005))
+  scale_y_continuous(breaks = c(0, 0.0025, 0.005), labels = c("0", "0.025", "0.005"))
 
 py_plot_sg <- py_plot("S/G", "1334/1276") +
   labs(x = expression(paste("Total S-lignin * total G-lignin"^-1)),
@@ -1732,14 +1762,38 @@ py_plot_goh <- py_plot("GOH/G", "1664/1603") +
     y = expression(paste("1664 cm"^-1,"/ 1603 cm"^-1))) 
   # scale_y_continuous(breaks = c(0, 1, 2, 3))
 
+py_plot_snooh <- py_plot("SnoOH", "1334") +
+  labs(x = expression(paste("S-lignin "-" S-OH")),
+    y = expression(paste("1334 cm"^-1))) +
+  scale_y_continuous(breaks = c(0, 0.0015, 0.003), labels = c("0", "0.0015", "0.003")) +
+  scale_x_continuous(breaks = c(0, 0.01, 0.02), labels = c("0", "0.01", "0.02"))
 
-pdf("Raman_figure5.pdf", width = onecol, height = 6)
+py_plot_soh <- py_plot("S-OH", "1334") +
+  labs(x = expression(paste("S-OH")),
+    y = expression(paste("1334 cm"^-1))) +
+  scale_y_continuous(breaks = c(0, 0.0015, 0.003), labels = c("0", "0.0015", "0.003")) +
+  scale_x_continuous(breaks = c(0, 0.005, 0.01), labels = c("0", "0.005", "0.01"))
+
+py_plot_scho <- py_plot("S-CHO", "1334") +
+  labs(x = expression(paste("S-CHO")),
+    y = expression(paste("1334 cm"^-1))) 
+  # scale_y_continuous(breaks = c(0, 0.0015, 0.003), labels = c("0", "0.0015", "0.003")) +
+  # scale_x_continuous(breaks = c(0, 0.005, 0.01), labels = c("0", "0.005", "0.01"))
+
+py_plot_snocho <- py_plot("SnoCHO", "1334") +
+  labs(x = expression(paste("S"-"S-CHO")),
+    y = expression(paste("1334 cm"^-1))) 
+
+
+pdf("Raman_figure5.pdf", width = twocol, height = 5)
 right <- plot_grid(py_plot_lig, 
                     py_plot_sg, 
                     py_plot_cho,
-                   py_plot_goh,
-  ncol = 1,
-  labels = c("", "C", "D", "E"),
+                   py_plot_soh,
+                   py_plot_snocho,
+                   py_plot_snooh,
+  ncol = 2,
+  labels = c("", "C", "D", "E", "F", "G"),
   label_size = 10,
   label_fontfamily = "Helvetica"
   # label_x = -0.02,
@@ -1752,7 +1806,7 @@ plot_grid(plot_grid(total_corr),
   label_fontfamily = "Helvetica",
   # label_x = -0.005,
   # label_y = 1.01,
-  rel_widths = c(0.7, 0.5),
+  rel_widths = c(1,1.2),
   ncol = 2,
   align = "hv",
   axis = "t"
@@ -1808,99 +1862,99 @@ Plotted difference from the WT $\Delta x_{z} = x_{z} - x_{z}^{WT}$
 
 #### AUC
 
-```{r change correlations absolute, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
 
-rmn_data_corr <- rmn_data_corrected %>%
-  ungroup() %>%
-  group_by(genotype, cell.type, replicate, technical) %>%
-  summarise(AUC = mean(AUC, na.rm = T)) %>%
-  ungroup() %>%
-  mutate(scaled.z = scale_z(AUC))
-
-rmn_data_corr <- rmn_data_corr %>%
-  left_join(filter(rmn_data_corr, genotype == "Col-0") %>%
-    ungroup() %>%
-    select(cell.type, scaled.z) %>%
-    group_by(cell.type) %>%
-    summarise(scaled.WT = mean(scaled.z))) %>%
-  mutate(diff = scaled.z - scaled.WT) %>%
-  group_by(genotype, cell.type) %>%
-  summarise(AUC.mean = mean(diff, na.rm = T),
-            AUC.sd = sd(diff, na.rm = T)) %>%
-  pivot_wider(id_cols = genotype, names_from = cell.type, values_from = c(AUC.mean, AUC.sd))
-
-pdf("AUC_celltypes.pdf")
-ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
-  annotate("rect",
-    xmin = -Inf,
-    xmax = 0,
-    ymin = -Inf,
-    ymax = 0,
-    fill = "grey95"
-  ) +
-  annotate("rect",
-    xmin = Inf,
-    xmax = 0,
-    ymin = Inf,
-    ymax = 0,
-    fill = "grey95"
-  ) +
-  geom_abline(slope = 1, intercept = 0, linetype = 2, size = 0.2) +
-  geom_rect(aes(xmin = AUC.mean_VB - AUC.sd_VB,
-                xmax = AUC.mean_VB + AUC.sd_VB,
-                ymin = AUC.mean_IF - AUC.sd_IF,
-                ymax = AUC.mean_IF + AUC.sd_IF)) +
-  # geom_point(aes(
-  #   x = VB,
-  #   y = IF,
-  #   # fill = assigned.structure,
-  #   # colour = assigned.structure
-  # ),
-  # size = 1,
-  # shape = 16,
-  # alpha = 0.5
-  # ) +
-  # stat_ellipse(aes(
-  #   x = VB,
-  #   y = IF,
-  #   # fill = assigned.structure,
-  # ), geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
-  # stat_ellipse(aes(
-  #   x = VB,
-  #   y = IF,
-  #   # colour = assigned.structure,
-  # ), alpha = 0.85, type = "t", level = 0.4) +
-  # geom_label_repel(data = filter(rmn_data_corr,
-  #                                IF - PMX > 1 | IF -PMX < -1),
-  #                  aes(x = PMX,
-  #                      y = IF,
-  #                      label = wavenumber),
-  #   nudge_y = 0.25,
-  #   family = "Helvetica",
-  #   segment.colour = "red",
-  #   size = 2.5
-  # ) +
-  theme_leo() +
-  theme(
-    axis.title = element_text(),
-    axis.text.x = element_text(angle = 0),
-    legend.position = c(1.005, 0),
-    legend.justification = c(0,0),
-    legend.direction = "vertical",
-    legend.key.width = unit(4, "mm"),
-    strip.text = element_text(size = 8),
-    # legend.title = element_blank(),
-    plot.margin = unit(c(2, 18, 2, 2), "mm")
-  ) +
-  labs(
-    x = "Change in the vascular bundle",
-    y = "Change in the interfascicular fibres"
-  ) +
-  scale_x_continuous(limits = c(-4, 4)) +
-  scale_y_continuous(limits = c(-4, 4)) +
-  coord_fixed() +
-  facet_wrap(~genotype, ncol = 5)
-dev.off()
+# rmn_data_corr <- rmn_data_corrected %>%
+#   ungroup() %>%
+#   group_by(genotype, cell.type, replicate, technical) %>%
+#   summarise(AUC = mean(AUC, na.rm = T)) %>%
+#   ungroup() %>%
+#   mutate(scaled.z = scale_z(AUC))
+# 
+# rmn_data_corr <- rmn_data_corr %>%
+#   left_join(filter(rmn_data_corr, genotype == "Col-0") %>%
+#     ungroup() %>%
+#     select(cell.type, scaled.z) %>%
+#     group_by(cell.type) %>%
+#     summarise(scaled.WT = mean(scaled.z))) %>%
+#   mutate(diff = scaled.z - scaled.WT) %>%
+#   group_by(genotype, cell.type) %>%
+#   summarise(AUC.mean = mean(diff, na.rm = T),
+#             AUC.sd = sd(diff, na.rm = T)) %>%
+#   pivot_wider(id_cols = genotype, names_from = cell.type, values_from = c(AUC.mean, AUC.sd))
+# 
+# pdf("AUC_celltypes.pdf")
+# ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
+#   annotate("rect",
+#     xmin = -Inf,
+#     xmax = 0,
+#     ymin = -Inf,
+#     ymax = 0,
+#     fill = "grey95"
+#   ) +
+#   annotate("rect",
+#     xmin = Inf,
+#     xmax = 0,
+#     ymin = Inf,
+#     ymax = 0,
+#     fill = "grey95"
+#   ) +
+#   geom_abline(slope = 1, intercept = 0, linetype = 2, size = 0.2) +
+#   geom_rect(aes(xmin = AUC.mean_VB - AUC.sd_VB,
+#                 xmax = AUC.mean_VB + AUC.sd_VB,
+#                 ymin = AUC.mean_IF - AUC.sd_IF,
+#                 ymax = AUC.mean_IF + AUC.sd_IF)) +
+#   # geom_point(aes(
+#   #   x = VB,
+#   #   y = IF,
+#   #   # fill = assigned.structure,
+#   #   # colour = assigned.structure
+#   # ),
+#   # size = 1,
+#   # shape = 16,
+#   # alpha = 0.5
+#   # ) +
+#   # stat_ellipse(aes(
+#   #   x = VB,
+#   #   y = IF,
+#   #   # fill = assigned.structure,
+#   # ), geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
+#   # stat_ellipse(aes(
+#   #   x = VB,
+#   #   y = IF,
+#   #   # colour = assigned.structure,
+#   # ), alpha = 0.85, type = "t", level = 0.4) +
+#   # geom_label_repel(data = filter(rmn_data_corr,
+#   #                                IF - PMX > 1 | IF -PMX < -1),
+#   #                  aes(x = PMX,
+#   #                      y = IF,
+#   #                      label = wavenumber),
+#   #   nudge_y = 0.25,
+#   #   family = "Helvetica",
+#   #   segment.colour = "red",
+#   #   size = 2.5
+#   # ) +
+#   theme_leo() +
+#   theme(
+#     axis.title = element_text(),
+#     axis.text.x = element_text(angle = 0),
+#     legend.position = c(1.005, 0),
+#     legend.justification = c(0,0),
+#     legend.direction = "vertical",
+#     legend.key.width = unit(4, "mm"),
+#     strip.text = element_text(size = 8),
+#     # legend.title = element_blank(),
+#     plot.margin = unit(c(2, 18, 2, 2), "mm")
+#   ) +
+#   labs(
+#     x = "Change in the vascular bundle",
+#     y = "Change in the interfascicular fibres"
+#   ) +
+#   scale_x_continuous(limits = c(-4, 4)) +
+#   scale_y_continuous(limits = c(-4, 4)) +
+#   coord_fixed() +
+#   facet_wrap(~genotype, ncol = 5)
+# dev.off()
 ```
 
 #### Relative to AUC
@@ -2023,7 +2077,7 @@ rel_auc <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
     legend.key.width = unit(4, "mm"),
     strip.text = element_text(size = 8),
     # legend.title = element_blank(),
-    plot.margin = unit(c(2, 18, 2, 2), "mm")
+    plot.margin = unit(c(2, 20, 2, 2), "mm")
   ) +
   labs(
     x = "Change in the vascular bundle",
@@ -2194,7 +2248,7 @@ rel_lig <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
     legend.direction = "vertical",
     legend.key.width = unit(4, "mm"),
     # legend.title = element_blank(),
-    plot.margin = unit(c(2, 18, 2, 2), "mm")
+    plot.margin = unit(c(2, 20, 2, 2), "mm")
   ) +
   labs(
     x = "Change in the vascular bundle",
@@ -2218,7 +2272,7 @@ rel_lig <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
   facet_wrap(~genotype, ncol = 5)
 # dev.off()
 
-pdf("Raman_figure6.pdf", width = twocol, height = 6)
+pdf("Raman_figure6.pdf", width = twocol, height = 5.5)
 plot_grid(
   rel_auc,
   rel_lig,
@@ -2420,12 +2474,12 @@ auc_corr <- ggplot(rmn_auc, aes(
     aes(label = paste("R² =", round(adj.r.squared, digits = 2))),
     hjust = 0,
     family = "Helvetica",
-    size = text6,
+    size = ggtext_size,
     data = rmn_auc_lm
   ) +
   theme_leo()
 
-pdf("Raman_figureS3.pdf", width = onecol, height = onecol / 2)
+pdf("Raman_figureS3.pdf", width = onehalfcol, height = onehalfcol / 2)
 plot_grid(band_contribs,
           auc_corr,
           labels = c("A", "B"),
@@ -2439,46 +2493,6 @@ dev.off()
 #### Spurious correlations
 
 ```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
-
-theme_leo <- function(base_size = 6,
-                      base_family = "Helvetica") {
-  theme_minimal(
-    base_size = base_size,
-    base_family = base_family
-  ) %+replace%
-    theme(
-      strip.text = element_text(hjust = 0, face = "italic"),
-      axis.ticks = element_line(
-        size = 0.2,
-        lineend = "square",
-        color = "black"
-      ),
-      axis.text.x = element_text(
-        size = 6,
-        colour = "black", # flipped coords
-        margin = margin(1, 1, 1, 1)
-      ),
-      axis.text.y = element_text(
-        colour = "black",
-        size = 6,
-        angle = 0,
-        vjust = 0.5,
-        hjust = 1,
-        margin = margin(1, 1, 1, 1)
-      ),
-      axis.title = element_text(
-        colour = "black",
-        size = 6
-      ),
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      panel.border = element_rect(fill = NA, color = "black", size = 0.2),
-      legend.position = "none",
-      plot.margin = unit(c(2, 2, 2, 2), "mm"),
-      complete = TRUE
-    )
-}
-
 py <- read.csv("/home/leonard/Documents/Uni/PhD/Raman/pyrolysis_2018_amount.csv")
   
 py$Coniferaldehyde <- py$X22
@@ -2621,7 +2635,7 @@ ggplot(data = filter(py_rmn_corr, unit == x & wavenumber == y & genotype != z),
            label = paste("R² = ",round(regr$adj.r.squared, digits = 2)),
            x = 0,
            y = 0,
-           size = text6,
+           size = ggtext_size,
            family = "Helvetica",
            hjust = 0,
            vjust = 0,
@@ -2744,17 +2758,17 @@ s6 <- ggplot(data = rmn_data_ridge) +
     strip.text = element_text(size = 8),
     axis.title.y = element_blank()
   ) +
-  geom_vline(xintercept = 1603, colour = "black", alpha = 1, size = 0.4, linetype = 2) +
+  geom_vline(xintercept = 1603, colour = "black", alpha = 1, size = 0.2, linetype = 2) +
   annotate("text",
            x = 1603,
            y = 0.75,
            label = expression(paste(" 1603 cm"^-1)),
            hjust = 0,
            family = "Helvetica",
-           size = text6) +
+           size = ggtext_size) +
   facet_wrap(~cell.type, ncol = 2)
 
-pdf("Raman_figureS6.pdf", width = onecol, height = onecol)
+pdf("Raman_figureS6.pdf", width = onehalfcol, height = onecol)
 s6
 dev.off()
 ```
@@ -2838,4 +2852,114 @@ ggplot(mod_cho, aes(x = wavenumber)) +
       n = length(mod_cho$wavenumber),
       binwidth = 1
     ))
+```
+
+#### all spectra
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, eval=FALSE}
+
+rmn_model_supp <- rmn_models %>%
+  # filter(state == "mono") %>%
+  mutate(filename = recode(filename,
+                           "mono-5h-cooh" = "5H-COOH",
+                           "mono-gsat-oh" = "Gsat-OH",
+                           "mono-c-cooh" = "C-COOH",
+                           "mono-h-cooh" = "H-COOH",
+                           "mono-g-cooh" = "G-COOH",
+                           "mono-g-cho" = "G-CHO",
+                           "mono-g-oh" = "G-OH",
+                           "mono-s-cooh" = "S-COOH",
+                           "mono-s-cho" = "S-CHO",
+                           "mono-s-oh" = "S-OH"))
+
+supp_spectra <- ggplot(rmn_model_supp) +
+  # geom_text_repel(
+  #   data = tibble(
+  #     wavenumber = rep(c(1656, 1620, 1600, 1335, 1276), 2),
+  #     unit = rep(c("G", "S"), each = 5, len = 10),
+  #     gamma = rep("COOH", 10),
+  #     scaled = rep(1, 10)
+  #   ),
+  #   aes(
+  #     label = wavenumber,
+  #     x = wavenumber,
+  #     y = scaled
+  #   ),
+  #   angle = 90,
+  #   hjust = 0.5,
+  #   direction = "x",
+  #   min.segment.length = 0,
+  #   segment.size = 0.4,
+  #   nudge_y = -0.25,
+  #   segment.colour = "grey85",
+  #   family = "Helvetica",
+  #   size = ggtext_size
+  # ) +
+  # annotate("segment",
+  #   x = c(1656, 1620, 1600, 1335, 1276),
+  #   xend = c(1656, 1620, 1600, 1335, 1276),
+  #   y = 1,
+  #   yend = Inf,
+  #   colour = "grey85",
+  #   size = 0.4
+  # ) +
+  geom_vline(xintercept = c(1656, 1620, 1600, 1335, 1276),
+        size = 0.2,
+        linetype = 2,
+        alpha = 0.5,
+        colour = "black") +
+  geom_line(aes(
+    x = wavenumber,
+    y = rollmean(scaled, 3, na.pad = TRUE),
+    # fill = state,
+    colour = filename
+  ),
+  # alpha = 0.5,
+  size = 0.2,
+  # colour = NA,
+  # fill = NA,
+  # scale = 100,
+  # min_height = -0.002
+  ) +
+  # geom_ridgeline(aes(
+  #   x = wavenumber,
+  #   y = filename,
+  #   height = rollmean(scaled, 3, na.pad = TRUE),
+  #   # fill = filename,
+  #   # colour = state
+  # ),
+  # # alpha = 0.5,
+  # size = 0.2,
+  # # colour = NA,
+  # # fill = "#4575b4",
+  # scale = 4,
+  # # alpha = 0.75,
+  # min_height = -0.002
+  # ) +
+  # scale_fill_manual(values = c("poly" = "#d73027", "mono" = "#4575b4")) +
+  scale_colour_viridis_d() +
+  # scale_colour_manual(values = c("poly" = "#d73027", "mono" = "#4575b4")) +
+  scale_x_reverse(
+    limits = c(1700, 300),
+    # sec.axis = sec_axis(~., breaks = unique(peak_pres$peak))
+  ) +
+  # labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
+  theme_leo() +
+  theme(
+    # panel.spacing = unit(5, "mm"),
+    axis.title.y = element_blank(),
+    # axis.text.y = element_blank(),
+    # axis.ticks.y = element_blank(),
+    strip.text = element_text(size = 8),
+    axis.text.x.top = element_text(
+      angle = 90,
+      vjust = 0.5,
+      hjust = 1
+    ),
+  ) 
+library(plotly)
+# pdf("supplemental_spectra.pdf", width = twocol, height = 5)
+ggplotly(supp_spectra)
+# dev.off()
+
 ```
