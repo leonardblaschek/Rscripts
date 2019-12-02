@@ -609,7 +609,7 @@ auc_boxes <- ggplot(data = rmn_data_all_auc, aes(x = cell.type, y = auc / 1000))
   ) +
   scale_fill_viridis_d() +
   theme_leo() +
-  labs(y = expression(paste("AUC per 490 µm"^2))) +
+  labs(y = "AUC") +
   scale_y_continuous(expand = expand_scale(mult = 0.07),
                      breaks = c(0, 200, 400)) +
   theme(
@@ -720,12 +720,8 @@ dev.off()
 ### Figure 3 -- spectra, AUC of the two tissues in *Arabidopsis* WT and mutants
 
 ```{r load and correct mutant spectra, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-# #### import and tidy Raman data ####
 
-readLines("/home/leonard/Documents/Uni/PhD/IRX/RAMAN/nuoendagula/4cl1＆2/4/4cl1＆2 #4 IF-1.txt") %>%
-  str_split("\t") %>%
-  grep("% \\([0-9]{3}/255\\)", ., value = T)
-
+#### import and tidy Raman data ####
 rmn_files <-
   list.files(
     path = "/home/leonard/Documents/Uni/PhD/IRX/RAMAN/nuoendagula/",
@@ -738,7 +734,7 @@ read_plus <- function(flnm) {
   read_tsv(flnm,
     comment = "#",
     col_names = FALSE,
-    skip = 1,
+    skip = 25,
     cols_only(
       X1 = col_number(),
       X2 = col_number()
@@ -875,7 +871,23 @@ rmn_data_corrected <- rmn_data_corrected %>%
   )
 
 write_csv(rmn_data_corrected, "rmn_data_corrected.csv")
-# rmn_data_corrected <- read_csv("rmn_data_corrected.csv")
+rmn_data_corrected2 <- read_csv("rmn_data_corrected.csv", col_types = "ccccnnn") %>%
+  mutate(
+    genotype = ordered(genotype,
+      levels = c(
+        "Col-0",
+        "4cl1",
+        "4cl2",
+        "4cl1x4cl2",
+        "ccoaomt1",
+        "fah1",
+        "omt1",
+        "ccr1-3",
+        "cad4",
+        "cad5",
+        "cad4xcad5"
+      )
+    ))
 
 # lig_peak <- rmn_data_corrected %>%
 #   group_by(genotype, cell.type, replicate, technical) %>%
@@ -1007,7 +1019,7 @@ spectra <- function(x) {
     panel.spacing = unit(1, "mm"),
     axis.title.y = element_blank(),
     strip.text = element_text(size = 8),
-    plot.margin = unit(c(2, 0, 2, 2), "mm")
+    plot.margin = unit(c(2, 0, 2, 1.5), "mm")
   )  +
   facet_wrap(~cell.type, ncol = 2)
   
@@ -1031,7 +1043,7 @@ mutant_ridge_letters <- letter_groups(filter(rmn_data_auc, cell.type == x),
   genotype,
   "tukey",
   print_position = "above",
-  print_adjust = 1.5
+  print_adjust = 2
 )
 
 ggplot(data = filter(rmn_data_auc, cell.type == x), aes(x = genotype, y = AUC / 10000)) +
@@ -1052,13 +1064,13 @@ ggplot(data = filter(rmn_data_auc, cell.type == x), aes(x = genotype, y = AUC / 
   theme_leo() +
   # labs(y = expression(paste("AUC per 490 µm"^2))) +
   labs(y = "AUC") +
-  # scale_y_continuous(limits = c(0, 500), breaks = c(0, 200, 400)) +
+  scale_y_continuous(limits = c(0, 4.2), breaks = c(0, 2, 4)) +
   scale_x_discrete(expand = expand_scale(mult = c(0.09, 0.135))) +
   theme(
     axis.text.y = element_blank(),
     axis.title.y = element_blank(),
     axis.ticks.y = element_blank(),
-    plot.margin = unit(c(2, 0, 2, 0), "mm"),
+    plot.margin = unit(c(2, 0.5, 2, 0), "mm"),
     strip.text = element_blank()
   ) +
   geom_text(
@@ -1679,7 +1691,7 @@ py_rmn <- rmn_data_corrected %>%
   ) %>%
   group_by(cell.type, genotype, replicate, technical) %>%
   transmute(
-    "1603/4.6 + 1334" = `1603` + (2 * `1334`),
+    "CLB" = `1603` + (2 * `1334`),
     "1334/1603" = `1334` / `1603`,
     "1664/1603" = `1664` / `1603`,
     "1334/1276" = `1334` / `1276`,
@@ -1713,7 +1725,7 @@ py_rmn_corr_mat <- py_rmn_corr %>%
   unnest(tidied)
 
 broom::glance(lm(mean ~ total.mean.scaled, data = filter(py_rmn_corr, unit == "Lignin" & 
-                                                           wavenumber == "1603/4.6 + 1334")))
+                                                           wavenumber == "CLB")))
 
 # broom::tidy(lm(Lignin ~ `1603` + `1334`, data = filter(py_rmn_corr, variable == "mean")))
 
@@ -1721,7 +1733,7 @@ broom::glance(lm(mean ~ total.mean.scaled, data = filter(py_rmn_corr, unit == "L
 
 
 
-py_plot <- function(x, y, z = "bork") {
+py_plot <- function(x, y, z = "bork", col = "white") {
   
 tidycor <- broom::tidy(cor.test(
   as.matrix(filter(py_rmn_corr, unit == x &
@@ -1761,11 +1773,11 @@ ggplot(data = filter(py_rmn_corr, unit == x & wavenumber == y & genotype != z),
              alpha = 0.75,
              shape = 16) +
   geom_smooth(method = "lm",
-                fullrange = F,
+                fullrange = T,
                 size = 0.4,
                 se = F,
-                linetype = 2,
-              colour = "white") +
+                linetype = 1,
+              colour = col) +
   scale_colour_manual(values = c("yes" = "white", no = "black")) +
   scale_fill_distiller(
     palette = "RdYlBu",
@@ -1783,7 +1795,7 @@ ggplot(data = filter(py_rmn_corr, unit == x & wavenumber == y & genotype != z),
            family = "Helvetica",
            hjust = 0,
            vjust = 0,
-              colour = "white") +
+              colour = col) +
   theme_leo() +
   theme(axis.text.y = element_text(angle = 90,
                                    hjust = 0.5),
@@ -1794,7 +1806,7 @@ ggplot(data = filter(py_rmn_corr, unit == x & wavenumber == y & genotype != z),
   
 }
 
-py_plot_lig <- py_plot("Lignin", "1603/4.6 + 1334") +
+py_plot_lig <- py_plot("Lignin", "CLB") +
   labs(x = expression(paste("Lignin * total pyrolysate"^-1)),
     y = expression(paste("CLB [AU * AUC"^-1,"]"))) +
   scale_y_continuous(breaks = c(0, 0.005, 0.01), labels = c("0", "0.005", "0.01"))
@@ -1804,37 +1816,37 @@ py_plot_sg <- py_plot("S/G", "1334/1276") +
     y = expression(paste("1334 cm"^-1,"/ 1276 cm"^-1))) +
   scale_y_continuous(breaks = c(0, 1, 2, 3))
 
-py_plot_cho <- py_plot("GCHO/lig", "1625/lig") +
+py_plot_cho <- py_plot("GCHO/lig", "1625/lig", "cad4xcad5", "black") +
   labs(x = expression(paste("G"[CHO]," * lignin"^-1)),
     y = expression(paste("1625 cm"^-1,"/ CLB"))) +
   scale_y_continuous(breaks = c(0, 0.5, 1)) +
-  # geom_point(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig" & genotype == "cad4xcad5"),
-  #            aes(colour = WT),
-  #            size = 1,
-  #            alpha = 0.75,
-  #            shape = 16) +
-  # geom_errorbar(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig" & genotype == "cad4xcad5"),
-  #               aes(ymin = total.mean.scaled - total.sd.scaled,
-  #                   ymax = total.mean.scaled + total.sd.scaled),
-  #               size = 0.2,
-  #               width = 0,
-  #               alpha = 0.75) +
-  geom_smooth(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig" & genotype != "cad4xcad5"),
+  geom_point(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig" & genotype == "cad4xcad5"),
+             aes(colour = WT),
+             size = 1,
+             alpha = 0.75,
+             shape = 16) +
+  geom_errorbar(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig" & genotype == "cad4xcad5"),
+                aes(ymin = total.mean.scaled - total.sd.scaled,
+                    ymax = total.mean.scaled + total.sd.scaled),
+                size = 0.2,
+                width = 0,
+                alpha = 0.75) +
+  geom_smooth(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig"),
               method = "lm",
-              colour = "blue",
+              colour = "black",
                 fullrange = T,
                 size = 0.4,
                 se = F,
-                linetype = 1) + 
-  annotate("text",
-           label = "R² = −0.12",
-           x = 0,
-           y = 0.1,
-           size = ggtext_size,
-           family = "Helvetica",
-           hjust = 0,
-           vjust = 0,
-              colour = "blue")
+                linetype = 2)
+  # annotate("text",
+  #          label = "R² = −0.12",
+  #          x = 0,
+  #          y = 0.1,
+  #          size = ggtext_size,
+  #          family = "Helvetica",
+  #          hjust = 0,
+  #          vjust = 0,
+  #             colour = "blue")
 
 py_plot_goh <- py_plot("GOH/G", "1664/1603") +
   labs(x = expression(paste("G"^{OH}," * total G-lignin"^-1)),
@@ -2050,7 +2062,7 @@ rmn_data_corr <- rmn_data_corrected %>%
     values_from = scaled
   ) %>%
   group_by(genotype, cell.type, replicate, technical) %>%
-  mutate("1603/4.6 + 1334" = `1603` + 4.6 * `1334`) %>%
+  mutate("CLB" = `1603` + 4.6 * `1334`) %>%
   # select(-`1603`) %>%
   pivot_longer(
     cols = -c(genotype, cell.type, replicate, technical),
@@ -2074,7 +2086,7 @@ rmn_data_corr <- rmn_data_corr %>%
   ungroup() 
 
 rmn_data_corr <- left_join(rmn_data_corr, (validated_peaks %>%
-                                             mutate(wavenumber = recode(wavenumber, "1603, 1334" = "1603/4.6 + 1334")) %>%
+                                             mutate(wavenumber = recode(wavenumber, "1603, 1334" = "CLB")) %>%
   rbind(list(13, "381", "AUC", "Cellulose", "Cellulose", 0, 0, 0, 0)) %>%
   rbind(list(10, "1099", "AUC", "Cellulose", "Cellulose", 0, 0, 0, 0)))) %>%
   drop_na() %>%
@@ -3421,46 +3433,1132 @@ dev.off()
 
 ```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, eval=FALSE}
 
-cml_data_length <- cml_data %>%
-  group_by(genotype, replicate, technical, ROI) %>%
-  summarise(length = max(distance)) %>%
+# fine (AUC to area of measurement)
+
+IF_areas <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/IF_areas.csv", col_types = "cccnnn") %>%
   group_by(genotype, replicate, technical) %>%
-  summarise(length = mean(length)) %>%
-  group_by(genotype, replicate) %>%
-  summarise(length = mean(length)) %>%
-  group_by(genotype) %>%
-  summarise(length = mean(length))
+  summarise(Area_80 = ((5024 - sum(Area_80)) / 5024) * 100,
+            Area_40 = ((1264 - sum(Area_40)) / 1264) * 100,
+            Area_20 = ((316 - sum(Area_20)) / 316) * 100
+  )
 
 auc_data <- rmn_data_corrected %>%
   filter(cell.type == "IF") %>%
-  group_by(genotype) %>%
+  group_by(genotype, replicate, technical) %>%
   summarise(AUC = mean(AUC)) %>%
-  mutate(genotype = recode(genotype, "Col-0" = "WT")) %>%
-  left_join(cml_data_length)
+  left_join(IF_areas)
 
-broom::glance(lm(AUC ~ length, data = auc_data))
+auc_data_avg <- auc_data %>%
+  drop_na() %>%
+  group_by(genotype) %>%
+  summarise(AUC = mean(AUC),
+            Area_20 = mean(Area_20),
+            Area_40 = mean(Area_40),
+            Area_80 = mean(Area_80))
 
-pdf("AUC_to_width.pdf")
-ggplot(auc_data, aes(x = AUC, y = length)) +
-  geom_point(aes(x = AUC, y = length)) +
-  geom_smooth(method = "lm") +
-  geom_text_repel(aes(label = genotype),
-                  min.segment.length = 0)
-dev.off() 
+auc_model <- lm(AUC ~ Area_20 + (Area_40 - Area_20) + (Area_80 - Area_40),
+                auc_data)
+broom::glance(auc_model)
+broom::tidy(auc_model)
 
+auc_mixed_model <- lme4::lmer(AUC ~ 
+                    Area_20 + 
+                    # (Area_40 - Area_20) + 
+                    # (Area_80 - Area_40) +
+                    (1 | genotype),
+                    # ((Area_40 - Area_20) | genotype) +
+                    # ((Area_80 - Area_40) | genotype),
+                    data = auc_data)
+MuMIn::r.squaredGLMM(auc_mixed_model)
 
-rmn_auc <- rmn_data_corrected %>%
-  # filter(cell.type == "IF") %>%
-  group_by(genotype, replicate, technical, cell.type) %>%
-  summarise(AUC = mean(AUC))
+auc_plot <- function(area) {
+  form <- paste("AUC ~", area)
+  model <- broom::glance(lm(as.formula(form[2]), auc_data))
 
-rmn_var <- rmn_data_corrected %>%
-  select(genotype, cell.type, replicate, technical, corrected.intensity, scaled, scaled_max) %>%
-  pivot_longer(cols = c("corrected.intensity", "scaled", "scaled_max"),
-               names_to = "scaling",
-               values_to = "value") %>%
-  group_by(genotype, cell.type, scaling) %>%
-  mutate(mean = mean(value)) %>%
-  group_by()
+  ggplot(auc_data, aes(x = AUC, y = !!area)) +
+    geom_point(aes(x = AUC, y = !!area, fill = genotype),
+      shape = 21,
+      stroke = 0.1,
+      size = 1,
+      alpha = 0.5
+    ) +
+    annotate("text",
+      x = 19000,
+      y = 46,
+      label = paste("marginal R² = ", round(MuMIn::r.squaredGLMM(auc_mixed_model)[1], digits = 2)),
+      hjust = 1,
+      family = "Helvetica",
+      size = ggtext_size
+    ) +
+    annotate("text",
+      x = 19000,
+      y = 42,
+      label = paste("conditional R² = ", round(MuMIn::r.squaredGLMM(auc_mixed_model)[2], digits = 2)),
+      hjust = 1,
+      family = "Helvetica",
+      size = ggtext_size
+    ) +
+    geom_smooth(method = "lm",
+                colour = "black",
+                se = FALSE,
+                size = 0.4,
+                linetype = 2,
+                fullrange = TRUE) +
+    geom_smooth(aes(colour = genotype),
+                method = "lm",
+                se = FALSE,
+                size = 0.2) +
+    geom_text_repel(
+      data = auc_data_avg,
+      aes(label = genotype),
+      min.segment.length = 0,
+      family = "Helvetica",
+      size = ggtext_size,
+      fontface = 3
+    ) +
+    geom_point(
+      data = auc_data_avg,
+      aes(x = AUC, y = !!area, fill = genotype),
+      size = 3,
+      stroke = 0.2,
+      shape = 21
+    ) +
+    scale_fill_viridis_d() +
+    scale_colour_viridis_d() +
+    scale_y_continuous(expand = expand_scale(mult = 0.01)) +
+    scale_x_continuous(expand = expand_scale(mult = 0.01)) +
+    # expand_limits(y = 0, x = 0) +
+    theme_leo() +
+    labs(y = "Cell wall in measurement area [%]") +
+    theme(plot.margin = unit(c(3, 3, 3, 3), "mm"))
+}
+
+p20 <- auc_plot(quo(Area_20))
+
+pdf("AUC_to_width.pdf", width = onehalfcol, height = onehalfcol)
+p20
+dev.off()
 
 ```
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE, eval=FALSE}
+rmn_data_auc <- as_tibble(rmn_data_correction$corrected, rownames = NA)
+
+rmn_data_auc <- rmn_data_auc %>%
+  rownames_to_column() %>%
+  separate(rowname, sep = "_", into = c("genotype", "cell.type", "replicate", "technical"), remove = TRUE) %>%
+  gather(key = "wavenumber", value = "corrected.intensity", -c(genotype, cell.type, replicate, technical)) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X."), replacement = "-")) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X"), replacement = "")) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  inner_join(., rmn_data, by = c("genotype", "cell.type", "replicate", "technical", "wavenumber")) %>%
+  ungroup() %>%
+  filter(genotype != "ccr1xfah1" &
+    wavenumber %in% c(300:1700) &
+    cell.type %in% c("IF", "PMX")) %>%
+  anti_join(tibble(genotype = "cad4xcad5",
+                   cell.type = "PMX",
+                   replicate = "4",
+                   technical = "2")) %>%
+  mutate(
+    genotype = ordered(genotype,
+      levels = c(
+        "Col-0",
+        "4cl1",
+        "4cl2",
+        "4cl1x4cl2",
+        "ccoaomt1",
+        "fah1",
+        "omt1",
+        "ccr1-3",
+        "cad4",
+        "cad5",
+        "cad4xcad5"
+      )
+    ),
+    cell.type = recode(cell.type, "PMX" = "VB")
+  )
+
+rmn_data_auc <- rmn_data_auc %>%
+  ungroup() %>%
+  filter(cell.type == "IF") %>%
+  left_join(IF_areas) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(AUC = MESS::auc(wavenumber, corrected.intensity) / Area_20) %>%
+  summarise(AUC = mean(AUC),
+            Area_20 = mean(Area_20)) %>%
+  ungroup() %>%
+  mutate(
+    genotype = ordered(genotype, levels = c(
+      "Col-0",
+      "4cl1",
+      "4cl2",
+      "4cl1x4cl2",
+      "ccoaomt1",
+      "fah1",
+      "omt1",
+      "ccr1-3",
+      "cad4",
+      "cad5",
+      "cad4xcad5"
+    )))
+
+mutant_area_letters <- letter_groups(rmn_data_auc,
+                                    Area_20,
+                                    genotype,
+                                    "tukey",
+                                    print_position = "above")
+
+area <- ggplot(rmn_data_auc, aes(x = genotype, y = Area_20)) +
+  geom_quasirandom(aes(fill = genotype),
+    shape = 21,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2
+  ) +
+  geom_boxplot(
+    alpha = 0.5,
+    colour = "black",
+    outlier.alpha = 0,
+    fatten = 1,
+    size = 0.2
+  ) +
+  scale_fill_viridis_d() +
+  theme_leo() +
+  # labs(y = expression(paste("AUC per 490 µm"^2))) +
+  labs(y = "Cell wall in measurement area [%]") +
+  # scale_y_continuous(limits = c(0, 500), breaks = c(0, 200, 400)) +
+  geom_text(
+    data = mutant_area_letters,
+    aes(label = groups),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_x_discrete(labels = c(
+    "WT",
+    expression(italic("4cl1")),
+    expression(italic("4cl2")),
+    expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+    expression(italic("ccoaomt1")),
+    expression(italic("fah1")),
+    expression(italic("omt1")),
+    expression(italic("ccr1")),
+    expression(italic("cad4")),
+    expression(italic("cad5")),
+    expression(paste(italic("cad4"), "x", italic("cad5")))
+  )) +
+  theme(axis.title.y = element_blank()) +
+    coord_flip() 
+
+
+mutant_auc_letters <- letter_groups(rmn_data_auc,
+                                    AUC,
+                                    genotype,
+                                    "tukey",
+                                    print_position = "above")
+
+area_norm <- ggplot(rmn_data_auc, aes(x = genotype, y = AUC)) +
+  geom_quasirandom(aes(fill = genotype),
+    shape = 21,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2
+  ) +
+  geom_boxplot(
+    alpha = 0.5,
+    colour = "black",
+    outlier.alpha = 0,
+    fatten = 1,
+    size = 0.2
+  ) +
+  scale_fill_viridis_d() +
+  theme_leo() +
+  # labs(y = expression(paste("AUC per 490 µm"^2))) +
+  labs(y = "AUC normalised to CW area") +
+  # scale_y_continuous(limits = c(0, 500), breaks = c(0, 200, 400)) +
+  geom_text(
+    data = mutant_auc_letters,
+    aes(label = groups),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_x_discrete(labels = c(
+    "WT",
+    expression(italic("4cl1")),
+    expression(italic("4cl2")),
+    expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+    expression(italic("ccoaomt1")),
+    expression(italic("fah1")),
+    expression(italic("omt1")),
+    expression(italic("ccr1")),
+    expression(italic("cad4")),
+    expression(italic("cad5")),
+    expression(paste(italic("cad4"), "x", italic("cad5")))
+  )) +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+    coord_flip() 
+
+library(patchwork)
+pdf("area_norm.pdf", height = onehalfcol, width = onehalfcol)
+p20 / (area + area_norm) + plot_layout(heights=c(1.5,1)) +
+  plot_annotation(tag_levels = 'A') & 
+  theme(plot.tag = element_text(size = 10, face = "bold"),
+        plot.margin = unit(c(2,2,2,2), "mm"))
+dev.off()
+
+```
+
+## Correlations with other scaling
+
+### 1603
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+
+py <- read.csv("/home/leonard/Documents/Uni/PhD/Raman/pyrolysis_2018_amount.csv")
+
+py$`G-OH` <- ifelse(
+  py$variable == "mean",
+  py$X17 + py$X19 + py$X23,
+  sqrt(
+    py$X17^2 + py$X19^2 + py$X23^2
+  )
+)
+py$`S-OH` <- py$X33
+py$H <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:9]), sqrt(rowSums(py[, 7:9]^
+    2)))
+py$G <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:19]), sqrt(rowSums(py[, 7:19]^
+    2)))
+py$S <-
+  ifelse(py$variable == "mean", rowSums(py[, 21:28]), sqrt(rowSums(py[, 21:28]^
+    2)))
+py$S.G <- py$S / py$G
+py$H.G <- py$H / py$G
+py$Coniferaldehyde <- py$X22
+py$Vanillin <- py$X18
+py$Sinapaldehyde <- py$X32
+py$Syringaldehyde <- py$X29
+py$CHO <-
+  ifelse(
+    py$variable == "mean",
+    py$Coniferaldehyde + py$Sinapaldehyde + py$Vanillin + py$Syringaldehyde,
+    sqrt(
+      py$Coniferaldehyde^2 + py$Sinapaldehyde^2 + py$Vanillin^2 + py$Syringaldehyde^2
+    )
+  )
+py$Lignin <-
+  ifelse(py$variable == "mean", rowSums(py[, 3:28]), sqrt(rowSums(py[, 3:28]^
+    2)))
+
+py <- py %>%
+  select(genotype, variable, G, H, `G-OH`, Lignin, S, CHO) %>%
+  pivot_longer(-c(genotype, variable), names_to = "unit", values_to = "value")
+
+py_rmn <- rmn_data_avg %>%
+  filter(wavenumber %in% selected_peaks$wavenumber) %>%
+  group_by(genotype, wavenumber) %>%
+  summarise(total.mean.scaled = mean(mean.scaled_lig))
+
+
+# pdf("rmn_covariance.pdf")
+# corrplot(cor(spread(py_rmn, key = wavenumber, value = total.mean.scaled)[,-1]))
+# dev.off()
+
+py_rmn_corr <- left_join(py, py_rmn) %>%
+  ungroup() %>%
+  mutate(unit = recode(unit, 
+                       "G-OH" = "G-CHOH",
+                       "H" = "H-R",
+                       "G" = "G-R",
+                       "S" = "S-R",
+                       "CHO" = "R-CHO")) %>%
+  mutate(unit = ordered(unit, levels = c("Lignin", "G-R", "G-CHOH", "S-R", "H-R", "R-CHO")),
+         units_parsed = factor(unit, labels = c("Lignin",
+                                          "G[R]",
+                                          "G[CHOH]",
+                                          "S[R]",
+                                          "H[R]",
+                                          "R[CHO]")))
+
+
+py_rmn_corr_mat <- py_rmn_corr %>%
+  filter(variable == "mean") %>%
+  group_by(units_parsed, wavenumber) %>%
+  nest() %>%
+  mutate(
+    cor = map(data, ~ cor.test(.x$value, .x$total.mean.scaled)),
+    tidied = map(cor, tidy)
+  ) %>%
+  unnest(tidied)
+
+py_rmn_corr <- py_rmn_corr %>%
+  filter(variable == "mean") %>%
+  ungroup() %>%
+  mutate(
+    value = scale_range(value),
+    total.mean.scaled = scale_range(total.mean.scaled)
+  )
+
+total_corr <- ggplot(data = py_rmn_corr) +
+  geom_rect(
+    data = py_rmn_corr_mat,
+    xmin = -Inf,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf,
+    aes(fill = if_else(p.value < 0.05, estimate, NULL))
+  ) +
+  geom_point(aes(
+    x = value,
+    y = total.mean.scaled
+  ),
+  size = 0.5,
+  alpha = 0.75,
+  shape = 16
+  ) +
+  scale_fill_distiller(
+    palette = "RdYlBu",
+    na.value = "white",
+    name = "Pearson's r (if p < 0.05)",
+    limits = c(-1, 1)
+  ) +
+  guides(fill = guide_legend(title.position="top")) +
+  labs(
+    x = expression(paste("Pyrolysate * total pyrolysate"^-1)),
+    y = expression(paste("Raman average (IF:VB 1:1) * AUC"^-1))
+  ) +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    axis.ticks = element_blank(),
+    axis.text = element_blank(),
+    strip.text = element_text(size = 8),
+    legend.key.width = unit(4, "mm")
+  ) +
+  facet_grid(reorder(wavenumber, as.numeric(wavenumber)) ~ units_parsed, labeller = label_parsed) 
+
+pdf("pyro_correlations.pdf", height = 6, width = onecol)
+total_corr
+dev.off()
+```
+
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+
+py <- read.csv("/home/leonard/Documents/Uni/PhD/Raman/pyrolysis_2018_amount.csv")
+  
+py$Coniferaldehyde <- py$X22
+py$Vanillin <- py$X18
+py$Sinapaldehyde <- py$X32
+py$Syringaldehyde <- py$X29
+py$GOH <- ifelse(
+  py$variable == "mean",
+  py$X17 + py$X19 + py$X23,
+  sqrt(py$X17^2 + py$X19^2 + py$X23^2)
+)
+py$`S-OH` <- py$X33
+py$`S-CHO` <- py$X32
+py$`S-CHOs` <- ifelse(
+  py$variable == "mean",
+  py$X32 + py$X30 + py$X29,
+  sqrt(py$X32^2 + py$X30^2 + py$X29^2)
+)
+py$`SnoCHO` <- ifelse(
+  py$variable == "mean",
+  py$X26 + py$X27 + py$X31 + py$X28 + py$X33,
+  sqrt(py$X27^2 + py$X31^2 + py$X28^2 + py$X26^2 + py$X33^2)
+)
+py$GCHO <- ifelse(
+  py$variable == "mean",
+  py$X18 + py$X22,
+  sqrt(py$X18^2 + py$X22^2)
+)
+py$Aldehydes <-
+  ifelse(
+    py$variable == "mean",
+    py$Coniferaldehyde + py$Sinapaldehyde + py$Vanillin + py$Syringaldehyde,
+    sqrt(
+      py$Coniferaldehyde^2 + py$Sinapaldehyde^2 + py$Vanillin^2 + py$Syringaldehyde^2
+    )
+  )
+py$H <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:9]), sqrt(rowSums(py[, 7:9]^
+    2)))
+py$G <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:19]), sqrt(rowSums(py[, 7:19]^
+    2)))
+py$S <-
+  ifelse(py$variable == "mean", rowSums(py[, 21:28]), sqrt(rowSums(py[, 21:28]^
+    2)))
+py$SnoOH <-
+  ifelse(py$variable == "mean", rowSums(py[, 21:27]), sqrt(rowSums(py[, 21:27]^
+    2)))
+py$Lignin <-
+  ifelse(py$variable == "mean", rowSums(py[, 3:28]), sqrt(rowSums(py[, 3:28]^
+    2)))
+py$`GCHO/G` <- py$GCHO / py$G
+py$`GOH/G` <- py$GOH / py$G
+py$`GCHO/GOH` <- py$Coniferaldehyde / py$GOH
+py$`GCHO/lig` <- py$GCHO / py$Lignin
+py$`Aldehydes/lig` <- py$Aldehydes / py$Lignin
+py$`S/G` <- py$S / py$G
+py$`H/G` <- py$H / py$G
+py$`H/S` <- py$H / py$S
+
+py <- py %>%
+  select(-starts_with("X")) %>%
+  pivot_longer(-c(genotype, variable), names_to = "unit", values_to = "value") %>%
+  pivot_wider(id_cols = c( "genotype", "unit"), names_from = variable, values_from = value)
+
+py_rmn <- rmn_data_corrected %>%
+  filter(wavenumber %in% selected_peaks$wavenumber) %>%
+  group_by(cell.type, genotype, wavenumber, replicate, technical) %>%
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical), names_from = wavenumber,
+    values_from = scaled_lig
+  ) %>%
+  group_by(cell.type, genotype, replicate, technical) %>%
+  transmute(
+    "CLB" = `1603` + (2 * `1334`),
+    "1334/1603" = `1334` / `1603`,
+    "1664/1603" = `1664` / `1603`,
+    "1334/1276" = `1334` / `1276`,
+    "1625/1603" = `1625` / `1603`,
+    "1625/1664" = `1625` / `1664`,
+    "1625/lig" = `1625` / `1603` + (2 * `1334`),
+    "1625" = `1625`,
+    "1334" = `1334`,
+    "1603" = `1603`
+  ) %>%
+  pivot_longer(cols = -c(genotype, cell.type, replicate, technical), names_to = "wavenumber", values_to = "scaled") %>%
+  group_by(genotype, wavenumber, cell.type) %>%
+  summarise(mean.scaled = mean(scaled),
+            sd.scaled = sd(scaled) / mean.scaled) %>%
+  group_by(genotype, wavenumber) %>%
+  summarise(total.mean.scaled = mean(mean.scaled),
+            total.sd.scaled = total.mean.scaled * sqrt(sum(sd.scaled^2)))
+
+py_rmn_corr <- left_join(py, py_rmn) %>%
+  mutate(WT = case_when(genotype == "Col-0" ~ "yes",
+                        TRUE ~ "no"))
+
+py_rmn_corr_mat <- py_rmn_corr %>%
+  # filter(variable == "mean") %>%
+  group_by(unit, wavenumber) %>%
+  nest() %>%
+  mutate(
+    cor = map(data, ~ cor.test(.x$mean, .x$total.mean.scaled)),
+    tidied = map(cor, tidy)
+  ) %>%
+  unnest(tidied)
+
+broom::glance(lm(mean ~ total.mean.scaled, data = filter(py_rmn_corr, unit == "Lignin" & 
+                                                           wavenumber == "CLB")))
+
+# broom::tidy(lm(Lignin ~ `1603` + `1334`, data = filter(py_rmn_corr, variable == "mean")))
+
+
+
+
+
+py_plot <- function(x, y, z = "bork", col = "white") {
+  
+tidycor <- broom::tidy(cor.test(
+  as.matrix(filter(py_rmn_corr, unit == x &
+                     wavenumber == y &
+                     genotype != z)[ ,"mean"]),
+  as.matrix(filter(py_rmn_corr, unit == x &
+                     wavenumber == y &
+                     genotype != z)[ ,"total.mean.scaled"])
+  ))
+print(tidycor)
+  
+regr <- broom::glance(lm(mean ~ total.mean.scaled, data = filter(py_rmn_corr, unit == x & 
+                                                           wavenumber == y &
+                                                           genotype != z)))
+
+ggplot(data = filter(py_rmn_corr, unit == x & wavenumber == y & genotype != z),
+       aes(x = mean, y = total.mean.scaled)) +
+  geom_rect(data = tidycor,
+            xmax = Inf,
+            ymax = Inf,
+            xmin = -Inf,
+            ymin = -Inf,
+            aes(fill = estimate,
+                x = 0,
+                y = 0)) +
+  geom_errorbar(aes(ymin = total.mean.scaled - total.sd.scaled,
+                    ymax = total.mean.scaled + total.sd.scaled),
+                size = 0.2,
+                width = 0,
+                alpha = 0.75) +
+  # geom_errorbarh(aes(xmin = mean - sd,
+  #                   xmax = mean + sd),
+  #               size = 0.2,
+  #               height = 0) +
+  geom_point(aes(colour = WT),
+             size = 1,
+             alpha = 0.75,
+             shape = 16) +
+  geom_smooth(method = "lm",
+                fullrange = T,
+                size = 0.4,
+                se = F,
+                linetype = 1,
+              colour = col) +
+  scale_colour_manual(values = c("yes" = "white", no = "black")) +
+  scale_fill_distiller(
+    palette = "RdYlBu",
+    na.value = "white",
+    name = "Pearson's r",
+    limits = c(-1, 1)
+  ) +
+  scale_x_continuous(limits = c(0, NA)) +
+  scale_y_continuous(limits = c(0, NA)) +
+  annotate("text",
+           label = paste("R² = ",round(regr$adj.r.squared, digits = 2)),
+           x = 0,
+           y = 0,
+           size = ggtext_size,
+           family = "Helvetica",
+           hjust = 0,
+           vjust = 0,
+              colour = col) +
+  theme_leo() +
+  theme(axis.text.y = element_text(angle = 90,
+                                   hjust = 0.5),
+        plot.margin = unit(c(4, 2, 4, 4), "mm"))
+  # geom_label_repel(aes(label = genotype),
+  #                  size = 1,
+  #                  segment.size = 0.2)
+  
+}
+
+py_plot_lig <- py_plot("Lignin", "CLB") +
+  labs(x = expression(paste("Lignin * total pyrolysate"^-1)),
+    y = expression(paste("CLB [AU * AUC"^-1,"]"))) +
+  scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6))
+
+py_plot_sg <- py_plot("S/G", "1334/1276") +
+  labs(x = expression(paste("S"[R], " * G"[R]^{-1})),
+    y = expression(paste("1334 cm"^-1,"/ 1276 cm"^-1))) +
+  scale_y_continuous(breaks = c(0, 1, 2, 3))
+
+py_plot_cho <- py_plot("GCHO/lig", "1625/lig", "cad4xcad5", "black") +
+  labs(x = expression(paste("G"[CHO]," * lignin"^-1)),
+    y = expression(paste("1625 cm"^-1,"/ CLB"))) +
+  scale_y_continuous(breaks = c(0, 0.5, 1)) +
+  geom_point(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig" & genotype == "cad4xcad5"),
+             aes(colour = WT),
+             size = 1,
+             alpha = 0.75,
+             shape = 16) +
+  geom_errorbar(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig" & genotype == "cad4xcad5"),
+                aes(ymin = total.mean.scaled - total.sd.scaled,
+                    ymax = total.mean.scaled + total.sd.scaled),
+                size = 0.2,
+                width = 0,
+                alpha = 0.75) +
+  geom_smooth(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig"),
+              method = "lm",
+              colour = "black",
+                fullrange = T,
+                size = 0.4,
+                se = F,
+                linetype = 2)
+  # annotate("text",
+  #          label = "R² = −0.12",
+  #          x = 0,
+  #          y = 0.1,
+  #          size = ggtext_size,
+  #          family = "Helvetica",
+  #          hjust = 0,
+  #          vjust = 0,
+  #             colour = "blue")
+
+py_plot_goh <- py_plot("GOH/G", "1664/1603") +
+  labs(x = expression(paste("G"^{OH}," * total G-lignin"^-1)),
+    y = expression(paste("1664 cm"^-1,"/ 1603 cm"^-1))) 
+  # scale_y_continuous(breaks = c(0, 1, 2, 3))
+
+py_plot_snooh <- py_plot("SnoOH", "1334") +
+  labs(x = expression(paste("S-lignin "-" S-OH")),
+    y = expression(paste("1334 cm"^-1))) +
+  scale_y_continuous(breaks = c(0, 0.0015, 0.003), labels = c("0", "0.0015", "0.003")) +
+  scale_x_continuous(breaks = c(0, 0.01, 0.02), labels = c("0", "0.01", "0.02"))
+
+py_plot_soh <- py_plot("S-OH", "1334") +
+  labs(x = expression(paste("S-OH")),
+    y = expression(paste("1334 cm"^-1))) +
+  scale_y_continuous(breaks = c(0, 0.0015, 0.003), labels = c("0", "0.0015", "0.003")) +
+  scale_x_continuous(breaks = c(0, 0.005, 0.01), labels = c("0", "0.005", "0.01"))
+
+py_plot_scho <- py_plot("S-CHO", "1334") +
+  labs(x = expression(paste("S-CHO")),
+    y = expression(paste("1334 cm"^-1))) 
+  # scale_y_continuous(breaks = c(0, 0.0015, 0.003), labels = c("0", "0.0015", "0.003")) +
+  # scale_x_continuous(breaks = c(0, 0.005, 0.01), labels = c("0", "0.005", "0.01"))
+
+py_plot_snocho <- py_plot("SnoCHO", "1334") +
+  labs(x = expression(paste("S"-"S-CHO")),
+    y = expression(paste("1334 cm"^-1))) 
+
+
+pdf("Raman_scaled1603.pdf", width = onehalfcol, height = 5)
+right <- plot_grid(py_plot_lig, 
+                    py_plot_sg, 
+                    py_plot_cho,
+                   # py_plot_soh,
+                   # py_plot_snocho,
+                   # py_plot_snooh,
+  ncol = 1,
+  labels = c("", "C", "D"),
+  label_size = 10,
+  label_fontfamily = "Helvetica"
+  # label_x = -0.02,
+  # label_y = 1.01
+  )
+plot_grid(plot_grid(total_corr),
+          right,
+  labels = c("A", "B"),
+  label_size = 10,
+  label_fontfamily = "Helvetica",
+  # label_x = -0.005,
+  # label_y = 1.01,
+  rel_widths = c(1,0.6),
+  ncol = 2,
+  align = "hv",
+  axis = "t"
+)
+dev.off()
+```
+
+
+### no scaling
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+
+py <- read.csv("/home/leonard/Documents/Uni/PhD/Raman/pyrolysis_2018_amount.csv")
+
+py$`G-OH` <- ifelse(
+  py$variable == "mean",
+  py$X17 + py$X19 + py$X23,
+  sqrt(
+    py$X17^2 + py$X19^2 + py$X23^2
+  )
+)
+py$`S-OH` <- py$X33
+py$H <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:9]), sqrt(rowSums(py[, 7:9]^
+    2)))
+py$G <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:19]), sqrt(rowSums(py[, 7:19]^
+    2)))
+py$S <-
+  ifelse(py$variable == "mean", rowSums(py[, 21:28]), sqrt(rowSums(py[, 21:28]^
+    2)))
+py$S.G <- py$S / py$G
+py$H.G <- py$H / py$G
+py$Coniferaldehyde <- py$X22
+py$Vanillin <- py$X18
+py$Sinapaldehyde <- py$X32
+py$Syringaldehyde <- py$X29
+py$CHO <-
+  ifelse(
+    py$variable == "mean",
+    py$Coniferaldehyde + py$Sinapaldehyde + py$Vanillin + py$Syringaldehyde,
+    sqrt(
+      py$Coniferaldehyde^2 + py$Sinapaldehyde^2 + py$Vanillin^2 + py$Syringaldehyde^2
+    )
+  )
+py$Lignin <-
+  ifelse(py$variable == "mean", rowSums(py[, 3:28]), sqrt(rowSums(py[, 3:28]^
+    2)))
+
+py <- py %>%
+  select(genotype, variable, G, H, `G-OH`, Lignin, S, CHO) %>%
+  pivot_longer(-c(genotype, variable), names_to = "unit", values_to = "value")
+
+py_rmn <- rmn_data_avg %>%
+  filter(wavenumber %in% selected_peaks$wavenumber) %>%
+  group_by(genotype, wavenumber) %>%
+  summarise(total.mean.scaled = mean(mean.raw))
+
+
+# pdf("rmn_covariance.pdf")
+# corrplot(cor(spread(py_rmn, key = wavenumber, value = total.mean.scaled)[,-1]))
+# dev.off()
+
+py_rmn_corr <- left_join(py, py_rmn) %>%
+  ungroup() %>%
+  mutate(unit = recode(unit, 
+                       "G-OH" = "G-CHOH",
+                       "H" = "H-R",
+                       "G" = "G-R",
+                       "S" = "S-R",
+                       "CHO" = "R-CHO")) %>%
+  mutate(unit = ordered(unit, levels = c("Lignin", "G-R", "G-CHOH", "S-R", "H-R", "R-CHO")),
+         units_parsed = factor(unit, labels = c("Lignin",
+                                          "G[R]",
+                                          "G[CHOH]",
+                                          "S[R]",
+                                          "H[R]",
+                                          "R[CHO]")))
+
+
+py_rmn_corr_mat <- py_rmn_corr %>%
+  filter(variable == "mean") %>%
+  group_by(units_parsed, wavenumber) %>%
+  nest() %>%
+  mutate(
+    cor = map(data, ~ cor.test(.x$value, .x$total.mean.scaled)),
+    tidied = map(cor, tidy)
+  ) %>%
+  unnest(tidied)
+
+py_rmn_corr <- py_rmn_corr %>%
+  filter(variable == "mean") %>%
+  ungroup() %>%
+  mutate(
+    value = scale_range(value),
+    total.mean.scaled = scale_range(total.mean.scaled)
+  )
+
+total_corr <- ggplot(data = py_rmn_corr) +
+  geom_rect(
+    data = py_rmn_corr_mat,
+    xmin = -Inf,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf,
+    aes(fill = if_else(p.value < 0.05, estimate, NULL))
+  ) +
+  geom_point(aes(
+    x = value,
+    y = total.mean.scaled
+  ),
+  size = 0.5,
+  alpha = 0.75,
+  shape = 16
+  ) +
+  scale_fill_distiller(
+    palette = "RdYlBu",
+    na.value = "white",
+    name = "Pearson's r (if p < 0.05)",
+    limits = c(-1, 1)
+  ) +
+  guides(fill = guide_legend(title.position="top")) +
+  labs(
+    x = expression(paste("Pyrolysate * total pyrolysate"^-1)),
+    y = expression(paste("Raman average (IF:VB 1:1) * AUC"^-1))
+  ) +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    axis.ticks = element_blank(),
+    axis.text = element_blank(),
+    strip.text = element_text(size = 8),
+    legend.key.width = unit(4, "mm")
+  ) +
+  facet_grid(reorder(wavenumber, as.numeric(wavenumber)) ~ units_parsed, labeller = label_parsed) 
+
+pdf("pyro_correlations.pdf", height = 6, width = onecol)
+total_corr
+dev.off()
+```
+
+
+```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+
+py <- read.csv("/home/leonard/Documents/Uni/PhD/Raman/pyrolysis_2018_amount.csv")
+  
+py$Coniferaldehyde <- py$X22
+py$Vanillin <- py$X18
+py$Sinapaldehyde <- py$X32
+py$Syringaldehyde <- py$X29
+py$GOH <- ifelse(
+  py$variable == "mean",
+  py$X17 + py$X19 + py$X23,
+  sqrt(py$X17^2 + py$X19^2 + py$X23^2)
+)
+py$`S-OH` <- py$X33
+py$`S-CHO` <- py$X32
+py$`S-CHOs` <- ifelse(
+  py$variable == "mean",
+  py$X32 + py$X30 + py$X29,
+  sqrt(py$X32^2 + py$X30^2 + py$X29^2)
+)
+py$`SnoCHO` <- ifelse(
+  py$variable == "mean",
+  py$X26 + py$X27 + py$X31 + py$X28 + py$X33,
+  sqrt(py$X27^2 + py$X31^2 + py$X28^2 + py$X26^2 + py$X33^2)
+)
+py$GCHO <- ifelse(
+  py$variable == "mean",
+  py$X18 + py$X22,
+  sqrt(py$X18^2 + py$X22^2)
+)
+py$Aldehydes <-
+  ifelse(
+    py$variable == "mean",
+    py$Coniferaldehyde + py$Sinapaldehyde + py$Vanillin + py$Syringaldehyde,
+    sqrt(
+      py$Coniferaldehyde^2 + py$Sinapaldehyde^2 + py$Vanillin^2 + py$Syringaldehyde^2
+    )
+  )
+py$H <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:9]), sqrt(rowSums(py[, 7:9]^
+    2)))
+py$G <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:19]), sqrt(rowSums(py[, 7:19]^
+    2)))
+py$S <-
+  ifelse(py$variable == "mean", rowSums(py[, 21:28]), sqrt(rowSums(py[, 21:28]^
+    2)))
+py$SnoOH <-
+  ifelse(py$variable == "mean", rowSums(py[, 21:27]), sqrt(rowSums(py[, 21:27]^
+    2)))
+py$Lignin <-
+  ifelse(py$variable == "mean", rowSums(py[, 3:28]), sqrt(rowSums(py[, 3:28]^
+    2)))
+py$`GCHO/G` <- py$GCHO / py$G
+py$`GOH/G` <- py$GOH / py$G
+py$`GCHO/GOH` <- py$Coniferaldehyde / py$GOH
+py$`GCHO/lig` <- py$GCHO / py$Lignin
+py$`Aldehydes/lig` <- py$Aldehydes / py$Lignin
+py$`S/G` <- py$S / py$G
+py$`H/G` <- py$H / py$G
+py$`H/S` <- py$H / py$S
+
+py <- py %>%
+  select(-starts_with("X")) %>%
+  pivot_longer(-c(genotype, variable), names_to = "unit", values_to = "value") %>%
+  pivot_wider(id_cols = c( "genotype", "unit"), names_from = variable, values_from = value)
+
+py_rmn <- rmn_data_corrected %>%
+  filter(wavenumber %in% selected_peaks$wavenumber) %>%
+  group_by(cell.type, genotype, wavenumber, replicate, technical) %>%
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical), names_from = wavenumber,
+    values_from = corrected.intensity
+  ) %>%
+  group_by(cell.type, genotype, replicate, technical) %>%
+  transmute(
+    "CLB" = `1603` + (2 * `1334`),
+    "1334/1603" = `1334` / `1603`,
+    "1664/1603" = `1664` / `1603`,
+    "1334/1276" = `1334` / `1276`,
+    "1625/1603" = `1625` / `1603`,
+    "1625/1664" = `1625` / `1664`,
+    "1625/lig" = `1625` / `1603` + (2 * `1334`),
+    "1625" = `1625`,
+    "1334" = `1334`,
+    "1603" = `1603`
+  ) %>%
+  pivot_longer(cols = -c(genotype, cell.type, replicate, technical), names_to = "wavenumber", values_to = "scaled") %>%
+  group_by(genotype, wavenumber, cell.type) %>%
+  summarise(mean.scaled = mean(scaled),
+            sd.scaled = sd(scaled) / mean.scaled) %>%
+  group_by(genotype, wavenumber) %>%
+  summarise(total.mean.scaled = mean(mean.scaled),
+            total.sd.scaled = total.mean.scaled * sqrt(sum(sd.scaled^2)))
+
+py_rmn_corr <- left_join(py, py_rmn) %>%
+  mutate(WT = case_when(genotype == "Col-0" ~ "yes",
+                        TRUE ~ "no"))
+
+py_rmn_corr_mat <- py_rmn_corr %>%
+  # filter(variable == "mean") %>%
+  group_by(unit, wavenumber) %>%
+  nest() %>%
+  mutate(
+    cor = map(data, ~ cor.test(.x$mean, .x$total.mean.scaled)),
+    tidied = map(cor, tidy)
+  ) %>%
+  unnest(tidied)
+
+broom::glance(lm(mean ~ total.mean.scaled, data = filter(py_rmn_corr, unit == "Lignin" & 
+                                                           wavenumber == "CLB")))
+
+# broom::tidy(lm(Lignin ~ `1603` + `1334`, data = filter(py_rmn_corr, variable == "mean")))
+
+
+
+
+
+py_plot <- function(x, y, z = "bork", col = "white") {
+  
+tidycor <- broom::tidy(cor.test(
+  as.matrix(filter(py_rmn_corr, unit == x &
+                     wavenumber == y &
+                     genotype != z)[ ,"mean"]),
+  as.matrix(filter(py_rmn_corr, unit == x &
+                     wavenumber == y &
+                     genotype != z)[ ,"total.mean.scaled"])
+  ))
+print(tidycor)
+  
+regr <- broom::glance(lm(mean ~ total.mean.scaled, data = filter(py_rmn_corr, unit == x & 
+                                                           wavenumber == y &
+                                                           genotype != z)))
+
+ggplot(data = filter(py_rmn_corr, unit == x & wavenumber == y & genotype != z),
+       aes(x = mean, y = total.mean.scaled)) +
+  geom_rect(data = tidycor,
+            xmax = Inf,
+            ymax = Inf,
+            xmin = -Inf,
+            ymin = -Inf,
+            aes(fill = estimate,
+                x = 0,
+                y = 0)) +
+  geom_errorbar(aes(ymin = total.mean.scaled - total.sd.scaled,
+                    ymax = total.mean.scaled + total.sd.scaled),
+                size = 0.2,
+                width = 0,
+                alpha = 0.75) +
+  # geom_errorbarh(aes(xmin = mean - sd,
+  #                   xmax = mean + sd),
+  #               size = 0.2,
+  #               height = 0) +
+  geom_point(aes(colour = WT),
+             size = 1,
+             alpha = 0.75,
+             shape = 16) +
+  geom_smooth(method = "lm",
+                fullrange = T,
+                size = 0.4,
+                se = F,
+                linetype = 1,
+              colour = col) +
+  scale_colour_manual(values = c("yes" = "white", no = "black")) +
+  scale_fill_distiller(
+    palette = "RdYlBu",
+    na.value = "white",
+    name = "Pearson's r",
+    limits = c(-1, 1)
+  ) +
+  scale_x_continuous(limits = c(0, NA)) +
+  scale_y_continuous(limits = c(0, NA)) +
+  annotate("text",
+           label = paste("R² = ",round(regr$adj.r.squared, digits = 2)),
+           x = 0,
+           y = 0,
+           size = ggtext_size,
+           family = "Helvetica",
+           hjust = 0,
+           vjust = 0,
+              colour = col) +
+  theme_leo() +
+  theme(axis.text.y = element_text(angle = 90,
+                                   hjust = 0.5),
+        plot.margin = unit(c(4, 2, 4, 4), "mm"))
+  # geom_label_repel(aes(label = genotype),
+  #                  size = 1,
+  #                  segment.size = 0.2)
+  
+}
+
+py_plot_lig <- py_plot("Lignin", "CLB", col = "black") +
+  labs(x = expression(paste("Lignin * total pyrolysate"^-1)),
+    y = expression(paste("CLB [AU * AUC"^-1,"]")))
+  # scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6))
+
+py_plot_sg <- py_plot("S/G", "1334/1276") +
+  labs(x = expression(paste("S"[R], " * G"[R]^{-1})),
+    y = expression(paste("1334 cm"^-1,"/ 1276 cm"^-1))) +
+  scale_y_continuous(breaks = c(0, 1, 2, 3))
+
+py_plot_cho <- py_plot("GCHO/lig", "1625/lig", "cad4xcad5", "black") +
+  labs(x = expression(paste("G"[CHO]," * lignin"^-1)),
+    y = expression(paste("1625 cm"^-1,"/ CLB"))) +
+  # scale_y_continuous(breaks = c(0, 0.5, 1)) +
+  geom_point(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig" & genotype == "cad4xcad5"),
+             aes(colour = WT),
+             size = 1,
+             alpha = 0.75,
+             shape = 16) +
+  geom_errorbar(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig" & genotype == "cad4xcad5"),
+                aes(ymin = total.mean.scaled - total.sd.scaled,
+                    ymax = total.mean.scaled + total.sd.scaled),
+                size = 0.2,
+                width = 0,
+                alpha = 0.75) +
+  geom_smooth(data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig"),
+              method = "lm",
+              colour = "black",
+                fullrange = T,
+                size = 0.4,
+                se = F,
+                linetype = 2)
+  # annotate("text",
+  #          label = "R² = −0.12",
+  #          x = 0,
+  #          y = 0.1,
+  #          size = ggtext_size,
+  #          family = "Helvetica",
+  #          hjust = 0,
+  #          vjust = 0,
+  #             colour = "blue")
+
+py_plot_goh <- py_plot("GOH/G", "1664/1603") +
+  labs(x = expression(paste("G"^{OH}," * total G-lignin"^-1)),
+    y = expression(paste("1664 cm"^-1,"/ 1603 cm"^-1))) 
+  # scale_y_continuous(breaks = c(0, 1, 2, 3))
+
+py_plot_snooh <- py_plot("SnoOH", "1334") +
+  labs(x = expression(paste("S-lignin "-" S-OH")),
+    y = expression(paste("1334 cm"^-1))) +
+  scale_y_continuous(breaks = c(0, 0.0015, 0.003), labels = c("0", "0.0015", "0.003")) +
+  scale_x_continuous(breaks = c(0, 0.01, 0.02), labels = c("0", "0.01", "0.02"))
+
+py_plot_soh <- py_plot("S-OH", "1334") +
+  labs(x = expression(paste("S-OH")),
+    y = expression(paste("1334 cm"^-1))) +
+  scale_y_continuous(breaks = c(0, 0.0015, 0.003), labels = c("0", "0.0015", "0.003")) +
+  scale_x_continuous(breaks = c(0, 0.005, 0.01), labels = c("0", "0.005", "0.01"))
+
+py_plot_scho <- py_plot("S-CHO", "1334") +
+  labs(x = expression(paste("S-CHO")),
+    y = expression(paste("1334 cm"^-1))) 
+  # scale_y_continuous(breaks = c(0, 0.0015, 0.003), labels = c("0", "0.0015", "0.003")) +
+  # scale_x_continuous(breaks = c(0, 0.005, 0.01), labels = c("0", "0.005", "0.01"))
+
+py_plot_snocho <- py_plot("SnoCHO", "1334") +
+  labs(x = expression(paste("S"-"S-CHO")),
+    y = expression(paste("1334 cm"^-1))) 
+
+
+pdf("Raman_raw.pdf", width = onehalfcol, height = 5)
+right <- plot_grid(py_plot_lig, 
+                    py_plot_sg, 
+                    py_plot_cho,
+                   # py_plot_soh,
+                   # py_plot_snocho,
+                   # py_plot_snooh,
+  ncol = 1,
+  labels = c("", "C", "D"),
+  label_size = 10,
+  label_fontfamily = "Helvetica"
+  # label_x = -0.02,
+  # label_y = 1.01
+  )
+plot_grid(plot_grid(total_corr),
+          right,
+  labels = c("A", "B"),
+  label_size = 10,
+  label_fontfamily = "Helvetica",
+  # label_x = -0.005,
+  # label_y = 1.01,
+  rel_widths = c(1,0.6),
+  ncol = 2,
+  align = "hv",
+  axis = "t"
+)
+dev.off()
+```
+
