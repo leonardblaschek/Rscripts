@@ -344,3 +344,106 @@ p <-
 pdf("pyro_corr_both_log.pdf", width = 5, height = 5)
 p
 dev.off()
+
+#### supplemental regressions ####
+
+py <-
+  read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/pyrolysis_2018.csv")
+py <-
+  subset(py, genotype != "pal1" &
+           genotype != "pal2" & genotype != "WT_cad")
+py$H <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:9]), sqrt(rowSums(py[, 7:9]^
+                                                                   2)))
+py$G <-
+  ifelse(py$variable == "mean", rowSums(py[, 7:19]), sqrt(rowSums(py[, 7:19]^
+                                                                    2)))
+py$S <-
+  ifelse(py$variable == "mean", rowSums(py[, 21:28]), sqrt(rowSums(py[, 21:28]^
+                                                                     2)))
+py.melt <-
+  melt(
+    subset(py, select = c(1, 2, 30:32)),
+    id = c("genotype", "variable"),
+    variable.name = "residue"
+  )
+py.melt$sd <- py.melt$value
+py.melt <-
+  merge(
+    subset(py.melt, variable == "mean", select = c(1, 3, 4)),
+    subset(py.melt, variable == "sd", select = c(1, 3, 5))
+  )
+
+
+py.mean.OD <-
+  dcast(subset(phlog.monol.avg, genotype != "ccr1xfah1", select = c(1, 2, 5)),
+        genotype ~ cell.type)
+py.mean.OD[, 7] <-
+  0.5 * py.mean.OD[, 2] + 0.21 * py.mean.OD[, 4] + 0.21 * py.mean.OD[, 6] + py.mean.OD[, 3] *
+  0.03 + py.mean.OD[, 5] * 0.03
+colnames(py.mean.OD)[7] <- "Total"
+py.mean.OD <-
+  melt(py.mean.OD,
+       c("genotype"),
+       variable.name = "cell.type",
+       value.name = "mean.OD2")
+py.mean.SD <-
+  dcast(subset(phlog.monol.avg, select = c(1, 2, 6)), genotype ~ cell.type)
+py.mean.SD[, 7] <-
+  sqrt(
+    0.5 * py.mean.SD[, 2] ^ 2 + 0.21 * py.mean.SD[, 4] ^ 2 + 0.21 * py.mean.SD[, 6] ^
+      2 + 0.03 * py.mean.SD[, 3] ^ 2 + 0.03 * py.mean.SD[, 5] ^ 2
+  )
+colnames(py.mean.SD)[7] <- "Total"
+py.mean.SD <-
+  melt(py.mean.SD,
+       c("genotype"),
+       variable.name = "cell.type",
+       value.name = "SD.OD2")
+py.phlog <- merge(py.mean.OD, py.mean.SD)
+
+py.corr <- merge(py.melt, py.phlog)
+
+
+supp_reg <- py.corr %>%
+  filter(cell.type == "Total") %>%
+  pivot_wider(id_cols = c(genotype, mean.OD2), names_from = residue, values_from = value)
+
+mod_G <- lm(mean.OD2 ~ G, data = supp_reg)
+mod_GS <- lm(mean.OD2 ~ G + S, data = supp_reg)
+mod_GH <- lm(mean.OD2 ~ G + H, data = supp_reg)
+mod_GSH <- lm(mean.OD2 ~ G + S + H, data = supp_reg)
+
+models <- broom::glance(mod_G) %>%
+  rbind(broom::glance(mod_GS))%>%
+  rbind(broom::glance(mod_GH))%>%
+  rbind(broom::glance(mod_GSH)) %>%
+  add_column(model = c("G", "G + S", "G + H", "G + S + H"), .before = 1) %>%
+  select(model, adj.r.squared, BIC)
+
+model_table <- kable(models,
+                      "latex",
+                      align = "lll",
+                      caption = "Multiple regression models of the Wiesner test dependency on the concentration of different lignin subunits.",
+                      col.names = c(
+                        "Predictors",
+                        "Adjusted R²",
+                        "BIC"
+                      ),
+                      booktabs = TRUE,
+                      escape = TRUE,
+                      linesep = ""
+) 
+# %>%
+#   add_header_above(c(
+#     " " = 1, "Relative AUC\\\\textsuperscript{a}" = 2,
+#     "Signal\\\\textsubscript{Raman} * Signal\\\\textsubscript{fluo}\\\\textsuperscript{-1}" = 2
+#   ),
+#   escape = FALSE
+#   ) %>%
+#   footnote(alphabet = "Relative to the AUC of monomeric G\\\\textsubscript{CHOH}", escape = FALSE)
+
+model_table %>%
+  save_kable("Wiesner_tableS2.pdf")
+
+readr::write_file(model_table, "model_table.txt")

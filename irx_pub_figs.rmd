@@ -22,6 +22,10 @@ citecolor: blue
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(baseline)
+library(interactions)
+library(effects)
+library(grid)
+library(magick)
 library(agricolae)
 library(ggthemes)
 library(showtext)
@@ -33,8 +37,8 @@ library(ggridges)
 library(sf)
 library(piecewiseSEM)
 library(tukeygrps)
-library(wesanderson)
 library(scales)
+
 
 pal_ostwald_cont <- c("#155DA7", 
                       "#0A75B9", 
@@ -54,6 +58,11 @@ pal_ostwald_disc <- c("#275d95",
 pal_ostwald_disc2 <- c("#8fab1d", 
                        "#2d7d73", 
                        "#1d566f")
+pal_ostwald_disc3 <- c("#275d95",
+                       "#275d95",
+                      "#e8c245",
+                      "#d25952",
+                      "#d25952")
 pal_flame <- c("#1F265D", 
                "#203F8F", 
                "#404678", 
@@ -121,6 +130,8 @@ theme_leo <- function(base_size = 6,
       legend.position = "none",
       legend.text = element_text(size = 6),
       legend.key.height = unit(4, "mm"),
+      plot.title = element_text(size = 6,
+                                hjust = 0),
       complete = TRUE
     )
 }
@@ -164,9 +175,14 @@ my_limits <- function(value) {
 }
 
 ggtext_size <- 6 / (14 / 5)
+twocol <- 18 / 2.54
+onehalfcol <- 14 / 2.54
+onecol <- 9 / 2.54
 ```
 
 ## Wild type vessel overview
+
+### Load shape data
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 #### import and tidy shape data of the vessels from the Raman measurements ####
@@ -221,8 +237,17 @@ raman_convex <- raman_convex %>%
   ) %>%
   filter(cell.type != "？？")
 
-rmn_irx <- left_join(rmn_irx, raman_convex)
+rmn_irx <- left_join(rmn_irx, raman_convex) %>%
+  # group_by(genotype, replicate, technical, cell.type) %>%
+  mutate(Perim. = Perim. * (5.9 / 3.2), # correct wrong scale while measuring
+         Area = Area * (5.9 / 3.2)^2,
+         ConvexArea = ConvexArea * (5.9 /3.2)^2
+         )
+  
+  
 ```
+
+### Load Raman data
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 #### import and tidy Raman data ####
@@ -238,20 +263,37 @@ read_plus <- function(flnm) {
   read_tsv(flnm,
     comment = "#",
     col_names = FALSE,
-    skip = 1,
+    skip = 25,
     cols_only(
       X1 = col_number(),
       X2 = col_number()
     )
   ) %>%
-    mutate(filename = flnm)
+    mutate(
+      filename = flnm,
+      exp_time = readLines(flnm) %>%
+        str_split("\t") %>%
+        grep("Exposure Time: .* s", ., value = T) %>%
+        str_remove_all("#Exposure Time: | s") %>%
+        as.numeric(),
+      pwr = readLines(flnm) %>%
+        str_split("\t") %>%
+        grep("Excitation Power: .* mW", ., value = T) %>%
+        str_remove_all("#Excitation Power: | mW") %>%
+        as.numeric(),
+      nd_fltr = 1 - (readLines(flnm) %>%
+        str_split("\t") %>%
+        grep("% \\([0-9]{3}/255\\)", ., value = T) %>%
+        str_remove_all("#ND Filter : | % \\([0-9]{3}/255\\)") %>%
+        as.numeric() / 100)
+    )
 }
 
 rmn_data <- lapply(rmn_files, read_plus) %>%
   bind_rows()
 
-rmn_data <- rmn_data %>%
-  select(c(1:3))
+# rmn_data <- rmn_data %>%
+#   select(c(1:3))
 
 rmn_data$filename <- basename(rmn_data$filename)
 
@@ -290,11 +332,13 @@ rmn_data <- rmn_data %>%
     technical = str_extract(
       technical,
       "(\\d)+"
-    )
+    ),
+    wavenumber = round(wavenumber, digits = 0)
   ) %>%
-  filter(cell.type != "？？")
-
-rmn_data$wavenumber <- round(rmn_data$wavenumber, digits = 0)
+  filter(cell.type != "？？") %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(intensity = intensity / (exp_time * pwr * nd_fltr)) %>%
+  select(-exp_time, -pwr, -nd_fltr)
 
 #### baseline correct Raman data ####
 rmn_data_wide <- rmn_data %>%
@@ -347,52 +391,52 @@ rmn_data_corrected <- rmn_data_corrected %>%
         "cad4xcad5"
       )
     )
-  )
+    )
 
-# lig_peak <- rmn_data_corrected %>%
-#   group_by(genotype, cell.type, replicate, technical) %>%
-#   filter(wavenumber %in% c(1580:1620)) %>%
+write_csv(rmn_data_corrected, "rmn_data_corrected.csv")
+# rmn_data_corrected <- read_csv("rmn_data_corrected.csv", col_types = "ccccnnn") %>%
 #   mutate(
-#     peak.pos = wavenumber[which.max(corrected.intensity)],
-#     peak.height = corrected.intensity[which(wavenumber == peak.pos)]
-#   ) %>%
-#   filter(wavenumber == 1580) %>%
-#   select(genotype:technical, peak.pos, peak.height)
+#     genotype = ordered(genotype,
+#       levels = c(
+#         "Col-0",
+#         "4cl1",
+#         "4cl2",
+#         "4cl1x4cl2",
+#         "ccoaomt1",
+#         "fah1",
+#         "omt1",
+#         "ccr1-3",
+#         "cad4",
+#         "cad5",
+#         "cad4xcad5"
+#       )
+#     )
+#   )
 
 rmn_data_corrected <- rmn_data_corrected %>%
   # left_join(lig_peak) %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   mutate(
-    AUC = MESS::auc(wavenumber, intensity),
+    AUC = MESS::auc(wavenumber, corrected.intensity),
     scaled = corrected.intensity / AUC,
-    scaled_max = case_when(
-      wavenumber == 1664 ~ corrected.intensity / corrected.intensity[wavenumber == 1603],
-      TRUE ~ corrected.intensity / (
-        corrected.intensity[wavenumber == 1603] + 4.6 * corrected.intensity[wavenumber == 1334]
-      )
-    ),
-    # lig_peak = peak.height / AUC
-  )
+    scaled_lig = corrected.intensity / (
+      corrected.intensity[wavenumber == 1603] + 2 * corrected.intensity[wavenumber == 1334]
+    ))
 
 rmn_data_pre <- rmn_data_corrected %>%
   group_by(genotype, cell.type, replicate, wavenumber) %>%
   summarise(
     samples.pre = length(corrected.intensity),
     mean.scaled = mean(scaled, na.rm = TRUE),
-    mean.scaled_max = mean(scaled_max, na.rm = TRUE),
+    mean.scaled_lig = mean(scaled_lig, na.rm = TRUE),
     # mean.lig_peak = mean(lig_peak, na.rm = TRUE)
   )
 
 rmn_data_avg <- rmn_data_pre %>%
   group_by(genotype, cell.type, wavenumber) %>%
   summarise(
-    plants = paste("plants: ", length(mean.scaled)),
-    bundles = ifelse(length(mean.scaled) > 1,
-      paste("cells/plant: ", min(samples.pre), "—", max(samples.pre), sep = ""),
-      paste("cells/plant: ", min(samples.pre))
-    ),
     mean.scaled = mean(mean.scaled, na.rm = TRUE),
-    mean.scaled_max = mean(mean.scaled_max, na.rm = TRUE),
+    mean.scaled_lig = mean(mean.scaled_lig, na.rm = TRUE),
     # mean.lig_peak = mean(mean.lig_peak, na.rm = TRUE)
   )
 
@@ -400,19 +444,22 @@ rmn_data_avg <- rmn_data_pre %>%
 rmn_sum <- rmn_data_corrected %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   summarise(
-    "total_lignin" = scaled[wavenumber == 1603] + 4.6 * scaled[wavenumber == 1334],
-    "GOH_rel" = scaled_max[wavenumber == 1664],
+    "total_lignin" = scaled[wavenumber == 1603] + 2 * scaled[wavenumber == 1334],
+    "GOH_rel" = scaled_lig[wavenumber == 1664],
+    "GOH.G" = scaled_lig[wavenumber == 1664] / scaled_lig[wavenumber == 1603],
     # "GOH_tot" = scaled[wavenumber == 1664],
     # "G_tot" = scaled[wavenumber == 1603],
-    "G_rel" = scaled_max[wavenumber == 1603],
+    "G_rel" = scaled_lig[wavenumber == 1603],
     "S.G" = scaled[wavenumber == 1334] / scaled[wavenumber == 1276],
-    # "GCHO.G" = scaled_max[wavenumber == 1625],
-    "S_rel" = scaled_max[wavenumber == 1334],
+    "GCHO.lig" = scaled_lig[wavenumber == 1625],
+    "S_rel" = scaled_lig[wavenumber == 1334],
     # "S_tot" = scaled[wavenumber == 1334],
     "cellulose" = scaled[wavenumber == 1099] + scaled[wavenumber == 381],
     "AUC" = mean(AUC)
   )
 ```
+
+## Vessel type figure
 
 ```{r figure 2, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%', fig.width=5, fig.height=4}
 rmn_sum_long <- rmn_sum %>%
@@ -542,7 +589,7 @@ rmn_adj_box <- ggplot(
   # scale_colour_manual(values = pal_ostwald[c(3, 4, 6)]) +
   labs(
     x = "Neighbouring cell type",
-    y = "Cell walls adjacent [%]"
+    y = "CW adjacent [%]"
   ) +
   theme_leo() +
   theme(
@@ -554,16 +601,17 @@ pdf("rmn_adj_box.pdf", width = 9 / 2.54, height = 1.5)
 rmn_adj_box
 dev.off()
 
-rmn_area_letters <- letter_groups(rmn_sum_long %>% filter(variable == "Area"),
+
+rmn_violin <- function(x) { 
+  letters <- letter_groups(rmn_sum_long %>% filter(variable == x),
                                  value,
                                  cell.type,
                                  "tukey",
                                  print_position = "below",
-                                 print_adjust = 0.5
+                                 print_adjust = 1
 ) %>%
   mutate(cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX")))
-
-rmn_violin <- function(x) { 
+  
   ggplot(
   data = rmn_sum_long %>% filter(variable == x),
   aes(x = cell.type, y = value)
@@ -602,7 +650,7 @@ size = 0.2,
 scale = "width"
 ) +
   geom_text(
-    data = rmn_area_letters,
+    data = letters,
     aes(label = groups),
     size = ggtext_size,
     family = "Helvetica",
@@ -610,6 +658,7 @@ scale = "width"
   ) +
   scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
   scale_fill_manual(values = pal_flame_disc) +
+  expand_limits(y = 0) +
   theme_leo() +
   theme(
     text = element_text(family = "Helvetica"),
@@ -626,26 +675,68 @@ rmn_area <- rmn_violin("Area") +
 rmn_lig <- rmn_violin("total_lignin") +
   labs(
     x = "",
-    y = expression(paste("Lignin band intensity [AU]"))
+    y = expression(paste("Relative lignin"))
+  ) +
+  expand_limits(y = 0.015)
+
+rmn_s <- rmn_violin("S_rel") +
+  labs(
+    x = "",
+    y = expression(paste("Relative S-lignin"))
+  )
+
+rmn_g <- rmn_violin("G_rel") +
+  labs(
+    x = "",
+    y = expression(paste("Relative G-lignin"))
+  )
+
+rmn_goh <- rmn_violin("GOH.G") +
+  labs(
+    x = "",
+    y = expression(paste("Relative G"[CHOH]))
   )
 
 rmn_cellu <- rmn_violin("cellulose") +
   labs(
     x = "",
-    y = expression(paste("Cellulose band intensity [AU]"))
+    y = expression(paste("Relative cellulose"))
   )
 
-rmn_area
+celltypes_WT <-
+  rasterGrob(image_read_pdf(
+    "/home/leonard/Dropbox/IRX manuscript/Figures/IRX_WT.pdf",
+    density = 600
+  ))
 
-pdf("IRX_Figure2.pdf")
-plot_grid(rmn_area,
-  rmn_lig,
-  rmn_cellu,
-  labels = c("A", "B", "C"),
+
+top <- plot_grid(celltypes_WT,
+  rmn_adj_box,
+  labels = c("A", "B"),
   nrow = 1,
+  rel_widths = c(1, 2.2),
+  vjust = 1,
   label_size = 10,
   label_fontfamily = "Helvetica"
 )
+bottom <- plot_grid(rmn_area,
+  rmn_cellu,
+  rmn_lig,
+  rmn_g,
+  rmn_goh,
+  rmn_s,
+  labels = c("C", "D", "E", "F", "G", "H"),
+  vjust = 1,
+  nrow = 2,
+  label_size = 10,
+  label_fontfamily = "Helvetica"
+)
+
+pdf("IRX_Figure2.pdf", width = onecol, height = onecol)
+plot_grid(top,
+          bottom,
+          nrow = 2,
+          rel_heights = c(1.2,2))
 dev.off()
 ```
 
@@ -768,16 +859,16 @@ irx_str <- irx_str %>%
       "cad4xcad5"
     )),
     cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX"))
-  )
+  ) 
 
-pdf("sf_ROIs.pdf")
-ggplot() +
+sf_ROIs <- ggplot() +
   geom_sf(
     data = irx_str,
     aes(colour = circularity),
     # colour = "black",
     fill = NA,
-    lwd = 0.1
+    lwd = 0.1,
+    key_glyph = "point"
   ) +
   # geom_quasirandom(data = irx_str,
   #                  aes(x = 2, 
@@ -786,22 +877,71 @@ ggplot() +
   #                  shape = 21, 
   #                  colour = "white") +
   theme_leo() +
+  scale_x_continuous(expand = expand_scale(mult = 0)) +
+  scale_y_continuous(expand = expand_scale(mult = 0)) +
   theme(
     text = element_text(family = "Helvetica"),
-    legend.position = "none",
+    legend.position = "right",
     panel.border = element_blank(),
     # panel.background = element_rect(fill = "black"),
     axis.text = element_blank(),
     axis.title = element_blank(),
-    axis.ticks = element_blank()
+    axis.ticks = element_blank(),
+    strip.text = element_text(hjust = 0.5, face = "italic")
   ) +
   # scale_colour_distiller(palette = "YlGnBu", direction = -1) +
   # scale_colour_gradientn(colours = pal_wes, trans = "reverse") +
-  scale_colour_gradientn(colours = pal_ostwald, trans = "reverse") +
+  scale_colour_gradientn(colours = pal_ostwald_cont, trans = "reverse", name = "Circularity") +
+  guides(colour = guide_colourbar(barwidth = unit(2, "mm"))) +
   # scale_colour_gradientn(colours = pal_flame, trans = "reverse") +
   # scale_fill_gradientn(colours = pal_flame, trans = "reverse") +
   # scale_colour_viridis_c(direction = 1) +
-  facet_grid(cell.type ~ genotype)
+  facet_grid(cell.type ~ genotype, switch = "y")
+
+pdf("sf_ROIs.pdf", width = twocol, height = onecol)
+sf_ROIs
+dev.off()
+
+
+xdens <- ggplot(irx_str) +
+  geom_density(aes(x = circularity, fill = cell.type),
+               size = 0.1,
+               alpha = 0.5) +
+  scale_fill_manual(values = pal_flame_disc) +
+  theme_void()
+
+ydens <- ggplot(irx_str) +
+  geom_density(aes(x = convexity, fill = cell.type),
+               size = 0.1,
+               alpha = 0.5) +
+  scale_fill_manual(values = pal_flame_disc) +
+  coord_flip() +
+  theme_void()
+
+
+pdf("shape_distribution.pdf", height = onecol / 2, width = onecol)
+scatter <- ggplot(irx_str) +
+  geom_point(aes(x = circularity, y = convexity, shape = cell.type, fill = cell.type),
+             size = 1,
+             alpha = 0.75,
+             stroke = 0.2) +
+  scale_fill_manual(values = pal_flame_disc) +
+  scale_shape_manual(values = c(21, 22, 23)) +
+  labs(x = "Circularity",
+       y = "Convexity") +
+  theme_leo() +
+  theme(legend.position = c(0.9, 0.2),
+        legend.title = element_blank(),
+        # legend.spacing = unit(0, "mm"),
+        # legend.key.width = unit(4, "mm"),
+        # legend.key.height = unit(4, "mm"),
+        # legend.margin = margin(0,0,0,0)
+        )
+scatter_x <- insert_xaxis_grob(scatter, xdens, height = grid::unit(0.1, "null"),
+  position = c("top"))
+scatter_xy <- insert_yaxis_grob(scatter_x, ydens, width = grid::unit(0.1, "null"),
+  position = c("right"))
+ggdraw(scatter_xy)
 dev.off()
 
 # irx_sample <- irx_str %>%
@@ -936,16 +1076,16 @@ wiesner.data.pre <- wiesner.data %>%
   select(genotype, cell.type, replicate, mean.OD1)
 
 #### import and tidy shape data of the vessels from the Raman measurements ####
-raman.irx <- read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/raman_IRX_revisited.csv") %>%
+rmn_irx <- read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/raman_IRX_revisited.csv") %>%
   select(genotype:Perim., Circ., Round, Height, Width) %>%
   filter(object == 2) %>%
   select(-object)
 
 raman.nb <- read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/raman_IRX.csv") %>%
   select(genotype:n_f)
-raman.irx <- left_join(raman.irx, raman.nb)
-raman.irx$replicate <- as.character(raman.irx$replicate)
-raman.irx$technical <- as.character(raman.irx$technical)
+rmn_irx <- left_join(rmn_irx, raman.nb)
+rmn_irx$replicate <- as.character(rmn_irx$replicate)
+rmn_irx$technical <- as.character(rmn_irx$technical)
 
 raman_convex <- read.csv("/home/leonard/Documents/Uni/PhD/IRX/raman_irx_convex.csv")
 
@@ -987,9 +1127,9 @@ raman_convex <- raman_convex %>%
   ) %>%
   filter(cell.type != "？？")
 
-raman.irx <- left_join(raman.irx, raman_convex)
+rmn_irx <- left_join(rmn_irx, raman_convex)
 
-# write_csv(raman.irx, "raman_irx_shape.csv")
+# write_csv(rmn_irx, "raman_irx_shape.csv")
 
 #### import and tidy plant height data ####
 raman.heights <- read.csv("file:///home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
@@ -1000,62 +1140,25 @@ raman.heights <- read.csv("file:///home/leonard/Documents/Uni/Master/Summer proj
 raman.heights$replicate <- as.character(raman.heights$replicate)
 
 #### merge data frames ####
-raman.irx <- left_join(raman.irx, rmn_sum)
-raman.irx.switch <- left_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
+rmn_irx <- left_join(rmn_irx, rmn_sum)
+rmn_irx.switch <- left_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
   col_types = "cccc"
-), raman.irx) %>%
+), rmn_irx) %>%
   mutate(
     technical = str_c(technical, "switched", sep = "_"),
     cell.type = "SMX"
   )
-raman.irx <- raman.irx %>%
+rmn_irx <- rmn_irx %>%
   anti_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
     col_types = "cccc"
   )) %>%
-  bind_rows(raman.irx.switch)
-raman.irx <- left_join(raman.irx, raman.heights)
-raman.irx <- left_join(raman.irx, wiesner.data.pre) %>%
+  bind_rows(rmn_irx.switch)
+rmn_irx <- left_join(rmn_irx, raman.heights)
+rmn_irx <- left_join(rmn_irx, wiesner.data.pre) %>%
   mutate(convexity = Area / ConvexArea)
-# write.csv(raman.irx, file = "SEM_data.csv")
+# write.csv(rmn_irx, file = "SEM_data.csv")
 ```
 
-```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-# raman.irx.PMX <- filter(raman.irx, cell.type == "SMX") %>%
-#   select(
-#     convexity,
-#     Perim.,
-#     n_f,
-#     n_p,
-#     n_v,
-#     cellulose,
-#     mean.OD1,
-#     total_lignin,
-#     AUC,
-#     G_rel,
-#     GOH_rel,
-#     S_rel,
-#     GCHO.G,
-#     S.G
-#   ) %>%
-#   drop_na()
-# 
-# 
-# # chart.Correlation(raman.irx.PMX,
-# #                   histogram=TRUE, pch=21)
-# 
-# model.null <- lm(convexity ~ 1,
-#   data = raman.irx.PMX
-# )
-# model.full <- lm(convexity ~ .,
-#   data = raman.irx.PMX
-# )
-# 
-# step(model.null,
-#   scope = list(upper = model.full),
-#   direction = "both",
-#   data = raman.irx.PMX
-# )
-```
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 TM.multigroup <- function(x) {
@@ -1063,23 +1166,24 @@ TM.multigroup <- function(x) {
     lm(Circ. ~
     n_v +
       convexity,
-    data = filter(drop_na(raman.irx), cell.type == x)
+    data = filter(drop_na(rmn_irx), cell.type == x)
     ),
     lm(convexity ~
-    n_v +
+    # n_v +
       # n_f +
-      mean.OD1 +
+      # mean.OD1 +
       Perim. +
       # S.G +
       # G_tot +
-      GOH_rel +
-      G_rel +
+      # GOH_rel +
+      GOH.G +
+      # G_rel +
       # GOH_tot +
       S_rel +
       # S_tot +
-      # GCHO.G +
+      # GCHO.lig +
       total_lignin,
-    data = filter(drop_na(raman.irx), cell.type == x)
+    data = filter(drop_na(rmn_irx), cell.type == x)
     ),
     # lme(Perim. ~
     #       # n_v,
@@ -1089,7 +1193,7 @@ TM.multigroup <- function(x) {
     #       # lig.peak.pos +
     #       lig.peak,
     #     random = ~1|replicate,
-    #     data = filter(drop_na(raman.irx), cell.type == x)
+    #     data = filter(drop_na(rmn_irx), cell.type == x)
     # ),
     # lme(HeightByWidth ~
     #       # mean.OD1 +
@@ -1097,26 +1201,26 @@ TM.multigroup <- function(x) {
     #       # n_v +
     #       Circ.,
     #     random = ~1|replicate,
-    #     data = filter(drop_na(raman.irx), cell.type == x)
+    #     data = filter(drop_na(rmn_irx), cell.type == x)
     # ),
     # lme(X1147.1603 ~
     #       Perim.,
     #     random = ~1|replicate,
-    #     data = filter(drop_na(raman.irx), cell.type == x)
+    #     data = filter(drop_na(rmn_irx), cell.type == x)
     # ),
     # lme(X1603.1099 ~
     #       Perim.,
     #     random = ~1|replicate,
-    #     data = filter(drop_na(raman.irx), cell.type == x)
+    #     data = filter(drop_na(rmn_irx), cell.type == x)
     # ),
     # lme(mean.OD1 ~
     #       X1664.1603 +
     #       X1603.1099 +
     #       X1621.1603,
     #     random = ~1|replicate,
-    #     data = filter(drop_na(raman.irx), cell.type == x)
+    #     data = filter(drop_na(rmn_irx), cell.type == x)
     # ),
-    data = filter(drop_na(raman.irx), cell.type == x)
+    data = filter(drop_na(rmn_irx), cell.type == x)
   )
 }
 ```
@@ -1134,8 +1238,36 @@ negative (weakening) factors:
 * Relative S-content
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-summary(TM.multigroup("PX"), .progressBar = FALSE)
-plot(TM.multigroup("PX"))
+# summary(TM.multigroup("PX"), .progressBar = FALSE)
+psem_px <- psem(
+    lm(Circ. ~
+    # n_v +
+      convexity,
+    data = filter(drop_na(rmn_irx), cell.type == "PX")
+    ),
+    lm(convexity ~
+    # n_v +
+      # n_f +
+      mean.OD1 +
+      Perim. +
+      # cellulose +
+      # S.G +
+      # G_tot +
+      # GOH_rel +
+      GOH.G +
+      # G_rel +
+      # GOH_tot +
+      S_rel +
+      # S_tot +
+      # GCHO.lig +
+      total_lignin:mean.OD1 +
+      total_lignin,
+    data = filter(drop_na(rmn_irx), cell.type == "PX")
+    ),
+    data = filter(drop_na(rmn_irx), cell.type == "PX")
+  )
+summary(psem_px)
+plot(psem_px)
 ```
 
 ## SEM for PMX
@@ -1154,8 +1286,35 @@ negative (weakening) factors:
 * Adjacent vessels
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-summary(TM.multigroup("PMX"), .progressBar = FALSE)
-plot(TM.multigroup("PMX"))
+# summary(TM.multigroup("PMX"), .progressBar = FALSE)
+psem_pmx <- psem(
+    lm(Circ. ~
+    n_v +
+      convexity,
+    data = filter(drop_na(rmn_irx), cell.type == "PMX")
+    ),
+    lm(convexity ~
+    n_v +
+      # n_f +
+      mean.OD1 +
+      # Perim. +
+      # S.G +
+      # G_tot +
+      # GOH_rel +
+      # GOH.G +
+      # G_rel +
+      # GOH_tot +
+      S_rel +
+      # S_tot +
+      # GCHO.lig +
+      # total_lignin:mean.OD1 +
+      total_lignin,
+    data = filter(drop_na(rmn_irx), cell.type == "PMX")
+    ),
+    data = filter(drop_na(rmn_irx), cell.type == "PMX")
+  )
+summary(psem_pmx)
+plot(psem_pmx)
 ```
 
 ## SEM for SMX
@@ -1169,30 +1328,511 @@ negative (weakening) factors:
 * Relative S-content
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-summary(TM.multigroup("SMX"), .progressBar = FALSE)
-plot(TM.multigroup("SMX"))
+# summary(TM.multigroup("SMX"), .progressBar = FALSE)
+psem_smx <- psem(
+    lm(Circ. ~
+    # n_v +
+      convexity,
+    data = filter(drop_na(rmn_irx), cell.type == "SMX")
+    ),
+    lm(convexity ~
+    # n_v +
+      # n_f +
+      mean.OD1 +
+      # Perim. +
+      # S.G +
+      # G_tot +
+      # GOH_rel +
+      GOH.G +
+      # G_rel +
+      # GOH_tot +
+      # S_rel +
+      # S_tot +
+      # GCHO.lig +
+      total_lignin:mean.OD1 +
+      total_lignin,
+    data = filter(drop_na(rmn_irx), cell.type == "SMX")
+    ),
+    data = filter(drop_na(rmn_irx), cell.type == "SMX")
+  )
+summary(psem_smx)
+plot(psem_smx)
 ```
 
+## Model figure
+
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-# raman.irx.scaled <- raman.irx %>%
-#   select(-c(1:4)) %>%
-#   as.matrix() %>%
-#   scale() %>%
-#   as_tibble() %>%
-#   cbind(raman.irx[, c(1:4)])
+
+SEM_PX <-
+  rasterGrob(image_read_pdf(
+    "/home/leonard/Dropbox/IRX manuscript/Figures/SEM_PX.pdf",
+    density = 600
+  ))
+
+SEM_PMX <-
+  rasterGrob(image_read_pdf(
+    "/home/leonard/Dropbox/IRX manuscript/Figures/SEM_PMX.pdf",
+    density = 600
+  ))
+
+SEM_SMX <-
+  rasterGrob(image_read_pdf(
+    "/home/leonard/Dropbox/IRX manuscript/Figures/SEM_SMX.pdf",
+    density = 600
+  ))
+
+bottom <- plot_grid(SEM_PX,
+                    SEM_PMX,
+                    SEM_SMX,
+                    labels = c("B", "C", "D"),
+  vjust = 1,
+  nrow = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica")
+
+pdf("IRX_Figure4.pdf", width = twocol, height = onecol)
+plot_grid(sf_ROIs,
+          bottom,
+          labels = c("A", ""),
+  vjust = 1,
+  nrow = 2,
+  label_size = 10,
+  label_fontfamily = "Helvetica",
+  rel_heights = c(1.2,1))
+
+dev.off()
+
+```
+
+
+## Supplemental figures
+
+### Interaction terms
+
+#### interaction within the best models
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+find_interactions <- function(x) {
+  rmn_irx <- filter(rmn_irx, cell.type == x) %>%
+  select(
+    convexity,
+    Perim.,
+    # n_f,
+    # n_p,
+    n_v,
+    cellulose,
+    mean.OD1,
+    total_lignin,
+    # AUC,
+    # G_rel,
+    # GOH_rel,
+    GOH.G,
+    S_rel,
+    # GCHO.lig,
+    # S.G
+  ) %>%
+  drop_na()
+  
+  model.null <- lm(convexity ~ 1,
+  data = rmn_irx
+)
+model.full <- lm(convexity ~ (.)^2,
+  data = rmn_irx
+)
+
+best_model <- step(model.null,
+  scope = list(upper = model.full),
+  direction = "both",
+  data = rmn_irx
+)
+
+print(tidy(best_model) %>%
+  select(term) %>%
+  filter(str_detect(term, fixed(":"))))
+
+best_model
+}
+
+#### protoxylem ####
+best_model <- find_interactions("PX")
+
+mean.OD1_total_lignin <- interact_plot(best_model, pred = mean.OD1, modx = total_lignin, 
+                      colors = c("black", "black", "black"),
+                      x.label = "Wiesner stain",
+                      y.label = "Convexity") + 
+  theme_leo() +
+  theme(legend.position = c(0.75, 0.8),
+        panel.background = element_rect(fill = pal_flame_disc[1]))
+mean.OD1_total_lignin$layers[[1]]$aes_params$size <- 0.4 
+
+
+best_model <- find_interactions("PX")
+
+total_lignin_Perim. <- interact_plot(best_model, pred = total_lignin, modx = Perim., 
+                      colors = c("black", "black", "black"),
+                      x.label = "Total lignin",
+                      y.label = "Convexity") + 
+  theme_leo() +
+  theme(legend.position = c(0.75, 0.8),
+        panel.background = element_rect(fill = pal_flame_disc[1])) +
+  scale_y_continuous(
+  labels = scales::number_format(accuracy = 0.01))
+total_lignin_Perim.$layers[[1]]$aes_params$size <- 0.4 
+
+S_rel_Perim. <- interact_plot(best_model, pred = S_rel, modx = Perim., 
+                      colors = c("black", "black", "black"),
+                      x.label = "S-lignin",
+                      y.label = "Convexity") + 
+  theme_leo() +
+  theme(legend.position = c(0.75, 0.8),
+        panel.background = element_rect(fill = pal_flame_disc[1])) +
+  scale_y_continuous(
+  labels = scales::number_format(accuracy = 0.01)) +
+  scale_x_continuous(
+  labels = scales::number_format(accuracy = 0.01))
+S_rel_Perim.$layers[[1]]$aes_params$size <- 0.4 
+
+mean.OD1_Perim. <- interact_plot(best_model, pred = mean.OD1, modx = Perim., 
+                      colors = c("black", "black", "black"),
+                      x.label = "Wiesner stain",
+                      y.label = "Convexity") + 
+  theme_leo() +
+  theme(legend.position = c(0.75, 0.8),
+        panel.background = element_rect(fill = pal_flame_disc[1]))
+mean.OD1_Perim.$layers[[1]]$aes_params$size <- 0.4 
+
+GOH.G_mean.OD1 <- interact_plot(best_model, pred = GOH.G, modx = mean.OD1, 
+                      colors = c("black", "black", "black"),
+                      x.label = "Coniferyl alcohol",
+                      y.label = "Convexity") + 
+  theme_leo() +
+  theme(legend.position = c(0.75, 0.8),
+        panel.background = element_rect(fill = pal_flame_disc[1]))
+GOH.G_mean.OD1$layers[[1]]$aes_params$size <- 0.4 
+
+pdf("PX_interactions.pdf", height = twocol, width = twocol)
+px <- plot_grid(
+  total_lignin_Perim. + theme(legend.position="none"),
+  S_rel_Perim. + theme(legend.position="none"),
+  mean.OD1_Perim. + theme(legend.position="none"),
+  mean.OD1_total_lignin + theme(legend.position="none"),
+  "",
+  GOH.G_mean.OD1 + theme(legend.position="none"),
+  "",
+  ncol = 1
+)
+px
+dev.off()
+
+#### primary metaxylem ####
+best_model <- find_interactions("PMX")
+
+n_v_mean.OD1 <- interact_plot(best_model, pred = n_v, modx = mean.OD1, 
+                      colors = c("black", "black", "black"),
+                      x.label = "Vessel adjacency",
+                      y.label = "Convexity") + 
+  theme_leo() +
+  theme(legend.position = c(0.75, 0.8),
+        panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5)))
+n_v_mean.OD1$layers[[1]]$aes_params$size <- 0.4 
+
+n_v_total_lignin <- interact_plot(best_model, pred = n_v, modx = total_lignin, 
+                      colors = c("black", "black", "black"),
+                      x.label = "Vessel adjacency",
+                      y.label = "Convexity") + 
+  theme_leo() +
+  theme(legend.position = c(0.75, 0.8),
+        panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5)))
+n_v_total_lignin$layers[[1]]$aes_params$size <- 0.4 
+
+pdf("PMX_interactions.pdf", height = onecol, width = onecol / 2)
+pmx <- plot_grid(
+  "",
+  "",
+  "",
+  "",
+  n_v_total_lignin + theme(legend.position="none"),
+  "",
+  n_v_mean.OD1 + theme(legend.position="none"),
+  ncol = 1
+)
+pmx
+dev.off()
+
+#### secondary metaxylem ####
+best_model <- find_interactions("SMX")
+
+GOH.G_mean.OD1 <- interact_plot(best_model, pred = GOH.G, modx = mean.OD1, 
+                      colors = c("white", "white", "white"),
+                      x.label = "Coniferyl alcohol",
+                      y.label = "Convexity") + 
+  theme_leo() +
+  theme(legend.position = c(0.75, 0.8),
+        panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5)))
+GOH.G_mean.OD1$layers[[1]]$aes_params$size <- 0.4 
+
+mean.OD1_total_lignin <- interact_plot(best_model, pred = mean.OD1, modx = total_lignin, 
+                      colors = c("white", "white", "white"),
+                      x.label = "Wiesner stain",
+                      y.label = "Convexity") + 
+  theme_leo() +
+  theme(legend.position = c(0.75, 0.8),
+        panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5)))
+mean.OD1_total_lignin$layers[[1]]$aes_params$size <- 0.4 
+
+pdf("SMX_interactions.pdf", height = onecol, width = onecol / 2)
+smx <- plot_grid(
+  "",
+  "",
+  "",
+  mean.OD1_total_lignin + theme(legend.position="none"),
+  "",
+  GOH.G_mean.OD1 + theme(legend.position="none"),
+  "",
+  ncol = 1
+)
+smx
+dev.off()
+
+
+legend <-  get_legend(n_v_total_lignin + guides(linetype = guide_legend(title = "Interactor"),
+                                       colour = "none",
+                                       fill = "none") +
+               theme(legend.justification = "top"))
+
+pdf("interactions.pdf", height = twocol * 1.1, width = onecol)
+plot_grid(px,
+pmx,
+smx,
+ncol = 3,
+labels = c("A", "B", "C"),
+  vjust = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica")
+dev.off()
+```
+
+#### independent interactions 
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+find_interactions <- function(x) {
+  rmn_irx <- filter(rmn_irx, cell.type == x) %>%
+  select(
+    convexity,
+    Perim.,
+    # n_f,
+    # n_p,
+    n_v,
+    cellulose,
+    mean.OD1,
+    total_lignin,
+    # AUC,
+    # G_rel,
+    # GOH_rel,
+    GOH.G,
+    S_rel,
+    # GCHO.lig,
+    # S.G
+  ) %>%
+  drop_na()
+  
+  model.null <- lm(convexity ~ 1,
+  data = rmn_irx
+)
+model.full <- lm(convexity ~ (.)^2,
+  data = rmn_irx
+)
+
+best_model <- step(model.null,
+  scope = list(upper = model.full),
+  direction = "both",
+  data = rmn_irx
+)
+
+print(tidy(best_model) %>%
+  select(term) %>%
+  filter(str_detect(term, fixed(":"))))
+
+best_model
+}
+
+best_model <- find_interactions("PX")
+
+intrct <- paste0("Perim.", ":", "S_rel")
+as.data.frame(effect(c(intrct), best_model))
+
+
+plot_interactions <- function(ct, t1, t2) {
+ct <- enquo(ct)
+t1 <- enquo(t1)
+t2 <- enquo(t2)
+
+  rmn_irx <- filter(rmn_irx, cell.type == quo_name(ct)) %>%
+  select(
+    convexity,
+    Perim.,
+    # n_f,
+    # n_p,
+    n_v,
+    cellulose,
+    mean.OD1,
+    total_lignin,
+    # AUC,
+    # G_rel,
+    # GOH_rel,
+    GOH.G,
+    S_rel,
+    # GCHO.lig,
+    # S.G
+  ) %>%
+  drop_na()
+  
+  model.null <- lm(convexity ~ 1,
+  data = rmn_irx
+)
+model.full <- lm(convexity ~ (.)^2,
+  data = rmn_irx
+)
+
+best_model <- step(model.null,
+  scope = list(upper = model.full),
+  direction = "both",
+  data = rmn_irx
+)
+
+# intrct <- paste0(quo_name(t1), ":", quo_name(t2))
+
+# interact_fit <- as.data.frame(effect(c(intrct), best_model, xlevels = 3)) %>%
+#   mutate(!!t2 := as.character(!!t2))
+
+rmn_irx_bins <- rmn_irx %>%
+  select(!!t1, !!t2, convexity) %>%
+  drop_na() %>%
+  mutate(interactor = ordered(case_when(!!t2 > mean(!!t2)+sd(!!t2) ~ "High",
+            !!t2 < mean(!!t2)+sd(!!t2) & !!t2 > mean(!!t2)-sd(!!t2) ~ "Average",
+            !!t2 < mean(!!t2)-sd(!!t2) ~ "Low"), levels = c("High", "Average", "Low")))
+
+ggplot(rmn_irx_bins, aes(x = !!t1, y = convexity, colour = interactor)) +
+  # scale_colour_manual(values = pal_ostwald_disc, name = term2_group) +
+  geom_point() +
+  labs(title = quo_name(t2)) +
+  # geom_line()
+  geom_smooth(method = "lm")
+}
+
+# plot_interactions(PX, Perim., S_rel)
+# plot_interactions(PX, S_rel, Perim.)
+
+# # plot_interactions(PX, Perim., total_lignin)
+# plot_interactions(PX, total_lignin, Perim.)
 # 
-# model <- lme4::lmer(convexity ~
-#     n_v +
-#       mean.OD1 +
-#       Perim. +
-#       S_rel +
-#       GCHO.G +
-#       total_lignin +
-#       (1 + Perim.|cell.type),
-#     data = raman.irx.scaled)
+# plot_interactions(PX, total_lignin, mean.OD1)
+plot_interactions(PX, mean.OD1, total_lignin)
+#   coord_cartesian(ylim = c(0.90,1))
 # 
-# summary(model)
+# # plot_interactions(PX, Perim., mean.OD1)
+# plot_interactions(PX, mean.OD1, Perim.)
 # 
-# MuMIn::r.squaredGLMM(model)
-# reghelper::beta(model)
+# # plot_interactions(PX, GOH.G, mean.OD1)
+# plot_interactions(PX, mean.OD1, GOH.G)
+```
+
+### Overview
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+rmn_irx_long <- rmn_irx %>%
+  select(genotype:cell.type, n_v, Area, Perim., Circ., convexity, total_lignin, G_rel, GOH.G, S_rel, cellulose, mean.OD1) %>%
+  pivot_longer(cols = -c(genotype:cell.type), names_to = "variable", values_to = "value") %>%
+  mutate(
+    variable = recode(variable,
+                      "n_v" = "Adj. vessels",
+                      "cellulose" = "Cellulose",
+                      "Circ." = "Circularity",
+                      "convexity" = "Convexity",
+                      "G_rel" = "G-lignin",
+                      "GOH.G" = "G-CHOH",
+                      "mean.OD1" = "Wiesner mean",
+                      "Perim." = "Perimeter",
+                      "S_rel" = "S-lignin",
+                      "total_lignin" = "Lignin"),
+    genotype = ordered(genotype,
+      levels = c(
+        "Col-0",
+        "4cl1",
+        "4cl2",
+        "4cl1x4cl2",
+        "ccoaomt1",
+        "fah1",
+        "omt1",
+        "ccr1-3",
+        "cad4",
+        "cad5",
+        "cad4xcad5"
+      )
+    ),
+    cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX"))
+    )
+
+rmn_irx_letters <- letter_groups(rmn_irx_long,
+                                 value,
+                                 genotype,
+                                 "tukey",
+                                 cell.type,
+                                 variable,
+                                 print_position = "above",
+                                 print_adjust = 2)
+
+rmn_irx_overview <- ggplot(rmn_irx_long,
+                           aes(x = genotype, 
+                               y = value)) +
+  geom_quasirandom(
+    aes(fill = cell.type),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  geom_boxplot(
+    fill = "white",
+    alpha = 0.5,
+    width = 0.6,
+    outlier.alpha = 0,
+    lwd = 0.25,
+    fatten = 1,
+    width = 0.25
+  ) +
+  geom_text(
+    data = rmn_irx_letters,
+    aes(label = groups),
+    size = 6 / (14 / 5),
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = pal_flame_disc) +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  theme_leo() +
+  theme(axis.text.x = element_text(angle = 90,
+                                   hjust = 1),
+        axis.title = element_blank()) +
+  facet_grid(variable ~ cell.type,
+             scales = "free_y")
+
+pdf("IRX_FigureS1.pdf", width = twocol, height = twocol + 1)
+rmn_irx_overview
+dev.off()
 ```

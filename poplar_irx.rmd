@@ -208,13 +208,53 @@ ggplot(pop_irx, aes(x = n_v, y = convexity)) +
 
 ```
 
+
 ```{r}
+find_interactions <- function(x) {
+  pop_irx <- filter(pop_irx, type == x) %>%
+  select(
+    convexity,
+    Perim.,
+    Mean,
+    # n_f,
+    # n_p,
+    n_v,
+    Distance
+  ) %>%
+  drop_na()
+  
+  model.null <- lm(convexity ~ 1,
+  data = pop_irx
+)
+model.full <- lm(convexity ~ (.)^2,
+  data = pop_irx
+)
 
-pop_count <- pop_irx %>%
-  group_by(genotype, replicate, type) %>%
-  summarise(to_do = n())
+best_model <- step(model.null,
+  scope = list(upper = model.full),
+  direction = "both",
+  data = pop_irx
+)
 
-write_csv(pop_count, "poplar_todo.csv")
+print(tidy(best_model) %>%
+  select(term) %>%
+  filter(str_detect(term, fixed(":"))))
+
+best_model
+}
+
+#### primary vessels ####
+best_model <- find_interactions("P")
+summary(best_model)
+broom::glance(best_model)
+
+best_model <- find_interactions("S")
+summary(best_model)
+broom::glance(best_model)
+```
+
+
+```{r}
 
 pop_irx <- as.data.frame(pop_irx)
 poplar_psem <- psem(
@@ -313,11 +353,16 @@ pdf("irx_neighbours_pop.pdf", width = 7, height = 5)
 ```
 
 ```{r}
+
+pop_irx %>%
+  group_by(genotype, replicate, type) %>%
+  count()
+
 pop_irx_overview <- pop_irx %>%
   ungroup() %>%
   select(
     genotype,
-    bin,
+    type,
     n_v,
     Area,
     Circ.,
@@ -326,7 +371,14 @@ pop_irx_overview <- pop_irx %>%
   pivot_longer(n_v:convexity, names_to = "variable", values_to = "value") %>%
   drop_na()
 
-pop_letters <- letter_groups(pop_irx_overview, value, genotype, "tukey", bin, variable, print_position = "above")
+write_csv(pop_irx_overview %>%
+            filter(genotype == "WT") %>%
+  group_by(genotype, type, variable) %>%
+  summarise(value = mean(value)),
+  "WT_values.csv")
+
+
+pop_letters <- letter_groups(pop_irx_overview, value, genotype, "tukey", type, variable, print_position = "above")
 
 pop_overview <- ggplot(pop_irx_overview,
                        aes(x = genotype,
@@ -334,55 +386,71 @@ pop_overview <- ggplot(pop_irx_overview,
   geom_quasirandom() +
   geom_boxplot(alpha = 0.75,
                outlier.alpha = 0) +
-  facet_grid(variable ~ bin, scales = "free_y") +
+  facet_grid(variable ~ type, scales = "free_y") +
   theme_leo() +
   geom_label(data = pop_letters,
             aes(label = groups),
             label.size = 0,
             alpha = 0.5)
 
-pop_neighbourhood <- ggplot(pop_irx, aes(x = n_v, y = convexity)) +
-  geom_point(aes(fill = genotype),
-    shape = 21,
-    size = 2,
-    alpha = 0.75,
-    stroke = 0.2
-  ) +
-  scale_fill_few() +
-  scale_y_continuous(limits = c(0.7,1)) +
-  labs(x = "Fraction of perimeter adjacent to other vessels") +
-  theme_leo() +
-  geom_smooth(
-    method = "loess",
-    span = 1,
-    colour = "black",
-    linetype = 2
-  ) +
-  facet_wrap(~ bin, ncol = 1)
+pop_letters <- letter_groups(pop_irx_overview, value, type, "tukey", variable, genotype, print_position = "above")
 
-pop_distance <- ggplot(pop_irx, aes(x = Distance, y = convexity)) +
-  geom_point(aes(fill = genotype),
-    shape = 21,
-    size = 2,
-    alpha = 0.75,
-    stroke = 0.2
-  ) +
-  scale_fill_few() +
-  scale_y_continuous(limits = c(0.7,1)) +
-  labs(x = "Distance from the cambium [µm]") +
+pop_overview2 <- ggplot(pop_irx_overview,
+                       aes(x = type,
+                           y = value)) +
+  geom_quasirandom() +
+  geom_boxplot(alpha = 0.75,
+               outlier.alpha = 0) +
+  facet_grid(variable ~ genotype, scales = "free_y") +
   theme_leo() +
-  geom_smooth(
-    method = "loess",
-    span = 1,
-    colour = "black",
-    linetype = 2
-  ) +
-  facet_wrap(~ bin, ncol = 1)
+  geom_label(data = pop_letters,
+            aes(label = groups),
+            label.size = 0,
+            alpha = 0.5)
+
+# pop_neighbourhood <- ggplot(pop_irx, aes(x = n_v, y = convexity)) +
+#   geom_point(aes(fill = genotype),
+#     shape = 21,
+#     size = 2,
+#     alpha = 0.75,
+#     stroke = 0.2
+#   ) +
+#   scale_fill_few() +
+#   scale_y_continuous(limits = c(0.7,1)) +
+#   labs(x = "Fraction of perimeter adjacent to other vessels") +
+#   theme_leo() +
+#   geom_smooth(
+#     method = "loess",
+#     span = 1,
+#     colour = "black",
+#     linetype = 2
+#   ) +
+#   facet_wrap(~ bin, ncol = 1)
+# 
+# pop_distance <- ggplot(pop_irx, aes(x = Distance, y = convexity)) +
+#   geom_point(aes(fill = genotype),
+#     shape = 21,
+#     size = 2,
+#     alpha = 0.75,
+#     stroke = 0.2
+#   ) +
+#   scale_fill_few() +
+#   scale_y_continuous(limits = c(0.7,1)) +
+#   labs(x = "Distance from the cambium [µm]") +
+#   theme_leo() +
+#   geom_smooth(
+#     method = "loess",
+#     span = 1,
+#     colour = "black",
+#     linetype = 2
+#   ) +
+#   facet_wrap(~ bin, ncol = 1)
 
 pdf("pop_overview.pdf")
 pop_overview
-pop_neighbourhood
-pop_distance
+pop_overview2
+# pop_neighbourhood
+# pop_distance
 dev.off()
 ```
 

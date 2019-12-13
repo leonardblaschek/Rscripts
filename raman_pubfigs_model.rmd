@@ -3801,9 +3801,9 @@ p20 / (area + area_norm) + plot_layout(heights=c(1.5,1)) +
 dev.off()
 ```
 
-## Correlations with other scaling
+### Correlations with other scaling
 
-### 1603
+#### 1603
 
 ```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
 
@@ -4283,7 +4283,7 @@ dev.off()
 ```
 
 
-### no scaling
+#### no scaling
 
 ```{r, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
 
