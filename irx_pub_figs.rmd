@@ -25,6 +25,7 @@ library(baseline)
 library(interactions)
 library(effects)
 library(grid)
+library(png)
 library(magick)
 library(agricolae)
 library(ggthemes)
@@ -102,7 +103,7 @@ theme_leo <- function(base_size = 6,
     theme(
       strip.text = element_text(hjust = 0, face = "italic"),
       axis.ticks = element_line(
-        size = 0.25,
+        size = 0.125,
         lineend = "square",
         color = "black"
       ),
@@ -178,6 +179,471 @@ ggtext_size <- 6 / (14 / 5)
 twocol <- 18 / 2.54
 onehalfcol <- 14 / 2.54
 onecol <- 9 / 2.54
+```
+
+
+## EM drying collapse
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+em_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/EM/AD_collapse.csv") %>%
+  pivot_longer(cols = c(PX, MX), names_to = "cell.type", values_to = "count") %>%
+  mutate(state = ordered(state, levels = c("Fully", "Partially", "Intact")),
+         cell.type = ordered(cell.type, levels = c("PX", "MX")),
+         days = paste(days, "days")) %>%
+  group_by(experiment, treatment, days, cell.type) %>%
+  mutate(sum = sum(count)) %>%
+  group_by(experiment, treatment, days, cell.type, state) %>%
+  mutate(proportion = count / sum)
+
+em_data_avg <- em_data %>%
+  group_by(treatment, days, cell.type, state) %>%
+  summarise(proportion = mean(proportion))
+
+em_data_points <- em_data %>%
+  select(-sum, -count) %>%
+  group_by(treatment, days, cell.type, state) %>%
+  pivot_wider(id_cols = -c(state, proportion), names_from = state, values_from = proportion) %>%
+  mutate(Partially = Partially + Intact,
+         Fully = Fully + Partially) %>%
+  pivot_longer(cols = c(Fully, Partially, Intact), names_to = "state", values_to = "proportion") %>%
+  mutate(state2 = case_when(state == "Intact" ~ "Partially",
+                            state == "Partially" ~ "Fully",
+                            TRUE ~ "none"))
+
+em_collapse <- ggplot(em_data_avg %>% filter(treatment == "AD"), aes(x = cell.type, 
+                                   y = proportion, 
+                                   # group = experiment, 
+                                   fill = state)) +
+  geom_col(alpha = 0.85,
+           width = 0.6) +
+  geom_point(data = em_data_points %>% filter(treatment == "AD" &
+                                                state != "Fully"),
+    aes(group = experiment,
+        y = proportion - 0.01),
+    position = position_dodge(width = 0.5),
+    shape = 25,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2) +
+    geom_point(data = em_data_points %>% filter(treatment == "AD" &
+                                                state != "Fully"),
+    aes(group = experiment,
+        fill = state2,
+        y = proportion + 0.01),
+    position = position_dodge(width = 0.5),
+    shape = 24,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2) +
+  scale_fill_manual(values = rev(pal_ostwald_disc), name = "Collapse") +
+  scale_y_continuous(expand = expand_scale(mult = c(0, 0.05))) +
+  theme_leo() +
+  labs(y = "Proportion") +
+  facet_wrap(~ days, nrow = 1) +
+  theme(legend.position = "bottom",
+        axis.title.x = element_blank(),
+        legend.key.size = unit(4, "mm"))
+
+pdf("em_collapse.pdf", width = onecol, height = onecol / 2)
+em_collapse
+dev.off()
+```
+
+## AFM ratios 
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+afm_px <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/AFM/afm_PX.csv") %>%
+  mutate(days = as.character(days)) %>%
+  pivot_longer(cols = c(modulus, deformation, adhesion), names_to = "variable", values_to = "value") %>%
+  group_by(cell.type, days, cell, measurement, variable) %>%
+  summarise(ratio = value[layer == "SCW"] / value[layer == "PCW"]) %>%
+  filter(!(variable == "adhesion" & 
+             cell == "Cell 4" & 
+             measurement == 6 & 
+             days == "50")) # remove > 20-fold outlier
+
+rmn_violin <- function(x) { 
+  afm_px <- afm_px %>%
+    unite("ct.time", cell.type, days)
+  
+  letters <- letter_groups(afm_px %>% filter(variable == x),
+                                 ratio,
+                                 ct.time,
+                                 "tukey",
+                                 print_position = "below",
+                                 print_adjust = 0.5
+  ) %>%
+    separate(ct.time, into = c("cell.type", "days"))
+  
+  afm_px <- afm_px %>%
+    separate(ct.time, into = c("cell.type", "days"))
+  
+  ggplot(
+  data = afm_px %>% filter(variable == x),
+  aes(x = days, y = ratio)
+) +
+  # geom_line(aes(group = interaction(cell.type, variable, cell, measurement)),
+  #           size = 0.2,
+  #           alpha = 0.25) +
+  geom_quasirandom(
+    aes(fill = cell.type, group = days),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 2,
+    stroke = 0.2
+  ) +
+  # geom_boxplot(
+  #   aes(group = interaction(cell.type, variable), fill = cell.type),
+  #   # fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   position = position_dodge2(width = 1),
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+geom_violin(aes(group = interaction(days, cell.type),
+                # fill = cell.type
+),
+draw_quantiles = 0.5,
+fill = "white",
+colour = "black",
+alpha = 0.85,
+width = 0.2,
+position = position_dodge(width = 0.6),
+size = 0.2,
+scale = "width"
+) +
+  geom_text(
+    data = letters,
+    aes(label = groups),
+    size = ggtext_size,
+    family = "Helvetica",
+    position = position_dodge(width = 0.6)
+  ) +
+  scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
+  scale_fill_manual(values = pal_flame_disc) +
+  expand_limits(y = 0) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none",
+  ) 
+}
+
+modulus <- rmn_violin("modulus") +
+  labs(x = "",
+       y = "Relative DMT modulus")
+
+deformation <- rmn_violin("deformation") +
+  labs(x = "Days after induction",
+       y = "Relative deformation")
+
+adhesion <- rmn_violin("adhesion") +
+  labs(x = "",
+       y = "Relative adhesion") 
+
+pdf("afm_ratios.pdf", width = onecol, height = onecol / 2)
+afm_ratios <- plot_grid(
+  modulus,
+  deformation,
+  adhesion,
+  labels = c("A", "B", "C"),
+  vjust = 1,
+  nrow = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica"
+)
+afm_ratios
+dev.off()
+  
+```
+
+## Plant bending
+
+### Hydration influence
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+medium_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/WT_medium.csv") %>%
+  pivot_longer(cols = c(stiffness, strength), values_to = "value", names_to = "variable")
+
+rmn_violin <- function(x) { 
+
+  letters <- letter_groups(medium_data %>% filter(variable == x),
+                                 value,
+                                 medium,
+                                 "tukey",
+                                 print_position = "below",
+                                 print_adjust = 0.5
+  ) 
+  
+  ggplot(
+  data = medium_data %>% filter(variable == x),
+  aes(x = medium, y = value)
+) +
+  # geom_line(aes(group = interaction(cell.type, variable, cell, measurement)),
+  #           size = 0.2,
+  #           alpha = 0.25) +
+  geom_quasirandom(
+    aes(fill = medium),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1.5,
+    stroke = 0.2
+  ) +
+  # geom_boxplot(
+  #   aes(group = interaction(cell.type, variable), fill = cell.type),
+  #   # fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   position = position_dodge2(width = 1),
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+geom_violin(
+  # aes(group = interaction(days, cell.type),
+                # fill = cell.type
+# ),
+draw_quantiles = 0.5,
+fill = "white",
+colour = "black",
+alpha = 0.85,
+width = 0.2,
+position = position_dodge(width = 0.6),
+size = 0.2,
+scale = "width"
+) +
+  geom_text(
+    data = letters,
+    aes(label = groups),
+    size = ggtext_size,
+    family = "Helvetica",
+    position = position_dodge(width = 0.6)
+  ) +
+  # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
+  # scale_fill_manual(values = pal_flame_disc) +
+  scale_fill_grey(start = 0.9, end = 0.1) +
+  expand_limits(y = 0) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none",
+    axis.title.x = element_blank()
+  ) 
+}
+
+medium_strength <- rmn_violin("strength") +
+  labs(y = "Flexural strength [MPa]") 
+medium_stiffness <- rmn_violin("stiffness") +
+  labs(y = "Flexural stiffness [MPa]")
+
+pdf("bending_medium.pdf", width = onecol / 1.25, height = onecol / 3)
+hydration <- plot_grid(
+  medium_strength,
+  medium_stiffness,
+  labels = c("B", "C"),
+  # vjust = 1,
+  nrow = 1,
+  rel_widths = c(1, 1.1),
+  label_size = 10,
+  label_fontfamily = "Helvetica"
+)
+hydration
+dev.off()
+```
+
+### Bending curves
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+curve_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/bending_curve.csv") %>%
+  mutate(genotype = ordered(genotype, levels = c("WT", "4cl1x4cl2x4cl3")))
+
+curves <- ggplot(data = curve_data, 
+                 aes(x = strain, y = stress)) +
+  geom_line(aes(group = interaction(genotype, replicate)),
+            size = 0.2,
+            alpha = 0.15) +
+  geom_smooth(aes(colour = genotype),
+              size = 0.4) +
+  scale_color_manual(values = pal_ostwald_disc[c(1,3)]) +
+  theme_leo() +
+  xlim(0, 3) +
+  labs(x = "Flexural strain [%]",
+       y = "Flexural stress [MPa]") +
+  facet_wrap(~ genotype, nrow = 2)
+
+pdf("bending_curves.pdf", width = onecol / 2, height = onecol / 2)
+curves
+dev.off()
+```
+
+### S influence
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+s_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/stiffness_s.csv") %>%
+  tidyr::fill(everything()) %>%
+  pivot_longer(cols = c(stiffness, strength), values_to = "value", names_to = "variable") %>%
+  mutate(genotype = ordered(genotype, levels = c("WT", "fah1")))
+
+s_test <- s_data %>% filter(variable == "stiffness")
+p_values <- s_test %>%
+  group_by(section) %>%
+  transmute(p_value = broom::tidy(
+  t.test(value[genotype == "WT"], value[genotype == "fah1"])
+  )[["p.value"]]) %>%
+  mutate(p_value =  round(p_value, digits = 3))
+
+rmn_violin <- function(x) { 
+
+s_test <- s_data %>% filter(variable == x)
+p_value <- broom::tidy(
+  t.test(s_test$value[s_test$genotype == "WT"], s_test$value[s_test$genotype == "fah1"])
+  )[["p.value"]] %>%
+  formatC(., format = "e", digits = 0)
+  
+  ggplot(
+  data = s_data %>% filter(variable == x),
+  aes(x = genotype, y = value)
+) +
+  # geom_line(aes(group = interaction(cell.type, variable, cell, measurement)),
+  #           size = 0.2,
+  #           alpha = 0.25) +
+  geom_quasirandom(
+    aes(fill = genotype),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2
+  ) +
+  # geom_boxplot(
+  #   aes(group = interaction(cell.type, variable), fill = cell.type),
+  #   # fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   position = position_dodge2(width = 1),
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+geom_violin(
+  # aes(group = interaction(days, cell.type),
+                # fill = cell.type
+# ),
+draw_quantiles = 0.5,
+fill = "white",
+colour = "black",
+alpha = 0.85,
+width = 0.2,
+position = position_dodge(width = 0.6),
+size = 0.2,
+scale = "width"
+) +
+  annotate("text",
+           x = 2.5,
+           y =0,
+           label=paste("italic(P)==", p_value), 
+           parse=TRUE,
+           size = ggtext_size,
+           family = "Helvetica",
+           hjust = 1) +
+  scale_x_discrete(labels = c("WT", expression(italic("fah1")))) +
+  scale_fill_manual(values = pal_ostwald_disc[c(1,3)]) +
+  expand_limits(y = 0) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none",
+    axis.title.x = element_blank()
+  )
+}
+
+medium_strength <- rmn_violin("strength") +
+  labs(y = "Flexural strength [MPa]")
+medium_stiffness <- rmn_violin("stiffness") +
+  labs(y = "Flexural stiffness [MPa]")
+
+pdf("s_influence.pdf", width = onecol / 1.25, height = onecol / 3)
+s_inf <- plot_grid(
+  medium_strength,
+  medium_stiffness,
+  labels = c("D", "E"),
+  # vjust = 1,
+  nrow = 1,
+  label_size = 10,
+  rel_widths = c(1, 1.1),
+  label_fontfamily = "Helvetica"
+)
+s_inf
+dev.off()
+
+```
+### assemble bending figure
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+#### Load images ####
+WT <-
+  rasterGrob(
+    readPNG(
+      "/home/leonard/Dropbox/IRX manuscript/Edits/cropped_images/WT_plant.png"
+      )
+  )
+
+#### plot grid ####
+
+top <- plot_grid(
+  plot_grid(WT,
+            labels = c("A"),
+  label_fontfamily = "Helvetica",
+  label_colour = "white",
+  # vjust = 1,
+  label_size = 10),
+  hydration,
+  ncol = 2,
+  labels = c("", "B"),
+  label_fontfamily = "Helvetica",
+  label_size = 10,
+  # vjust = 1,
+  rel_widths = c(1, 2)
+)
+
+bottom <- plot_grid(
+      s_inf,
+      curves,
+      ncol = 2,
+      labels = c("", "F"),
+      label_fontfamily = "Helvetica",
+      label_size = 10,
+      # vjust = 1,
+  rel_widths = c(1, 1)
+  )
+
+
+pdf("IRX_figure4.pdf", width = onecol, height = onecol)
+plot_grid(top, bottom,
+          nrow = 2,
+          rel_heights = c(1, 1))
+dev.off()
 ```
 
 ## Wild type vessel overview
@@ -729,14 +1195,16 @@ bottom <- plot_grid(rmn_area,
   vjust = 1,
   nrow = 2,
   label_size = 10,
-  label_fontfamily = "Helvetica"
+  label_fontfamily = "Helvetica",
+  align = "hv",
+  axis = "lr"
 )
 
 pdf("IRX_Figure2.pdf", width = onecol, height = onecol)
 plot_grid(top,
           bottom,
           nrow = 2,
-          rel_heights = c(1.2,2))
+          rel_heights = c(1.3,2))
 dev.off()
 ```
 

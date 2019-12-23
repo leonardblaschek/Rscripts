@@ -148,15 +148,52 @@ read_plus <- function(flnm) {
 rmn_models <- lapply(rmn_model_files, read_plus) %>%
   bind_rows()
 
-rmn_models <- rmn_models %>%
+#### baseline correct Raman data ####
+# rmn_models_wide <- rmn_models %>%
+#   group_by(filename) %>%
+#   rename("wavenumber" = "X1",
+#          "intensity" = "X2") %>%
+#   mutate(group_id = row_number()) %>%
+#   spread(wavenumber, intensity) %>%
+#   select(-group_id) %>%
+#   summarise_all(funs(sum(., na.rm = TRUE)))
+
+rmn_models_nest <- rmn_models %>%
+  group_by(filename) %>%
+  rename("wavenumber" = "X1",
+         "intensity" = "X2") %>%
+  nest()
+
+pvt <- function(df) pivot_wider(data = df, names_from = wavenumber, values_from = intensity)
+
+bl_corr <- function(df) {
+  correction <- baseline(as.matrix(df),
+                         method = "als",
+  lambda = 5,
+  p = 0.01,
+  maxit = 100
+)
+  as_tibble((getCorrected(correction)))
+}
+
+rmn_models_corrected <- rmn_models_nest %>%
+  mutate(wide = map(data, pvt),
+         correction = map(wide, bl_corr)) %>%
+  select(-wide, -data) %>%
+  unnest_wider(correction) %>%
+  pivot_longer(cols = -filename, names_to = "wavenumber", values_to = "intensity") %>%
+  drop_na() %>%
+  ungroup()
+
+rmn_models <- rmn_models_corrected %>%
   mutate(filename = str_remove(basename(filename), ".\\.csv$")) %>%
   separate(filename, into = c("state", "unit", "gamma"), remove = FALSE) %>%
-  rename(
-    "wavenumber" = "X1",
-    "intensity" = "X2"
-  ) %>%
+  # rename(
+  #   "wavenumber" = "X1",
+  #   "intensity" = "X2"
+  # ) %>%
   mutate(
-    wavenumber = round(wavenumber, digits = 0),
+    wavenumber = round(as.numeric(wavenumber), digits = 0),
     unit = recode(unit,
       "g" = "G",
       "s" = "S"
@@ -231,14 +268,14 @@ spectra_plot <- ggplot(filter(rmn_models, unit %in% c("G", "S"))) +
     y = gamma,
     height = rollmean(scaled, 3, na.pad = TRUE),
     # fill = state,
-    colour = state
+    colour = state,
   ),
   alpha = 0.5,
   size = 0.2,
   # colour = NA,
   fill = NA,
   scale = 2.5,
-  min_height = -0.002
+  min_height = -0.05
   ) +
   geom_ridgeline(
     data = tibble(
@@ -3158,7 +3195,7 @@ rmn_model_scoeff <- rmn_models_fluo %>%
   ungroup() %>%
   mutate(AUC_rel = round(AUC / AUC[unit == "G" & gamma == "oh" & state == "mono"], digits = 2)) %>%
   select(-AUC) %>%
-  filter(unit %in% c("G", "S")) %>%
+  # filter(unit %in% c("G", "S")) %>%
   mutate(
     unit = recode(unit,
       "5h" = "5H",
@@ -3278,7 +3315,7 @@ supp_spectra <- ggplot(rmn_model_supp) +
   # fill = "#4575b4",
   scale = 3,
   # alpha = 0.75,
-  min_height = -0.002
+  min_height = -0.05
   ) +
   # scale_fill_manual(values = c("poly" = "#d73027", "mono" = "#4575b4")) +
   scale_colour_viridis_d() +

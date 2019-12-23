@@ -5,6 +5,7 @@ library(plyr)
 library(showtext)
 library(colorscience)
 library(cowplot)
+library(tidyverse)
 data(illuminants)
 
 font_add("Helvetica", regular = "/prop_fonts/01. Helvetica     [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
@@ -152,7 +153,7 @@ monomers50 <-
     "file:///home/leonard/Documents/Uni/Phloroglucinol/17-11-15_spectras_platereader/17-11-15_monomers_50uM.csv"
   )
 monomers50 <-
-  melt(monomers50, id = c("Monomer", "Acid", "Time", "Concentration"))
+  reshape2::melt(monomers50, id = c("Monomer", "Acid", "Time", "Concentration"))
 monomers50$variable <- gsub("X([0-9]+)", "\\1", monomers50$variable)
 monomers50$variable <- as.numeric(monomers50$variable)
 monomers50$Monomer <-
@@ -420,3 +421,77 @@ MSL <-
     )
     dev.off()
     
+rev_spectra <- read_csv("/home/leonard/Documents/Uni/Phloroglucinol/2019-12-20_spectra_platereader/2019-12-20_spectra_stained.csv") %>%
+  pivot_longer(cols = -c("sample", "condition"), names_to = "variable", values_to = "value") %>%
+  mutate(variable = as.numeric(variable))
+
+plotly::ggplotly(ggplot(rev_spectra, aes(x = variable, y = value, colour = sample)) + geom_line())
+
+spec.Hcho <-
+  subset(
+    rev_spectra,
+    sample == "Hcho" &
+      variable > 359 & variable < 800,
+    select = c(3, 4)
+  )
+spec.Hcho <- spec.Hcho[seq(1, nrow(spec.Hcho), 5), ]
+spec.Hcho$value <-  (10 ^ -spec.Hcho$value) * 100
+spec.Hcho <- data.matrix(spec.Hcho)
+XYZ.Hcho <-
+  spectra2XYZ(spec.Hcho, illuminantIn = illuminants[, c('wlnm', 'E')])
+RGB.Hcho <- XYZ2RGB(XYZ.Hcho, illuminant = 'E')
+HSV.Hcho <- RGB2HSV(RGB.Hcho)
+hue.Hcho <- HSV.Hcho[, 1] * 360
+names(hue.Hcho) <- NULL
+
+spec.Gdhp <-
+  subset(
+    rev_spectra,
+    sample == "Gdhp" &
+      variable > 359 & variable < 800,
+    select = c(3, 4)
+  )
+
+spec.Gdhp <- spec.Gdhp[seq(1, nrow(spec.Gdhp), 5), ]
+spec.Gdhp$value <-  (10 ^ -spec.Gdhp$value) * 100
+spec.Gdhp <- data.matrix(spec.Gdhp)
+XYZ.Gdhp <-
+  spectra2XYZ(spec.Gdhp, illuminantIn = illuminants[, c('wlnm', 'E')])
+RGB.Gdhp <- XYZ2RGB(XYZ.Gdhp, illuminant = 'E')
+HSV.Gdhp <- RGB2HSV(RGB.Gdhp)
+hue.Gdhp <- HSV.Gdhp[, 1] * 360
+names(hue.Gdhp) <- NULL
+
+spec.Sdhp <-
+  subset(
+    rev_spectra,
+    sample == "Sdhp" &
+      variable > 359 & variable < 800,
+    select = c(3, 4)
+  )
+spec.Sdhp <- spec.Sdhp[seq(1, nrow(spec.Sdhp), 5), ]
+spec.Sdhp$value <-  (10 ^ -spec.Sdhp$value) * 100
+spec.Sdhp <- data.matrix(spec.Sdhp)
+XYZ.Sdhp <-
+  spectra2XYZ(spec.Sdhp, illuminantIn = illuminants[, c('wlnm', 'E')])
+RGB.Sdhp <- XYZ2RGB(XYZ.Sdhp, illuminant = 'E')
+HSV.Sdhp <- RGB2HSV(RGB.Sdhp)
+hue.Sdhp <- HSV.Sdhp[, 1] * 360
+names(hue.Sdhp) <- NULL
+
+spec.Hdhp <-
+  subset(
+    rev_spectra,
+    sample == "Hdhp" &
+      variable > 359 & variable < 800,
+    select = c(3, 4)
+  )
+spec.Hdhp <- spec.Hdhp[seq(1, nrow(spec.Hdhp), 5), ]
+spec.Hdhp$value <-  (10 ^ -spec.Hdhp$value) * 100
+spec.Hdhp <- data.matrix(spec.Hdhp)
+XYZ.Hdhp <-
+  spectra2XYZ(spec.Hdhp, illuminantIn = illuminants[, c('wlnm', 'E')])
+RGB.Hdhp <- XYZ2RGB(XYZ.Hdhp, illuminant = 'E')
+HSV.Hdhp <- RGB2HSV(RGB.Hdhp)
+hue.Hdhp <- HSV.Hdhp[, 1] * 360
+names(hue.Hdhp) <- NULL
