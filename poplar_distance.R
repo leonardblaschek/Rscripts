@@ -293,7 +293,7 @@ poplar.OD_dist <-
       face = "italic",
       size = 6
     ),
-    plot.margin = unit(c(0, 0, 0, 0), "cm")
+    plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm")
   ) +
   labs(y = "Absorbance") +
   geom_text(
@@ -438,7 +438,7 @@ poplar.hue_dist <-
       face = "italic",
       size = 6
     ),
-    plot.margin = unit(c(0, 0, 0, 0), "cm")
+    plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm")
   ) +
   labs(y = "Hue") +
   geom_text(
