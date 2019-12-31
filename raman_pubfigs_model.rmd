@@ -3339,7 +3339,7 @@ supp_spectra <- ggplot(rmn_model_supp) +
       expression(paste("H"[COOH]))
     ))
   ) +
-  # labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
+  labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
   theme_leo() +
   theme(
     # panel.spacing = unit(5, "mm"),
@@ -3387,6 +3387,88 @@ supp_spectra <- ggplot(rmn_model_supp) +
 
 # library(plotly)
 pdf("supplemental_spectra.pdf", width = twocol, height = 5)
+supp_spectra
+dev.off()
+```
+
+#### Kappa figure
+
+```{r}
+rmn_model_supp <- rmn_models %>%
+  filter(filename == "mono-gsat-oh" |
+           filename == "mono-g-oh" |
+           filename == "poly-g-oh") %>%
+mutate(filename = ordered(filename, levels = rev(c("mono-g-oh",
+                                               "mono-gsat-oh",
+                                               "poly-g-oh"))))
+
+supp_spectra <- ggplot(rmn_model_supp) +
+  # geom_vline(xintercept = c(1656, 1620, 1600, 1335, 1276),
+  #       size = 0.2,
+  #       linetype = 2,
+  #       alpha = 0.5,
+  #       colour = "black") +
+  # geom_line(aes(
+  #   x = wavenumber,
+  #   y = rollmean(scaled, 3, na.pad = TRUE),
+  #   # fill = state,
+  #   colour = filename
+  # ),
+  # # alpha = 0.5,
+  # size = 0.2,
+  # # colour = NA,
+  # # fill = NA,
+  # # scale = 100,
+  # # min_height = -0.002
+  # ) +
+  geom_ridgeline(aes(
+    x = wavenumber,
+    y = filename,
+    height = rollmean(scaled, 3, na.pad = TRUE),
+    fill = filename,
+    # colour = state
+  ),
+  alpha = 0.5,
+  size = 0.2,
+  # colour = NA,
+  # fill = "#4575b4",
+  scale = 4,
+  # alpha = 0.75,
+  min_height = -0.05
+  ) +
+  # scale_fill_manual(values = c("poly" = "#d73027", "mono" = "#4575b4")) +
+  scale_colour_viridis_d() +
+  # scale_colour_manual(values = c("poly" = "#d73027", "mono" = "#4575b4")) +
+  scale_x_reverse(
+    limits = c(1700, 300),
+    # sec.axis = sec_axis(~., breaks = unique(peak_pres$peak))
+  ) +
+  annotate("text",
+           y = c(1, 2, 3),
+           x = 1700,
+           hjust = 0,
+           vjust = 1.1,
+    label = rev(c(
+      "Coniferyl alcohol monomer",
+      "Saturated coniferyl alcohol monomer",
+      "Coniferyl alcohol DHP"
+    )),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
+  theme_leo() +
+  theme(
+    # panel.spacing = unit(5, "mm"),
+    axis.title.y = element_blank(),
+    # axis.text.y = element_blank(),
+    # axis.ticks.y = element_blank(),
+    strip.text = element_text(size = 8),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+pdf("kappa_spectra.pdf", width = onecol * 1.5, height = 2)
 supp_spectra
 dev.off()
 ```

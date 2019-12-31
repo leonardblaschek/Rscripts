@@ -329,7 +329,7 @@ scale = "width"
     family = "Helvetica",
     position = position_dodge(width = 0.6)
   ) +
-  scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
+  # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
   scale_fill_manual(values = pal_flame_disc) +
   expand_limits(y = 0) +
   scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
@@ -925,7 +925,7 @@ rmn_sum <- rmn_data_corrected %>%
   )
 ```
 
-## Vessel type figure
+### assemble figure
 
 ```{r figure 2, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%', fig.width=5, fig.height=4}
 rmn_sum_long <- rmn_sum %>%
@@ -1207,8 +1207,8 @@ plot_grid(top,
           rel_heights = c(1.3,2))
 dev.off()
 ```
-
-## Visual vessel overview
+## Model figure
+### Visual vessel overview
 
 These are all the vessel shapes that I measured in the Wiesner images, just for an idea how the collapse looks.
 
@@ -1693,7 +1693,7 @@ TM.multigroup <- function(x) {
 }
 ```
 
-## SEM for PX
+### SEM for PX
 
 Collapse explained: 40%
 
@@ -1738,7 +1738,7 @@ summary(psem_px)
 plot(psem_px)
 ```
 
-## SEM for PMX
+### SEM for PMX
 
 Collapse explained: 49%
 
@@ -1785,7 +1785,7 @@ summary(psem_pmx)
 plot(psem_pmx)
 ```
 
-## SEM for SMX
+### SEM for SMX
 
 Collapse explained: 26%
 
@@ -1827,7 +1827,7 @@ summary(psem_smx)
 plot(psem_smx)
 ```
 
-## Model figure
+### assemble figure
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 
@@ -2304,3 +2304,548 @@ pdf("IRX_FigureS1.pdf", width = twocol, height = twocol + 1)
 rmn_irx_overview
 dev.off()
 ```
+
+### Poplar
+
+#### load data
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+
+pop_irx <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Poplar/poplar_irx.csv")
+
+#### create reference at the heigth of the cambium for distance calculation ####
+pop_irx_ref <- pop_irx %>%
+  filter(object == "ref") %>%
+  select(c(
+    "genotype",
+    "replicate",
+    "technical",
+    "X",
+    "Y",
+    "Length"
+  ))
+pop_irx_ref$ref.y1 <- pop_irx_ref$Y
+pop_irx_ref$ref.y2 <- pop_irx_ref$Y
+pop_irx_ref$ref.x1 <- pop_irx_ref$X - (pop_irx_ref$Length / 2)
+pop_irx_ref$ref.x2 <- pop_irx_ref$X + (pop_irx_ref$Length / 2)
+
+#### merge reference into data frame ####
+pop_irx <- pop_irx %>%
+  filter(object != "ref") %>%
+  full_join(select(pop_irx_ref, -X, -Y, -Length),
+    by = c("genotype", "replicate", "technical")
+  ) %>%
+  mutate(genotype = ordered(genotype, levels = c("WT", "c4h", "ccr1")))
+
+#### calculate difference of the centre of each vessel to the cambium ####
+pop_irx$Distance <-
+  apply(
+    pop_irx[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
+    1,
+    function(x) {
+      a <- c(x[1], x[2])
+      b <- c(x[3], x[5])
+      c <- c(x[4], x[6])
+      v1 <- b - c
+      v2 <- a - b
+      m <- cbind(v1, v2)
+      d <- abs(det(m)) / sqrt(sum(v1 * v1))
+      d
+    }
+  )
+
+pop_irx <- pop_irx %>%
+  mutate(bin = cut(
+    Distance,
+    breaks = c(-Inf, 50, 100, Inf),
+    labels = c("I", "II", "III")
+  ))
+
+pop_irx <- pop_irx %>%
+  mutate(convexity = Area / ConvexArea,
+         Mean = Mean / 255)
+```
+
+#### overview
+
+```{r}
+
+pop_irx_overview <- pop_irx %>%
+  ungroup() %>%
+  select(
+    genotype = genotype,
+    type = type,
+    `Adj. vessels` = n_v,
+    Area = Area,
+    Circularity = Circ.,
+    Distance = Distance,
+    Convexity = convexity
+    ) %>%
+  pivot_longer(`Adj. vessels`:Convexity, names_to = "variable", values_to = "value") %>%
+  drop_na()
+
+write_csv(pop_irx_overview %>%
+            filter(genotype == "WT") %>%
+  group_by(genotype, type, variable) %>%
+  summarise(value = mean(value)),
+  "WT_values.csv")
+
+
+pop_letters <- letter_groups(pop_irx_overview, 
+                             value, 
+                             genotype, 
+                             "kruskal", 
+                             type, 
+                             variable, 
+                             print_position = "below",
+                             print_adjust = 1.25) %>%
+  mutate(value = case_when(variable == "Convexity" & type == "S" ~ value - 0.1,
+                           TRUE ~ value))
+
+pop_overview <- ggplot(pop_irx_overview,
+                       aes(x = genotype,
+                           y = value)) +
+  geom_quasirandom(
+    aes(fill = type),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  geom_violin(aes(group = genotype,
+                  # fill = cell.type
+                  ),
+              draw_quantiles = 0.5,
+              fill = "white",
+              colour = "black",
+              alpha = 0.85,
+              width = 0.2,
+              position = position_dodge(width = 0.6),
+              size = 0.2,
+              scale = "width"
+              ) +
+  # geom_boxplot(
+  #   fill = "white",
+  #   colour = "black",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_text(
+    data = pop_letters,
+    aes(label = groups),
+    size = 6 / (14 / 5),
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = pal_flame_disc[c(1,3)]) +
+  scale_x_discrete(
+    labels = c(
+      "WT",
+      expression(paste(italic("C4H"), "-RNAi")),
+      expression(paste(italic("CCR"), "-RNAi"))
+      )
+  ) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+  theme_leo() +
+  theme(
+    # axis.text.x = element_text(angle = 90,
+    #                                hjust = 1),
+        axis.title = element_blank()) +
+  facet_grid(variable ~ type,
+             scales = "free_y")
+
+
+# pop_neighbourhood <- ggplot(pop_irx, aes(x = n_v, y = convexity)) +
+#   geom_point(aes(fill = genotype),
+#     shape = 21,
+#     size = 2,
+#     alpha = 0.75,
+#     stroke = 0.2
+#   ) +
+#   scale_fill_few() +
+#   scale_y_continuous(limits = c(0.7,1)) +
+#   labs(x = "Fraction of perimeter adjacent to other vessels") +
+#   theme_leo() +
+#   geom_smooth(
+#     method = "loess",
+#     span = 1,
+#     colour = "black",
+#     linetype = 2
+#   ) +
+#   facet_wrap(~ bin, ncol = 1)
+# 
+# pop_distance <- ggplot(pop_irx, aes(x = Distance, y = convexity)) +
+#   geom_point(aes(fill = genotype),
+#     shape = 21,
+#     size = 2,
+#     alpha = 0.75,
+#     stroke = 0.2
+#   ) +
+#   scale_fill_few() +
+#   scale_y_continuous(limits = c(0.7,1)) +
+#   labs(x = "Distance from the cambium [µm]") +
+#   theme_leo() +
+#   geom_smooth(
+#     method = "loess",
+#     span = 1,
+#     colour = "black",
+#     linetype = 2
+#   ) +
+#   facet_wrap(~ bin, ncol = 1)
+
+pdf("pop_overview.pdf", width = onecol * 0.9, height = onecol * 0.9)
+pop_overview
+dev.off()
+```
+
+#### SEMs
+
+```{r}
+
+pop_irx <- as.data.frame(pop_irx)
+poplar_psem <- psem(
+    lm(Circ. ~
+    n_v +
+      Distance +
+      # n_p +
+      convexity,
+    data = filter(pop_irx, type == "P")
+    ),
+    lm(convexity ~
+    n_v +
+      # n_p +
+      Mean +
+      Distance +
+      Perim.,
+    data = filter(pop_irx, type == "P")
+    ),
+    data = filter(pop_irx, type == "P")
+  )
+
+summary(poplar_psem)
+plot(poplar_psem)
+
+poplar_psem <- psem(
+    lm(Circ. ~
+    n_v +
+      Distance +
+      # n_p +
+      convexity,
+    data = filter(pop_irx, type == "S")
+    ),
+    lm(convexity ~
+    n_v +
+      # n_p +
+      Mean +
+      Distance +
+      Perim.,
+    data = filter(pop_irx, type == "S")
+    ),
+    data = filter(pop_irx, type == "S")
+  )
+
+summary(poplar_psem)
+plot(poplar_psem)
+```
+
+#### interactions 
+```{r}
+find_interactions <- function(x) {
+  pop_irx <- filter(pop_irx, type == x) %>%
+  select(
+    convexity,
+    Perim.,
+    Mean,
+    # n_f,
+    # n_p,
+    n_v,
+    Distance
+  ) %>%
+  drop_na()
+  
+  model.null <- lm(convexity ~ 1,
+  data = pop_irx
+)
+model.full <- lm(convexity ~ (.)^2,
+  data = pop_irx
+)
+
+best_model <- step(model.null,
+  scope = list(upper = model.full),
+  direction = "both",
+  data = pop_irx
+)
+
+print(tidy(best_model) %>%
+  select(term) %>%
+  filter(str_detect(term, fixed(":"))))
+
+best_model
+}
+
+#### protoxylem ####
+best_model <- find_interactions("S")
+
+Distance_n_v <- interact_plot(best_model, pred = Distance, modx = n_v, 
+                      colors = c("white", "white", "white"),
+                      x.label = "Distance [µm]",
+                      y.label = "Convexity"
+                      ) + 
+  theme_leo() +
+  theme(legend.position = "none",
+        panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5)))
+Distance_n_v$layers[[1]]$aes_params$size <- 0.2
+
+Mean_n_v <- interact_plot(best_model, pred = n_v, modx = Mean, 
+                      colors = c("white", "white", "white"),
+                      x.label = "Adjacent vessels",
+                      y.label = "Convexity"
+                      ) + 
+  theme_leo() +
+  theme(legend.position = "none",
+        panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5)))
+Mean_n_v$layers[[1]]$aes_params$size <- 0.2
+
+Mean_Distance <- interact_plot(best_model, pred = Distance, modx = Mean, 
+                      colors = c("white", "white", "white"),
+                      x.label = "Distance [µm]",
+                      y.label = "Convexity"
+                      ) + 
+  theme_leo() +
+  theme(legend.position = "none",
+        panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5)))
+Mean_Distance$layers[[1]]$aes_params$size <- 0.2
+
+pdf("pop_interactions.pdf", width = onecol, height = onecol / 3)
+plot_grid(Distance_n_v,
+          Mean_Distance,
+          Mean_n_v,
+          nrow = 1)
+dev.off()
+
+```
+
+### Bending
+
+#### Hydration influence
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+medium_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/WT_medium.csv") %>%
+  pivot_longer(cols = c(stiffness, strength), values_to = "value", names_to = "variable") %>%
+  mutate(variable = recode(variable, "stiffness" = "Stiffness",
+                           "strength" = "Strength"))
+
+medium_diameter_line <- ggplot(medium_data) +
+  geom_point(aes(x = d.microscope, y = value, fill = medium),
+    shape = 21,
+    alpha = 0.75,
+    size = 1.5,
+    stroke = 0.2
+  ) +
+  geom_smooth(aes(x = d.microscope, y = value, fill = medium, linetype = medium),
+    method = "lm",
+    colour = "black",
+    size = 0.2
+  ) +
+  labs(y = "MPa",
+       x = "Stem diameter [mm]") +
+  scale_fill_grey(start = 0.9, end = 0.1) +
+  theme_leo() +
+  theme(legend.position = "bottom",
+        legend.title = element_blank()) +
+  facet_wrap(~ variable, scales = "free_y")
+
+letters <- letter_groups(medium_data %>% filter(variable == "Stiffness"),
+                                 d.microscope,
+                                 medium,
+                                 "tukey",
+                                 print_position = "below",
+                                 print_adjust = 0.5
+  ) 
+  
+medium_diameter_box <- ggplot(
+  data = medium_data %>% filter(variable == "Stiffness"),
+  aes(x = medium, y = d.microscope)
+) +
+  # geom_line(aes(group = interaction(cell.type, variable, cell, measurement)),
+  #           size = 0.2,
+  #           alpha = 0.25) +
+  geom_quasirandom(
+    aes(fill = medium),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1.5,
+    stroke = 0.2
+  ) +
+  # geom_boxplot(
+  #   aes(group = interaction(cell.type, variable), fill = cell.type),
+  #   # fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   position = position_dodge2(width = 1),
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+geom_violin(
+  # aes(group = interaction(days, cell.type),
+                # fill = cell.type
+# ),
+draw_quantiles = 0.5,
+fill = "white",
+colour = "black",
+alpha = 0.85,
+width = 0.2,
+position = position_dodge(width = 0.6),
+size = 0.2,
+scale = "width"
+) +
+  geom_text(
+    data = letters,
+    aes(label = groups),
+    size = ggtext_size,
+    family = "Helvetica",
+    position = position_dodge(width = 0.6)
+  ) +
+  # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
+  # scale_fill_manual(values = pal_flame_disc) +
+  scale_fill_grey(start = 0.9, end = 0.1) +
+  expand_limits(y = 0) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+  labs(y = "Stem diameter [mm]") +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none",
+    axis.title.x = element_blank()
+  ) 
+
+```
+
+#### S influence
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+s_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/stiffness_s.csv") %>%
+  tidyr::fill(everything()) %>%
+  pivot_longer(cols = c(stiffness, strength), values_to = "value", names_to = "variable") %>%
+  mutate(genotype = ordered(genotype, levels = c("WT", "fah1")),
+         variable = recode(variable, "stiffness" = "Stiffness",
+                           "strength" = "Strength"))
+
+s_diameter_line <- ggplot(s_data) +
+  geom_point(aes(x = d.microscope, y = value, fill = genotype),
+    shape = 21,
+    alpha = 0.75,
+    size = 1.5,
+    stroke = 0.2
+  ) +
+  geom_smooth(aes(x = d.microscope, y = value, fill = genotype, colour = genotype),
+    method = "lm",
+    colour = "black",
+    size = 0.2
+  ) +
+  labs(y = "MPa",
+       x = "Stem diameter [mm]") +
+  scale_fill_manual(values = pal_ostwald_disc[c(1,3)], labels = c("WT", expression(italic("fah1")))) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)], labels = c("WT", expression(italic("fah1")))) +
+  theme_leo() +
+  theme(legend.position = "bottom",
+        legend.title = element_blank()) +
+  facet_wrap(~ variable, scales = "free_y")
+
+s_test <- s_data %>% filter(variable == "Stiffness")
+p_value <- broom::tidy(
+  t.test(s_test$d.microscope[s_test$genotype == "WT"], s_test$d.microscope[s_test$genotype == "fah1"])
+  )[["p.value"]] %>%
+  round(., digits = 2)
+  # formatC(., format = "e", digits = 0)
+  
+s_diameter_box <- ggplot(
+  data = s_data %>% filter(variable == "Stiffness"),
+  aes(x = genotype, y = d.microscope)
+) +
+  # geom_line(aes(group = interaction(cell.type, variable, cell, measurement)),
+  #           size = 0.2,
+  #           alpha = 0.25) +
+  geom_quasirandom(
+    aes(fill = genotype),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1.5,
+    stroke = 0.2
+  ) +
+  # geom_boxplot(
+  #   aes(group = interaction(cell.type, variable), fill = cell.type),
+  #   # fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   position = position_dodge2(width = 1),
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+geom_violin(
+  # aes(group = interaction(days, cell.type),
+                # fill = cell.type
+# ),
+draw_quantiles = 0.5,
+fill = "white",
+colour = "black",
+alpha = 0.85,
+width = 0.2,
+position = position_dodge(width = 0.6),
+size = 0.2,
+scale = "width"
+) +
+  annotate("text",
+           x = 2.5,
+           y =0,
+           label=paste("italic(P)==", p_value), 
+           parse=TRUE,
+           size = ggtext_size,
+           family = "Helvetica",
+           hjust = 1) +
+  scale_x_discrete(labels = c("WT", expression(italic("fah1")))) +
+  scale_fill_manual(values = pal_ostwald_disc[c(1,3)]) +
+  expand_limits(y = 0) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+  labs(y = "Stem diameter [mm]") +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none",
+    axis.title.x = element_blank()
+  )
+
+pdf("bending_supplemental.pdf", width = onecol, height = onecol)
+bending_supp <- plot_grid(
+  medium_diameter_line,
+  medium_diameter_box,
+  s_diameter_line,
+  s_diameter_box,
+  labels = c("A", "B", "C", "D"),
+  # vjust = 1,
+  nrow = 2,
+  align = "hv",
+  axis = "tlr",
+  rel_widths = c(1, 0.6),
+  label_size = 10,
+  label_fontfamily = "Helvetica"
+)
+bending_supp
+dev.off()
+```
+
