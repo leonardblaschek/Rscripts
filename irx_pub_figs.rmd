@@ -206,8 +206,7 @@ onecol <- 9 / 2.54
 
 eds_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/EDS/eds_data.csv",
   col_types = "ccnnn"
-) %>%
-  filter(days != "50")
+)
 
 eds_plot <- function(num, den, lbl) {
   num <- enquo(num)
@@ -220,12 +219,16 @@ eds_plot <- function(num, den, lbl) {
     summarise(p_value = broom::tidy(
       t.test(ratio[layer == "PCW"], ratio[layer == "SCW"])
     )[["p.value"]]) %>%
-    mutate(p_value = case_when(p_value > 0.001 ~ round(p_value, digits = 3),
-                               TRUE ~ round(p_value, digits = 4))
-    )
+    mutate(p_value = case_when(
+      p_value > 0.001 ~ round(p_value, digits = 3),
+      p_value > 0.0001 ~ round(p_value, digits = 4),
+      p_value > 0.00001 ~ round(p_value, digits = 5),
+      p_value > 0.000001 ~ round(p_value, digits = 6),
+      p_value > 0.0000001 ~ round(p_value, digits = 7),
+      TRUE ~ round(p_value, digits = 8)
+    ))
 
   eds_avg <- eds_data %>%
-    group_by(days) %>%
     mutate(min = min(!!num / !!den)) %>%
     group_by(layer, days) %>%
     summarise(
@@ -247,6 +250,16 @@ eds_plot <- function(num, den, lbl) {
       fill = layer
     )
   ) +
+    geom_quasirandom(
+      # aes(fill = cell.type, group = days),
+      dodge.width = 0.6,
+      shape = 21,
+      # width = 0.1,
+      # colour = NA,
+      alpha = 0.75,
+      size = 1,
+      stroke = 0.2
+    ) +
     geom_violin(aes(
       group = interaction(days, layer),
       # fill = cell.type
@@ -259,16 +272,6 @@ eds_plot <- function(num, den, lbl) {
     position = position_dodge(width = 0.6),
     size = 0.2,
     scale = "width"
-    ) +
-    geom_quasirandom(
-      # aes(fill = cell.type, group = days),
-      dodge.width = 0.6,
-      shape = 21,
-      # width = 0.1,
-      # colour = NA,
-      alpha = 0.75,
-      size = 1,
-      stroke = 0.2
     ) +
     geom_text(
       data = eds_avg,
@@ -296,15 +299,18 @@ eds_plot <- function(num, den, lbl) {
     )
 }
 
-pdf("eds_plots.pdf", width = onecol * 0.7, height = onecol / 2)
-plot_grid(eds_plot(C, O) + theme(axis.text.x = element_blank(),
-                       axis.title.x = element_blank(),
-                       axis.ticks.x = element_blank()),
-eds_plot(C, Cr),
+pdf("eds_plots.pdf", width = onecol * 0.7, height = onecol * 0.7)
+plot_grid(eds_plot(C, Cr) + theme(
+  axis.text.x = element_blank(),
+  axis.title.x = element_blank(),
+  axis.ticks.x = element_blank()
+),
+eds_plot(C, O),
 align = "v",
 axis = "lr",
 nrow = 2,
-rel_heights = c(1, 1.25))
+rel_heights = c(1, 1.18)
+)
 dev.off()
 ```
 
@@ -322,11 +328,29 @@ em_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/EM/AD_collapse.csv") %>
   group_by(experiment, treatment, days, cell.type) %>%
   mutate(sum = sum(count)) %>%
   group_by(experiment, treatment, days, cell.type, state) %>%
-  mutate(proportion = count / sum)
+  mutate(proportion = (count / sum) * 100)
 
 em_data_avg <- em_data %>%
   group_by(treatment, days, cell.type, state) %>%
-  summarise(proportion = mean(proportion))
+  summarise(
+    sd = sd(proportion),
+    proportion = mean(proportion)
+  ) %>%
+  group_by(treatment, days, cell.type) %>%
+  mutate(
+    ymin = case_when(
+      state == "Partially" ~ proportion[state == "Intact"] +
+        proportion[state == "Partially"] - sd,
+      state == "Fully" ~ 0,
+      state == "Intact" ~ proportion - sd
+    ),
+    ymax = case_when(
+      state == "Partially" ~ proportion[state == "Intact"] +
+        proportion[state == "Partially"] + sd,
+      state == "Fully" ~ 0,
+      state == "Intact" ~ proportion + sd
+    )
+  )
 
 em_data_points <- em_data %>%
   select(-sum, -count) %>%
@@ -343,63 +367,90 @@ em_data_points <- em_data %>%
     TRUE ~ "none"
   ))
 
-em_collapse <- ggplot(em_data_avg %>% filter(treatment == "AD"), aes(
-  x = days,
-  y = proportion,
-  # group = experiment,
-  fill = state
-)) +
-  geom_col(
-    alpha = 0.85,
-    width = 0.6
-  ) +
-  geom_point(
-    data = em_data_points %>% filter(treatment == "AD" &
-      state != "Fully"),
-    aes(
-      group = experiment,
-      y = proportion - 0.01
+em_collapse_plot <- function(cond) {
+  em_collapse <- ggplot(em_data_avg %>% filter(treatment == cond), aes(
+    x = days,
+    y = proportion,
+    # group = experiment,
+    fill = state
+  )) +
+    geom_col(
+      alpha = 0.85,
+      width = 0.6
+    ) +
+    geom_errorbar(aes(
+      ymin = ymin,
+      ymax = ymax
     ),
-    position = position_dodge(width = 0.5),
-    shape = 25,
-    # width = 0.1,
-    # colour = NA,
-    alpha = 0.75,
-    size = 1,
-    stroke = 0.2
-  ) +
-  geom_point(
-    data = em_data_points %>% filter(treatment == "AD" &
-      state != "Fully"),
-    aes(
-      group = experiment,
-      fill = state2,
-      y = proportion + 0.01
-    ),
-    position = position_dodge(width = 0.5),
-    shape = 24,
-    # width = 0.1,
-    # colour = NA,
-    alpha = 0.75,
-    size = 1,
-    stroke = 0.2
-  ) +
-  scale_fill_manual(values = rev(pal_ostwald_disc), name = "Collapse") +
-  scale_y_continuous(expand = expand_scale(mult = c(0, 0.05))) +
-  theme_leo() +
-  labs(
-    y = "Proportion",
-    x = "Days after induction"
-  ) +
-  facet_wrap(~cell.type, nrow = 1) +
-  theme(
-    legend.position = "right",
-    # axis.title.x = element_blank(),
-    legend.key.size = unit(4, "mm")
-  )
+    width = 0.1,
+    size = 0.2
+    ) +
+    # geom_point(
+    #   data = em_data_points %>% filter(treatment == cond &
+    #     state != "Fully"),
+    #   aes(
+    #     group = experiment,
+    #     y = proportion - 0.01
+    #   ),
+    #   position = position_dodge(width = 0.5),
+    #   shape = 25,
+    #   # width = 0.1,
+    #   # colour = NA,
+    #   alpha = 0.75,
+    #   size = 1,
+    #   stroke = 0.2
+    # ) +
+    # geom_point(
+    #   data = em_data_points %>% filter(treatment == cond &
+    #     state != "Fully"),
+    #   aes(
+    #     group = experiment,
+    #     fill = state2,
+    #     y = proportion + 0.01
+    #   ),
+    #   position = position_dodge(width = 0.5),
+    #   shape = 24,
+    #   # width = 0.1,
+    #   # colour = NA,
+    #   alpha = 0.75,
+    #   size = 1,
+    #   stroke = 0.2
+    # ) +
+    scale_fill_manual(values = rev(pal_ostwald_disc), name = "Collapse") +
+    scale_y_continuous(expand = expand_scale(mult = c(0, 0.05))) +
+    theme_leo() +
+    labs(
+      y = "Proportion",
+      x = "Days after induction"
+    ) +
+    facet_wrap(~cell.type, nrow = 1) +
+    theme(
+      # axis.title.x = element_blank(),
+      legend.key.height = unit(2, "mm"),
+      legend.key.width = unit(2, "mm"),
+      legend.margin = unit(c(0, 0, 0, 0), "mm"),
+      plot.margin = unit(c(0.5, 6, 0.5, 6), "pt")
+    ) + coord_cartesian(ylim = c(0, 100))
+}
 
-pdf("em_collapse.pdf", width = onecol, height = onecol / 2)
-em_collapse
+cpd_plot <- em_collapse_plot("CPD") + labs(y = "After CPD [%]") +
+  theme(legend.position = "bottom",
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank())
+# cpd_plot$layers[[2]]$aes_params$alpha <- 0
+# cpd_plot$layers[[3]]$aes_params$alpha <- 0
+
+ad_plot <- em_collapse_plot("AD") + labs(y = "After air drying [%]") +
+  theme(strip.text = element_blank())
+
+pdf("em_collapse.pdf", width = onecol * 0.75, height = onecol * 0.7)
+plot_grid(
+  cpd_plot,
+  ad_plot,
+  nrow = 2,
+  rel_heights = c(1, 1)
+)
 dev.off()
 ```
 
@@ -407,8 +458,7 @@ dev.off()
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 afm_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/AFM/afm_PX.csv") %>%
-  mutate(days = as.character(days),
-         cell.type = ordered(cell.type, levels = c("PX", "MX"))) %>%
+  mutate(days = as.character(days)) %>%
   pivot_longer(cols = c(modulus, deformation, adhesion), names_to = "variable", values_to = "value") %>%
   group_by(cell.type, days, cell, measurement, variable) %>%
   summarise(ratio = value[layer == "SCW"] / value[layer == "PCW"]) %>%
@@ -417,23 +467,35 @@ afm_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/AFM/afm_PX.csv") %>%
     measurement == 6 &
     days == "50")) # remove > 20-fold outlier
 
-afm_mx <- afm_data %>%
+afm_mx <- afm_data %>% # make dummy data for MX: DO NOT FORGET TO REMOVE!
   ungroup() %>%
-  mutate(cell.type = "MX",
-         ratio = ratio + runif(20))
+  mutate(
+    cell.type = "MX",
+    ratio = ratio + runif(20)
+  )
 
-afm_data <- afm_data %>% bind_rows(afm_mx)
+afm_data <- afm_data %>%
+  bind_rows(afm_mx) %>%
+  ungroup() %>%
+  mutate(cell.type = ordered(cell.type, levels = c("PX", "MX")))
 
 rmn_violin <- function(x) {
   afm_data <- afm_data
 
-afm_test <- afm_data %>% filter(variable == x)
-p_values <- afm_test %>%
-  group_by(cell.type) %>%
-  summarise(p_value = broom::tidy(
-    t.test(ratio[days == "10"], ratio[days == "50"])
-  )[["p.value"]]) %>%
-  mutate(p_value = formatC(p_value, format = "e", digits = 1))
+  afm_test <- afm_data %>% filter(variable == x)
+  p_values <- afm_test %>%
+    group_by(cell.type) %>%
+    summarise(p_value = broom::tidy(
+      t.test(ratio[days == "10"], ratio[days == "50"])
+    )[["p.value"]]) %>%
+    mutate(p_value = case_when(
+      p_value > 0.001 ~ round(p_value, digits = 3),
+      p_value > 0.0001 ~ round(p_value, digits = 4),
+      p_value > 0.00001 ~ round(p_value, digits = 5),
+      p_value > 0.000001 ~ round(p_value, digits = 6),
+      p_value > 0.0000001 ~ round(p_value, digits = 7),
+      TRUE ~ round(p_value, digits = 8)
+    ))
 
 
   ggplot(
@@ -479,7 +541,7 @@ p_values <- afm_test %>%
     ) +
     geom_text(
       data = p_values,
-      aes(label = p_value),
+      aes(label = paste(("P ="), p_value)),
       x = 0.5,
       y = 0,
       hjust = 0,
@@ -495,19 +557,20 @@ p_values <- afm_test %>%
     theme(
       text = element_text(family = "Helvetica"),
       legend.position = "none",
+      plot.margin = unit(c(5.5, 5.5, 5.5, 4.5), "pt")
     ) +
     facet_wrap(~cell.type, nrow = 2)
 }
 
 modulus <- rmn_violin("modulus") +
   labs(
-    x = "",
+    x = "Days after induction",
     y = "Relative DMT modulus"
   )
 
 deformation <- rmn_violin("deformation") +
   labs(
-    x = "Days after induction",
+    x = "",
     y = "Relative deformation"
   )
 
@@ -517,16 +580,13 @@ adhesion <- rmn_violin("adhesion") +
     y = "Relative adhesion"
   )
 
-pdf("afm_ratios.pdf", width = onecol * 0.7, height = onecol * 0.75)
+pdf("afm_ratios.pdf", width = onecol * 0.715, height = onecol * 0.7)
 afm_ratios <- plot_grid(
-  modulus,
   deformation,
+  modulus,
   adhesion,
-  labels = c("A", "B", "C"),
   # vjust = 1,
-  nrow = 1,
-  label_size = 10,
-  label_fontfamily = "Helvetica"
+  nrow = 1
 )
 afm_ratios
 dev.off()
@@ -634,7 +694,7 @@ dev.off()
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 curve_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/bending_curve.csv") %>%
-  mutate(genotype = ordered(genotype, levels = c("WT", "4cl1x4cl2x4cl3"))) 
+  mutate(genotype = ordered(genotype, levels = c("WT", "4cl1x4cl2x4cl3")))
 
 
 curves <- ggplot(
@@ -770,7 +830,7 @@ pdf("s_influence.pdf", width = onecol / 1.25, height = onecol / 3)
 s_inf <- plot_grid(
   medium_strength,
   medium_stiffness,
-  labels = c("D", "E"),
+  labels = c("E", "F"),
   # vjust = 1,
   nrow = 1,
   label_size = 10,
@@ -812,10 +872,10 @@ top <- plot_grid(
 )
 
 bottom <- plot_grid(
-  s_inf,
   curves,
+  s_inf,
   ncol = 2,
-  labels = c("", "F"),
+  labels = c("D", ""),
   label_fontfamily = "Helvetica",
   label_size = 10,
   # vjust = 1,
@@ -895,6 +955,11 @@ rmn_irx <- left_join(rmn_irx, raman_convex) %>%
     Area = Area * (5.9 / 3.2)^2,
     ConvexArea = ConvexArea * (5.9 / 3.2)^2
   )
+
+rmn_irx_n <- rmn_irx %>%
+  filter(genotype == "Col-0") %>%
+  group_by(cell.type, replicate) %>%
+  tally()
 ```
 
 ### Load Raman data
@@ -1340,13 +1405,13 @@ rmn_lig <- rmn_violin("total_lignin") +
 rmn_s <- rmn_violin("S_rel") +
   labs(
     x = "",
-    y = expression(paste("Relative S-lignin"))
+    y = expression(paste("Relative S-units"))
   )
 
 rmn_g <- rmn_violin("G_rel") +
   labs(
     x = "",
-    y = expression(paste("Relative G-lignin"))
+    y = expression(paste("Relative G-units"))
   )
 
 rmn_goh <- rmn_violin("GOH.G") +
