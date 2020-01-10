@@ -458,26 +458,18 @@ dev.off()
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 afm_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/AFM/afm_PX.csv") %>%
+  tidyr::fill(everything()) %>%
   mutate(days = as.character(days)) %>%
   pivot_longer(cols = c(modulus, deformation, adhesion), names_to = "variable", values_to = "value") %>%
   group_by(cell.type, days, cell, measurement, variable) %>%
   summarise(ratio = value[layer == "SCW"] / value[layer == "PCW"]) %>%
-  filter(!(variable == "adhesion" &
+  filter(!(variable == "adhesion" & # remove > 20-fold outlier
     cell == "Cell 4" &
     measurement == 6 &
-    days == "50")) # remove > 20-fold outlier
-
-afm_mx <- afm_data %>% # make dummy data for MX: DO NOT FORGET TO REMOVE!
+    cell.type == "PX" &
+    days == "50")) %>%
   ungroup() %>%
-  mutate(
-    cell.type = "MX",
-    ratio = ratio + runif(20)
-  )
-
-afm_data <- afm_data %>%
-  bind_rows(afm_mx) %>%
-  ungroup() %>%
-  mutate(cell.type = ordered(cell.type, levels = c("PX", "MX")))
+  mutate(cell.type = ordered(cell.type, levels = c("PX", "MX"))) 
 
 rmn_violin <- function(x) {
   afm_data <- afm_data
@@ -494,7 +486,9 @@ rmn_violin <- function(x) {
       p_value > 0.00001 ~ round(p_value, digits = 5),
       p_value > 0.000001 ~ round(p_value, digits = 6),
       p_value > 0.0000001 ~ round(p_value, digits = 7),
-      TRUE ~ round(p_value, digits = 8)
+      p_value > 0.000000001 ~ round(p_value, digits = 9),
+      p_value > 0.0000000001 ~ round(p_value, digits = 10),
+      TRUE ~ round(p_value, digits = 13)
     ))
 
 
@@ -696,25 +690,21 @@ dev.off()
 curve_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/bending_curve.csv") %>%
   mutate(genotype = ordered(genotype, levels = c("WT", "4cl1x4cl2x4cl3")))
 
-
 curves <- ggplot(
   data = curve_data,
   aes(x = strain, y = stress)
 ) +
-  # geom_hline(yintercept = 5.8,
-  #            size = 0.2,
-  #            linetype = 2) +
-  # geom_vline(xintercept = 0.65,
-  #            size = 0.2,
-  #            linetype = 2) +
-  # annotate("text",
-  #          label = "Breaking point",
-  #          family = "Helvetica",
-  #          size = ggtext_size,
-  #          x = 0.7,
-  #          y = 6.2,
-  #          hjust = 0,
-  #          vjust = 0) +
+  geom_vline(xintercept = 0.65,
+             size = 0.2,
+             linetype = 2) +
+  annotate("text",
+           label = "WT breaking point",
+           family = "Helvetica",
+           size = ggtext_size,
+           x = 0.7,
+           y = 8.5,
+           hjust = 0,
+           vjust = 0) +
   geom_line(aes(group = interaction(genotype, replicate)),
     size = 0.2,
     alpha = 0.15
@@ -1160,7 +1150,7 @@ rmn_data_avg <- rmn_data_pre %>%
 rmn_sum <- rmn_data_corrected %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   summarise(
-    "total_lignin" = scaled[wavenumber == 1603] + 2 * scaled[wavenumber == 1334],
+    "total_lignin" = (scaled[wavenumber == 1603] / 2) + scaled[wavenumber == 1334],
     "GOH_rel" = scaled_lig[wavenumber == 1664],
     "GOH.G" = scaled_lig[wavenumber == 1664] / scaled_lig[wavenumber == 1603],
     # "GOH_tot" = scaled[wavenumber == 1664],
@@ -1399,8 +1389,7 @@ rmn_lig <- rmn_violin("total_lignin") +
   labs(
     x = "",
     y = expression(paste("Relative lignin"))
-  ) +
-  expand_limits(y = 0.015)
+  ) 
 
 rmn_s <- rmn_violin("S_rel") +
   labs(
@@ -1457,7 +1446,7 @@ bottom <- plot_grid(rmn_area,
   axis = "lr"
 )
 
-pdf("IRX_Figure2.pdf", width = onecol, height = onecol)
+pdf("IRX_figure2.pdf", width = onecol, height = onecol)
 plot_grid(top,
   bottom,
   nrow = 2,
@@ -1624,7 +1613,7 @@ sf_ROIs <- ggplot() +
   # scale_colour_viridis_c(direction = 1) +
   facet_grid(cell.type ~ genotype, switch = "y")
 
-pdf("sf_ROIs.pdf", width = twocol, height = onecol)
+pdf("sf_ROIs.pdf", width = twocol * 0.7, height = onecol)
 sf_ROIs
 dev.off()
 
@@ -2729,11 +2718,13 @@ pop_irx <- pop_irx %>%
 pop_irx <- pop_irx %>%
   mutate(
     convexity = Area / ConvexArea,
-    Mean = Mean / 255
+    Mean = Mean / 255,
+    type = recode(type, "P" = "PX",
+                  "S" = "SX")
   )
 ```
 
-#### overview
+#### mutant overview
 
 ```{r}
 
@@ -2767,10 +2758,11 @@ pop_letters <- letter_groups(pop_irx_overview,
   type,
   variable,
   print_position = "below",
-  print_adjust = 1.25
+  print_adjust = 0.75
 ) %>%
   mutate(value = case_when(
-    variable == "Convexity" & type == "S" ~ value - 0.1,
+    variable == "Convexity" ~ value - 0.1,
+    variable == "Circularity" ~ value - 0.1,
     TRUE ~ value
   ))
 
@@ -2834,6 +2826,7 @@ pop_overview <- ggplot(
     #                                hjust = 1),
     axis.title = element_blank()
   ) +
+  expand_limits(y = 0) +
   facet_grid(variable ~ type,
     scales = "free_y"
   )
@@ -2882,6 +2875,252 @@ pop_overview
 dev.off()
 ```
 
+#### WT overview
+
+```{r}
+
+pop_adj <- pop_irx %>%
+  select(genotype:n_v) %>%
+  filter(genotype == "WT") %>%
+  pivot_longer(n_r:n_v, names_to = "variable", values_to = "value")
+
+p_values <- pop_adj %>%
+    group_by(variable) %>%
+    summarise(p_value = broom::tidy(
+      wilcox.test(value[type == "PX"], value[type == "SX"])
+    )[["p.value"]]) %>%
+    mutate(p_value = formatC(p_value, format = "e", digits = 1)
+      #        case_when(
+      # p_value > 0.001 ~ round(p_value, digits = 3),
+      # p_value > 0.0001 ~ round(p_value, digits = 4),
+      # p_value > 0.00001 ~ round(p_value, digits = 5),
+      # p_value > 0.000001 ~ round(p_value, digits = 6),
+      # p_value > 0.0000001 ~ round(p_value, digits = 7),
+      # TRUE ~ round(p_value, digits = 8)
+    )
+
+pop_adj_box <- ggplot(
+  data = pop_adj,
+  aes(x = variable, y = value * 100)
+) +
+  geom_quasirandom(
+    aes(
+      group = interaction(type, variable),
+      fill = type
+    ),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  # geom_boxplot(
+  #   aes(group = interaction(cell.type, variable), fill = cell.type),
+  #   # fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   position = position_dodge2(width = 1),
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_violin(aes(
+    group = interaction(type, variable),
+    # fill = cell.type
+  ),
+  draw_quantiles = 0.5,
+  fill = "white",
+  colour = "black",
+  alpha = 0.85,
+  width = 0.2,
+  position = position_dodge(width = 0.6),
+  size = 0.2,
+  scale = "width"
+  ) +
+  geom_text(
+      data = p_values,
+      aes(label = paste(("P ="), p_value)),
+      # x = 0.5,
+      y = -5,
+      hjust = 0.5,
+      vjust = 1,
+      family = "Helvetica",
+      size = ggtext_size
+    ) +
+  annotate("text",
+    x = c(0.6, 1.4),
+    y = c(100, 100),
+    label = c("PX", "SX"),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  annotate("segment",
+    x = c(0.7, 1.3),
+    xend = c(0.8, 1.2),
+    y = c(100, 100),
+    yend = c(100, 100),
+    colour = "black",
+    size = 0.2
+  ) +
+  scale_x_discrete(labels = c("Fibres", "Parenchyma", "Rays", "Vessels")) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.15, 0.05))) +
+  # scale_fill_grey(start = 1, end = 0) +
+  # scale_fill_brewer(palette = "Greys") +
+  scale_fill_manual(values = pal_flame_disc[c(1,3)]) +
+  # scale_fill_manual(values = pal_ostwald[c(3, 4, 6)]) +
+  # scale_colour_manual(values = pal_ostwald[c(3, 4, 6)]) +
+  labs(
+    x = "Neighbouring cell type",
+    y = "CW adjacent [%]"
+  ) +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none"
+  )
+
+pdf("pop_adj_box.pdf", width = 9 / 2.54, height = 1.5)
+pop_adj_box
+dev.off()
+
+
+rmn_violin <- function(x) {
+  
+  pop_irx_overview <- pop_irx %>%
+    filter(genotype == "WT") %>%
+    select(genotype:type, Mean, Distance, Area) %>%
+    pivot_longer(c(Mean, Distance, Area), names_to = "variable", values_to = "value")
+  
+p_values <- pop_irx_overview %>% filter(variable == x) %>%
+    summarise(p_value = broom::tidy(
+      t.test(value[type == "PX"], value[type == "SX"])
+    )[["p.value"]]) %>%
+    mutate(p_value = formatC(p_value, format = "e", digits = 1))
+
+  ggplot(
+    data = pop_irx_overview %>% filter(variable == x),
+    aes(x = type, y = value)
+  ) +
+    geom_quasirandom(
+      aes(fill = type),
+      dodge.width = 0.6,
+      shape = 21,
+      # width = 0.1,
+      # colour = NA,
+      alpha = 0.75,
+      size = 1,
+      stroke = 0.2
+    ) +
+    # geom_boxplot(
+    #   aes(group = interaction(cell.type, variable), fill = cell.type),
+    #   # fill = "white",
+    #   alpha = 0.5,
+    #   width = 0.6,
+    #   position = position_dodge2(width = 1),
+    #   outlier.alpha = 0,
+    #   lwd = 0.25,
+    #   fatten = 1,
+    #   width = 0.25
+    # ) +
+    geom_violin(aes(
+      group = type,
+      # fill = cell.type
+    ),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+    ) +
+    geom_text(
+      data = p_values,
+      aes(label = paste(("P ="), p_value)),
+      x = 1.5,
+      y = -0,
+      hjust = 0.5,
+      vjust = 1,
+      family = "Helvetica",
+      size = ggtext_size
+    ) +
+    scale_x_discrete(labels = c("PX", "SX")) +
+    scale_fill_manual(values = pal_flame_disc[c(1, 3)]) +
+    scale_y_continuous(expand = expand_scale(mult = c(0.15, 0.05))) +
+    expand_limits(y = 0) +
+    theme_leo() +
+    theme(
+      text = element_text(family = "Helvetica"),
+      legend.position = "none",
+    )
+}
+
+pop_area <- rmn_violin("Area") +
+  labs(
+    x = "",
+    y = expression(paste("Area [µm"^2, "]"))
+  )
+
+pop_wiesner <- rmn_violin("Mean") +
+  labs(
+    x = "",
+    y = expression(paste("Coniferaldehyde"))
+  )
+
+pop_distance <- rmn_violin("Distance") +
+  labs(
+    x = "",
+    y = expression(paste("Distance [µm]"))
+  )
+
+
+celltypes_WT <-
+  rasterGrob(readPNG(
+    "/home/leonard/Dropbox/IRX manuscript/Edits/poplarWT.png"
+  ))
+
+
+right_low <- plot_grid(
+  pop_area,
+  pop_distance,
+  pop_wiesner,
+  labels = c("C", "D", "E"),
+  nrow = 1,
+  # rel_widths = c(1, 2.2),
+  vjust = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica"
+)
+
+right <- plot_grid(
+  pop_adj_box,
+  right_low,
+  labels = c("B", ""),
+  nrow = 2,
+  # rel_widths = c(1, 2.2),
+  vjust = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica")
+
+pdf("IRX_figure2_pop.pdf", width = onecol * 1.15, height = onecol * 0.75)
+plot_grid(
+  celltypes_WT,
+  right,
+  labels = c("A", ""),
+  nrow = 1,
+  # rel_widths = c(1, 2.2),
+  vjust = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica",
+  rel_widths = c(1, 2)
+)
+dev.off()
+```
+
 #### SEMs
 
 ```{r}
@@ -2893,7 +3132,7 @@ poplar_psem <- psem(
     Distance +
     # n_p +
     convexity,
-  data = filter(pop_irx, type == "P")
+  data = filter(pop_irx, type == "PX")
   ),
   lm(convexity ~
   n_v +
@@ -2901,15 +3140,15 @@ poplar_psem <- psem(
     Mean +
     Distance +
     Perim.,
-  data = filter(pop_irx, type == "P")
+  data = filter(pop_irx, type == "PX")
   ),
-  data = filter(pop_irx, type == "P")
+  data = filter(pop_irx, type == "PX")
 )
 
 ind_claims <- ind_claims %>%
   bind_rows(summary(poplar_psem)[["dTable"]][, c(1, 4, 5)] %>%
     mutate(
-      model = "P",
+      model = "PX",
       species = "Populus",
       fishC = summary(poplar_psem)[["Cstat"]][["Fisher.C"]],
       fishP = summary(poplar_psem)[["Cstat"]][["P.Value"]]
@@ -2918,7 +3157,7 @@ ind_claims <- ind_claims %>%
 coefs <- coefs %>%
   bind_rows(summary(poplar_psem)[["coefficients"]][, c(1:8)] %>%
     mutate(
-      model = "P",
+      model = "PX",
       species = "Populus"
     ))
 plot(poplar_psem)
@@ -2929,7 +3168,7 @@ poplar_psem <- psem(
     Distance +
     # n_p +
     convexity,
-  data = filter(pop_irx, type == "S")
+  data = filter(pop_irx, type == "SX")
   ),
   lm(convexity ~
   n_v +
@@ -2937,15 +3176,15 @@ poplar_psem <- psem(
     Mean +
     Distance +
     Perim.,
-  data = filter(pop_irx, type == "S")
+  data = filter(pop_irx, type == "SX")
   ),
-  data = filter(pop_irx, type == "S")
+  data = filter(pop_irx, type == "SX")
 )
 
 ind_claims <- ind_claims %>%
   bind_rows(summary(poplar_psem)[["dTable"]][, c(1, 4, 5)] %>%
     mutate(
-      model = "S",
+      model = "SX",
       species = "Populus",
       fishC = summary(poplar_psem)[["Cstat"]][["Fisher.C"]],
       fishP = summary(poplar_psem)[["Cstat"]][["P.Value"]]
@@ -2954,7 +3193,7 @@ ind_claims <- ind_claims %>%
 coefs <- coefs %>%
   bind_rows(summary(poplar_psem)[["coefficients"]][, c(1:8)] %>%
     mutate(
-      model = "S",
+      model = "SX",
       species = "Populus"
     ))
 plot(poplar_psem)

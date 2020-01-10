@@ -764,156 +764,135 @@ dev.off()
 ```{r load and correct mutant spectra, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
 #### import and tidy Raman data ####
-# rmn_files <-
-#   list.files(
-#     path = "/home/leonard/Documents/Uni/PhD/IRX/RAMAN/nuoendagula/",
-#     pattern = "*.txt",
-#     recursive = TRUE,
-#     full.names = TRUE
-#   )
-#
-# read_plus <- function(flnm) {
-#   read_tsv(flnm,
-#     comment = "#",
-#     col_names = FALSE,
-#     skip = 25,
-#     cols_only(
-#       X1 = col_number(),
-#       X2 = col_number()
-#     )
-#   ) %>%
-#     mutate(
-#       filename = flnm,
-#       exp_time = readLines(flnm) %>%
-#         str_split("\t") %>%
-#         grep("Exposure Time: .* s", ., value = T) %>%
-#         str_remove_all("#Exposure Time: | s") %>%
-#         as.numeric(),
-#       pwr = readLines(flnm) %>%
-#         str_split("\t") %>%
-#         grep("Excitation Power: .* mW", ., value = T) %>%
-#         str_remove_all("#Excitation Power: | mW") %>%
-#         as.numeric(),
-#       nd_fltr = 1 - (readLines(flnm) %>%
-#         str_split("\t") %>%
-#         grep("% \\([0-9]{3}/255\\)", ., value = T) %>%
-#         str_remove_all("#ND Filter : | % \\([0-9]{3}/255\\)") %>%
-#         as.numeric() / 100)
-#     )
-# }
-#
-# rmn_data <- lapply(rmn_files, read_plus) %>%
-#   bind_rows()
-#
-# # rmn_data <- rmn_data %>%
-# #   select(c(1:3))
-#
-# rmn_data$filename <- basename(rmn_data$filename)
-#
-# rmn_data$filename <-
-#   str_replace(rmn_data$filename, fixed("fah 1"), "fah1")
-#
-# rmn_data <- rmn_data %>%
-#   distinct(X1, filename, .keep_all = TRUE) %>%
-#   separate(
-#     filename,
-#     into = c("genotype", "replicate", "cell.type", "technical"),
-#     sep = "\\s*#|-|\\s",
-#     extra = "merge"
-#   ) %>%
-#   rename("wavenumber" = X1, "intensity" = X2) %>%
-#   mutate(
-#     genotype = recode(
-#       genotype,
-#       "4cl1＆2" = "4cl1x4cl2",
-#       "cad4＆5" = "cad4xcad5",
-#       "ccoaomt" = "ccoaomt1",
-#       "ccr1" = "ccr1-3",
-#       "col.o" = "Col-0",
-#       "Col.0" = "Col-0",
-#       "ccr1＆fah1" = "ccr1xfah1"
-#     ),
-#     cell.type = recode(cell.type,
-#       "px" = "PX",
-#       "SX" = "SMX",
-#       "MX" = "PMX"
-#     ),
-#     replicate = str_extract(
-#       replicate,
-#       "\\d"
-#     ),
-#     technical = str_extract(
-#       technical,
-#       "(\\d)+"
-#     ),
-#     wavenumber = round(wavenumber, digits = 0)
-#   ) %>%
-#   filter(cell.type != "？？") %>%
-#   group_by(genotype, cell.type, replicate, technical) %>%
-#   mutate(intensity = intensity / (exp_time * pwr * nd_fltr)) %>%
-#   select(-exp_time, -pwr, -nd_fltr)
-#
-# #### baseline correct Raman data ####
-# rmn_data_wide <- rmn_data %>%
-#   group_by(genotype, cell.type, replicate, technical) %>%
-#   mutate(group_id = row_number()) %>%
-#   spread(wavenumber, intensity) %>%
-#   select(-group_id) %>%
-#   summarise_all(funs(sum(., na.rm = TRUE)))
-#
-# rmn_data_mat <- as.matrix(rmn_data_wide[, -c(1:4)])
-# rownames(rmn_data_mat) <- paste(rmn_data_wide$genotype,
-#   rmn_data_wide$cell.type,
-#   rmn_data_wide$replicate,
-#   rmn_data_wide$technical,
-#   sep = "_"
-# )
-#
-# rmn_data_correction <- baseline.als(rmn_data_mat,
-#   lambda = 5,
-#   p = 0.01,
-#   maxit = 100
-# )
-# rmn_data_corrected <- as_tibble(rmn_data_correction$corrected, rownames = NA)
-#
-# rmn_data_corrected <- rmn_data_corrected %>%
-#   rownames_to_column() %>%
-#   separate(rowname, sep = "_", into = c("genotype", "cell.type", "replicate", "technical"), remove = TRUE) %>%
-#   gather(key = "wavenumber", value = "corrected.intensity", -c(genotype, cell.type, replicate, technical)) %>%
-#   mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X."), replacement = "-")) %>%
-#   mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X"), replacement = "")) %>%
-#   mutate(wavenumber = as.numeric(wavenumber)) %>%
-#   group_by(genotype, cell.type, replicate, technical) %>%
-#   inner_join(., rmn_data, by = c("genotype", "cell.type", "replicate", "technical", "wavenumber")) %>%
-#   ungroup() %>%
-#   filter(genotype != "ccr1xfah1" &
-#     wavenumber %in% c(300:1700) &
-#     cell.type %in% c("IF", "PMX")) %>%
-#   anti_join(tibble(genotype = "cad4xcad5",
-#                    cell.type = "PMX",
-#                    replicate = "4",
-#                    technical = "2")) %>%
-#   mutate(
-#     genotype = ordered(genotype,
-#       levels = c(
-#         "Col-0",
-#         "4cl1",
-#         "4cl2",
-#         "4cl1x4cl2",
-#         "ccoaomt1",
-#         "fah1",
-#         "omt1",
-#         "ccr1-3",
-#         "cad4",
-#         "cad5",
-#         "cad4xcad5"
-#       )
-#     ),
-#     cell.type = recode(cell.type, "PMX" = "VB")
-#   )
+rmn_files <-
+  list.files(
+    path = "/home/leonard/Documents/Uni/PhD/IRX/RAMAN/nuoendagula/",
+    pattern = "*.txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
 
-# write_csv(rmn_data_corrected, "rmn_data_corrected.csv")
-rmn_data_corrected <- read_csv("rmn_data_corrected.csv", col_types = "ccccnnn") %>%
+read_plus <- function(flnm) {
+  read_tsv(flnm,
+    comment = "#",
+    col_names = FALSE,
+    skip = 25,
+    cols_only(
+      X1 = col_number(),
+      X2 = col_number()
+    )
+  ) %>%
+    mutate(
+      filename = flnm,
+      exp_time = readLines(flnm) %>%
+        str_split("\t") %>%
+        grep("Exposure Time: .* s", ., value = T) %>%
+        str_remove_all("#Exposure Time: | s") %>%
+        as.numeric(),
+      pwr = readLines(flnm) %>%
+        str_split("\t") %>%
+        grep("Excitation Power: .* mW", ., value = T) %>%
+        str_remove_all("#Excitation Power: | mW") %>%
+        as.numeric(),
+      nd_fltr = 1 - (readLines(flnm) %>%
+        str_split("\t") %>%
+        grep("% \\([0-9]{3}/255\\)", ., value = T) %>%
+        str_remove_all("#ND Filter : | % \\([0-9]{3}/255\\)") %>%
+        as.numeric() / 100)
+    )
+}
+
+rmn_data <- lapply(rmn_files, read_plus) %>%
+  bind_rows()
+
+# rmn_data <- rmn_data %>%
+#   select(c(1:3))
+
+rmn_data$filename <- basename(rmn_data$filename)
+
+rmn_data$filename <-
+  str_replace(rmn_data$filename, fixed("fah 1"), "fah1")
+
+rmn_data <- rmn_data %>%
+  distinct(X1, filename, .keep_all = TRUE) %>%
+  separate(
+    filename,
+    into = c("genotype", "replicate", "cell.type", "technical"),
+    sep = "\\s*#|-|\\s",
+    extra = "merge"
+  ) %>%
+  rename("wavenumber" = X1, "intensity" = X2) %>%
+  mutate(
+    genotype = recode(
+      genotype,
+      "4cl1＆2" = "4cl1x4cl2",
+      "cad4＆5" = "cad4xcad5",
+      "ccoaomt" = "ccoaomt1",
+      "ccr1" = "ccr1-3",
+      "col.o" = "Col-0",
+      "Col.0" = "Col-0",
+      "ccr1＆fah1" = "ccr1xfah1"
+    ),
+    cell.type = recode(cell.type,
+      "px" = "PX",
+      "SX" = "SMX",
+      "MX" = "PMX"
+    ),
+    replicate = str_extract(
+      replicate,
+      "\\d"
+    ),
+    technical = str_extract(
+      technical,
+      "(\\d)+"
+    ),
+    wavenumber = round(wavenumber, digits = 0)
+  ) %>%
+  filter(cell.type != "？？") %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(intensity = intensity / (exp_time * pwr * nd_fltr)) %>%
+  select(-exp_time, -pwr, -nd_fltr)
+
+#### baseline correct Raman data ####
+rmn_data_wide <- rmn_data %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(group_id = row_number()) %>%
+  spread(wavenumber, intensity) %>%
+  select(-group_id) %>%
+  summarise_all(funs(sum(., na.rm = TRUE)))
+
+rmn_data_mat <- as.matrix(rmn_data_wide[, -c(1:4)])
+rownames(rmn_data_mat) <- paste(rmn_data_wide$genotype,
+  rmn_data_wide$cell.type,
+  rmn_data_wide$replicate,
+  rmn_data_wide$technical,
+  sep = "_"
+)
+
+rmn_data_correction <- baseline.als(rmn_data_mat,
+  lambda = 5,
+  p = 0.01,
+  maxit = 100
+)
+rmn_data_corrected <- as_tibble(rmn_data_correction$corrected, rownames = NA)
+
+rmn_data_corrected <- rmn_data_corrected %>%
+  rownames_to_column() %>%
+  separate(rowname, sep = "_", into = c("genotype", "cell.type", "replicate", "technical"), remove = TRUE) %>%
+  gather(key = "wavenumber", value = "corrected.intensity", -c(genotype, cell.type, replicate, technical)) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X."), replacement = "-")) %>%
+  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X"), replacement = "")) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  inner_join(., rmn_data, by = c("genotype", "cell.type", "replicate", "technical", "wavenumber")) %>%
+  ungroup() %>%
+  filter(genotype != "ccr1xfah1" &
+    wavenumber %in% c(300:1700) &
+    cell.type %in% c("IF", "PMX")) %>%
+  anti_join(tibble(genotype = "cad4xcad5",
+                   cell.type = "PMX",
+                   replicate = "4",
+                   technical = "2")) %>%
   mutate(
     genotype = ordered(genotype,
       levels = c(
@@ -929,8 +908,29 @@ rmn_data_corrected <- read_csv("rmn_data_corrected.csv", col_types = "ccccnnn") 
         "cad5",
         "cad4xcad5"
       )
-    )
+    ),
+    cell.type = recode(cell.type, "PMX" = "VB")
   )
+
+# write_csv(rmn_data_corrected, "rmn_data_corrected.csv")
+# rmn_data_corrected <- read_csv("rmn_data_corrected.csv", col_types = "ccccnnn") %>%
+#   mutate(
+#     genotype = ordered(genotype,
+#       levels = c(
+#         "Col-0",
+#         "4cl1",
+#         "4cl2",
+#         "4cl1x4cl2",
+#         "ccoaomt1",
+#         "fah1",
+#         "omt1",
+#         "ccr1-3",
+#         "cad4",
+#         "cad5",
+#         "cad4xcad5"
+#       )
+#     )
+#   )
 
 # lig_peak <- rmn_data_corrected %>%
 #   group_by(genotype, cell.type, replicate, technical) %>%
@@ -1258,7 +1258,7 @@ dev.off()
 
 \newpage
 
-### Table 1 -- identified band and correspondence with literature.
+### Table 1 -- identified bands and correspondence with literature.
 
 ```{r peak loading mean, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
 options(knitr.kable.NA = "")
@@ -1292,112 +1292,112 @@ kable(selected_peaks,
 
 ```{r iterative opls-da, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
-# rmn_data_spread <- rmn_data_corrected %>%
-#   pivot_wider(
-#     id_cols = c(genotype, cell.type, replicate, technical),
-#     names_from = wavenumber,
-#     values_from = scaled
-#   ) %>%
-#   unite("genocell", genotype, cell.type, remove = F) %>%
-#   ungroup()
-#
-# celltype_list <- list(
-#   "IF",
-#   "VB"
-# )
-# geno_list <- list(
-#   "Col-0",
-#   "4cl1",
-#   "4cl2",
-#   "4cl1x4cl2",
-#   "ccoaomt1",
-#   "fah1",
-#   "omt1",
-#   "ccr1-3",
-#   "cad4",
-#   "cad5",
-#   "cad4xcad5"
-# )
-#
-# genocell_list <- expand.grid(geno_list, celltype_list) %>%
-#   unite(genocell_1, Var1, Var2) %>%
-#   mutate(genocell_2 = genocell_1) %>%
-#   expand(genocell_1, genocell_2) %>%
-#   filter(genocell_1 != genocell_2) %>%
-#   unite("comb", genocell_1, genocell_2, sep = ",") %>%
-#   lst() %>%
-#   unlist()
-#
-# ### compute and save OPLS-DA iterations ####
-# oplsda_iter <- function(x, y) {
-#   splinter <- str_split(y, fixed(","))
-#   genocell_1 <- splinter[[1]][[1]]
-#   genocell_2 <- splinter[[1]][[2]]
-#   rmn_mat <- data.matrix(x %>%
-#     filter(genocell %in% c(genocell_1, genocell_2)) %>%
-#     select(-genotype, -cell.type, -replicate, -technical, -genocell))
-#   rwnms <- x %>%
-#     filter(genocell %in% c(genocell_1, genocell_2)) %>%
-#     select(genotype, cell.type, replicate, technical) %>%
-#     unite("ID", genotype, cell.type, replicate, technical, sep = "_")
-#   rownames(rmn_mat) <- rwnms$ID
-#   rmn_meta <- as.matrix(x %>%
-#     filter(genocell %in% c(genocell_1, genocell_2)) %>%
-#     select(genotype, cell.type, replicate, technical, genocell))
-#
-#   genocell <- rmn_meta[, "genocell"]
-#   if (nrow(rmn_mat) < 7) {
-#     rmn_oplsda <- opls(rmn_mat, genocell, predI = 1, orthoI = 1, crossvalI = nrow(rmn_mat))
-#   } else {
-#     rmn_oplsda <- opls(rmn_mat, genocell, predI = 1, orthoI = 1, crossvalI = 7)
-#   }
-#
-#   loading <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
-#     rename(loading = p1) %>%
-#     mutate(wavenumber = as.numeric(wavenumber))
-#   return(loading)
-# }
-#
-# loadings <- vector("list", 1)
-# for (i in genocell_list) {
-#   loadings[[i]] <- oplsda_iter(rmn_data_spread, i)
-# }
-#
-# loadings_df <- loadings[-1] %>%
-#   enframe() %>%
-#   unnest() %>%
-#   spread(key = wavenumber, value = loading) %>%
-#   separate(name, sep = ",", into = c("genocell_1", "genocell_2")) %>%
-#   separate(genocell_1, sep = "_", into = c("genotype_1", "cell.type_1")) %>%
-#   separate(genocell_2, sep = "_", into = c("genotype_2", "cell.type_2"))
-#
-# loadings_df <- loadings_df[!duplicated(t(apply(loadings_df[c("genotype_1", "cell.type_1", "genotype_2", "cell.type_2")], 1, sort))), ]
-#
-# write_csv(loadings_df, "loadings_df.csv")
-#
-# loadings_df_mean <- loadings_df %>%
-#   pivot_longer(cols = -c(cell.type_1, cell.type_2, genotype_1, genotype_2),
-#                names_to = "wavenumber",
-#                values_to = "loading", ) %>%
-#   mutate(wavenumber = as.numeric(wavenumber)) %>%
-#   group_by(wavenumber) %>%
-#   summarise(loading.mean = mean(abs(loading)))
-#
-# write_csv(loadings_df_mean, "loadings_df_mean.csv")
-#
-# rmn_data_loading <- rmn_data_corrected %>%
-#   group_by(wavenumber) %>%
-#   summarise(
-#     mean.scaled = mean(scaled, na.rm = TRUE)
-#   ) %>%
-#   left_join(loadings_df_mean)
-#
-# write_csv(rmn_data_loading, "rmn_data_loading.csv")
+rmn_data_spread <- rmn_data_corrected %>%
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical),
+    names_from = wavenumber,
+    values_from = scaled
+  ) %>%
+  unite("genocell", genotype, cell.type, remove = F) %>%
+  ungroup()
+
+celltype_list <- list(
+  "IF",
+  "VB"
+)
+geno_list <- list(
+  "Col-0",
+  "4cl1",
+  "4cl2",
+  "4cl1x4cl2",
+  "ccoaomt1",
+  "fah1",
+  "omt1",
+  "ccr1-3",
+  "cad4",
+  "cad5",
+  "cad4xcad5"
+)
+
+genocell_list <- expand.grid(geno_list, celltype_list) %>%
+  unite(genocell_1, Var1, Var2) %>%
+  mutate(genocell_2 = genocell_1) %>%
+  expand(genocell_1, genocell_2) %>%
+  filter(genocell_1 != genocell_2) %>%
+  unite("comb", genocell_1, genocell_2, sep = ",") %>%
+  lst() %>%
+  unlist()
+
+### compute and save OPLS-DA iterations ####
+oplsda_iter <- function(x, y) {
+  splinter <- str_split(y, fixed(","))
+  genocell_1 <- splinter[[1]][[1]]
+  genocell_2 <- splinter[[1]][[2]]
+  rmn_mat <- data.matrix(x %>%
+    filter(genocell %in% c(genocell_1, genocell_2)) %>%
+    select(-genotype, -cell.type, -replicate, -technical, -genocell))
+  rwnms <- x %>%
+    filter(genocell %in% c(genocell_1, genocell_2)) %>%
+    select(genotype, cell.type, replicate, technical) %>%
+    unite("ID", genotype, cell.type, replicate, technical, sep = "_")
+  rownames(rmn_mat) <- rwnms$ID
+  rmn_meta <- as.matrix(x %>%
+    filter(genocell %in% c(genocell_1, genocell_2)) %>%
+    select(genotype, cell.type, replicate, technical, genocell))
+
+  genocell <- rmn_meta[, "genocell"]
+  if (nrow(rmn_mat) < 7) {
+    rmn_oplsda <- opls(rmn_mat, genocell, predI = 1, orthoI = 1, crossvalI = nrow(rmn_mat))
+  } else {
+    rmn_oplsda <- opls(rmn_mat, genocell, predI = 1, orthoI = 1, crossvalI = 7)
+  }
+
+  loading <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
+    rename(loading = p1) %>%
+    mutate(wavenumber = as.numeric(wavenumber))
+  return(loading)
+}
+
+loadings <- vector("list", 1)
+for (i in genocell_list) {
+  loadings[[i]] <- oplsda_iter(rmn_data_spread, i)
+}
+
+loadings_df <- loadings[-1] %>%
+  enframe() %>%
+  unnest() %>%
+  spread(key = wavenumber, value = loading) %>%
+  separate(name, sep = ",", into = c("genocell_1", "genocell_2")) %>%
+  separate(genocell_1, sep = "_", into = c("genotype_1", "cell.type_1")) %>%
+  separate(genocell_2, sep = "_", into = c("genotype_2", "cell.type_2"))
+
+loadings_df <- loadings_df[!duplicated(t(apply(loadings_df[c("genotype_1", "cell.type_1", "genotype_2", "cell.type_2")], 1, sort))), ]
+
+write_csv(loadings_df, "loadings_df.csv")
+
+loadings_df_mean <- loadings_df %>%
+  pivot_longer(cols = -c(cell.type_1, cell.type_2, genotype_1, genotype_2),
+               names_to = "wavenumber",
+               values_to = "loading", ) %>%
+  mutate(wavenumber = as.numeric(wavenumber)) %>%
+  group_by(wavenumber) %>%
+  summarise(loading.mean = mean(abs(loading)))
+
+write_csv(loadings_df_mean, "loadings_df_mean.csv")
+
+rmn_data_loading <- rmn_data_corrected %>%
+  group_by(wavenumber) %>%
+  summarise(
+    mean.scaled = mean(scaled, na.rm = TRUE)
+  ) %>%
+  left_join(loadings_df_mean)
+
+write_csv(rmn_data_loading, "rmn_data_loading.csv")
 
 #### read in OPLS-DA iterations if previously computed ####
-loadings_df <- read_csv("loadings_df.csv")
-rmn_data_loading <- read_csv("rmn_data_loading.csv")
-loadings_df_mean <- read_csv("loadings_df_mean.csv")
+# loadings_df <- read_csv("loadings_df.csv")
+# rmn_data_loading <- read_csv("rmn_data_loading.csv")
+# loadings_df_mean <- read_csv("loadings_df_mean.csv")
 ```
 
 ```{r opls-da clustering, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
