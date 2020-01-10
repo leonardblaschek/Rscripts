@@ -401,19 +401,19 @@ peak_upset <- ggplot(peak_pres) +
   ) +
   labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
   scale_y_discrete(labels = rev(c(
-    expression(paste("G"[CHOH])),
-    expression(paste("G"[CHOH])),
-    expression(paste("G"[sat - CHOH])),
-    expression(paste("G"[CHO])),
-    expression(paste("G"[CHO])),
-    expression(paste("G"[COOH])),
-    expression(paste("5H"[COOH])),
-    expression(paste("S"[CHOH])),
-    expression(paste("S"[CHO])),
-    expression(paste("S"[CHO])),
-    expression(paste("S"[COOH])),
-    expression(paste("C"[COOH])),
-    expression(paste("H"[COOH]))
+    expression(paste(bold("G")[CHOH])),
+    expression(paste(bold("G")[CHOH])),
+    expression(paste(bold("G")[sat - CHOH])),
+    expression(paste(bold("G")[CHO])),
+    expression(paste(bold("G")[CHO])),
+    expression(paste(bold("G")[COOH])),
+    expression(paste(bold("5H")[COOH])),
+    expression(paste(bold("S")[CHOH])),
+    expression(paste(bold("S")[CHO])),
+    expression(paste(bold("S")[CHO])),
+    expression(paste(bold("S")[COOH])),
+    expression(paste(bold("C")[COOH])),
+    expression(paste(bold("H")[COOH]))
   ))) +
   scale_colour_manual(values = c(
     "poly" = "#d73027",
@@ -434,7 +434,7 @@ peak_upset <- ggplot(peak_pres) +
     ),
     axis.ticks = element_blank(),
     axis.title.y = element_blank(),
-    # axis.text.y = element_blank()
+    axis.text.y = element_text(hjust = 0)
   )
 # pdf("peak_upset_plot.pdf", height = 2)
 # peak_upset
@@ -448,8 +448,10 @@ plot_grid(spectra_plot,
   rel_heights = c(1, 0.75),
   label_size = 10,
   label_fontfamily = "Helvetica",
-  label_x = -0.005,
-  label_y = 1.005
+  hjust = 0,
+  vjust = 1,
+  label_x = 0,
+  label_y = 1.00
 )
 dev.off()
 ```
@@ -1606,10 +1608,10 @@ py_rmn_corr <- left_join(py, py_rmn) %>%
     unit = ordered(unit, levels = c("Lignin", "G-R", "G-CHOH", "S-R", "H-R", "R-CHO")),
     units_parsed = factor(unit, labels = c(
       "Lignin",
-      "G[R]",
-      "G[CHOH]",
-      "S[R]",
-      "H[R]",
+      "bold(G)[R]",
+      "bold(G)[CHOH]",
+      "bold(S)[R]",
+      "bold(H)[R]",
       "R[CHO]"
     ))
   )
@@ -1900,7 +1902,7 @@ py_plot_lig <- py_plot("Lignin", "CLB") +
 
 py_plot_sg <- py_plot("S/G", "1334/1276") +
   labs(
-    x = expression(paste("S"[R], " * G"[R]^{
+    x = expression(paste(bold("S")[R], " * ",bold("G")[R]^{
       -1
     })),
     y = expression(paste("1334 cm"^-1, "/ 1276 cm"^-1))
@@ -1910,7 +1912,7 @@ py_plot_sg <- py_plot("S/G", "1334/1276") +
 
 py_plot_cho <- py_plot("GCHO/lig", "1625/lig") +
   labs(
-    x = expression(paste("G"[CHO], " * lignin"^-1)),
+    x = expression(paste(bold("G")[CHO], " * lignin"^-1)),
     y = expression(paste("1625 cm"^-1, "/ CLB"))
   ) +
   scale_y_continuous(breaks = c(0, 0.4, 0.8), labels = c("0", "0.4", "0.8")) +
@@ -2210,9 +2212,9 @@ rel_auc <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
     name = "Total\namount",
     labels = c(
       "Cellulose",
-      expression("G"[CHOH]),
-      expression("G"[R]),
-      expression("S"[R]),
+      expression(bold("G")[CHOH]),
+      expression(bold("G")[R]),
+      expression(bold("S")[R]),
       "Lignin"
     )
   ) +
@@ -2391,9 +2393,9 @@ rel_lig <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
     ),
     name = "Relative\namount",
     labels = c(
-      expression("G"[CHOH]),
-      expression("G"[R]),
-      expression("S"[R])
+      expression(bold("G")[CHOH]),
+      expression(bold("G")[R]),
+      expression(bold("S")[R])
     )
   ) +
   scale_x_continuous(limits = c(-4, 4)) +
@@ -3327,16 +3329,16 @@ supp_spectra <- ggplot(rmn_model_supp) +
   scale_y_discrete(
     expand = expand_scale(mult = c(0.15, 0.1)),
     labels = rev(c(
-      expression(paste("G"[CHOH])),
-      expression(paste("G"[sat - CHOH])),
-      expression(paste("G"[CHO])),
-      expression(paste("G"[COOH])),
-      expression(paste("5H"[COOH])),
-      expression(paste("S"[CHOH])),
-      expression(paste("S"[CHO])),
-      expression(paste("S"[COOH])),
-      expression(paste("C"[COOH])),
-      expression(paste("H"[COOH]))
+      expression(paste(bold("G")[CHOH])),
+      expression(paste(bold("G")[sat - CHOH])),
+      expression(paste(bold("G")[CHO])),
+      expression(paste(bold("G")[COOH])),
+      expression(paste(bold("5H")[COOH])),
+      expression(paste(bold("S")[CHOH])),
+      expression(paste(bold("S")[CHO])),
+      expression(paste(bold("S")[COOH])),
+      expression(paste(bold("C")[COOH])),
+      expression(paste(bold("H")[COOH]))
     ))
   ) +
   labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
@@ -3344,7 +3346,7 @@ supp_spectra <- ggplot(rmn_model_supp) +
   theme(
     # panel.spacing = unit(5, "mm"),
     axis.title.y = element_blank(),
-    # axis.text.y = element_blank(),
+    axis.text.y = element_text(hjust = 0),
     # axis.ticks.y = element_blank(),
     strip.text = element_text(size = 8),
     axis.text.x.top = element_text(
@@ -3625,9 +3627,9 @@ supp_spectra <- ggplot(rmn_models785_corrected) +
   scale_y_discrete(
     expand = expand_scale(mult = c(0.2, 0.1)),
     labels = rev(c(
-      expression(paste("S"[CHOH] ~ DHP)),
-      expression(paste("S"[COOH] ~ DHP)),
-      expression(paste("G"[COOH] ~ DHP))
+      expression(paste(bold("S")[CHOH] ~ DHP)),
+      expression(paste(bold("S")[COOH] ~ DHP)),
+      expression(paste(bold("G")[COOH] ~ DHP))
     ))
   ) +
   labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
@@ -3990,10 +3992,10 @@ py_rmn_corr <- left_join(py, py_rmn) %>%
     unit = ordered(unit, levels = c("Lignin", "G-R", "G-CHOH", "S-R", "H-R", "R-CHO")),
     units_parsed = factor(unit, labels = c(
       "Lignin",
-      "G[R]",
-      "G[CHOH]",
-      "S[R]",
-      "H[R]",
+      "bold(G)[R]",
+      "bold(G)[CHOH]",
+      "bold(S)[R]",
+      "bold(H)[R]",
       "R[CHO]"
     ))
   )
@@ -4282,7 +4284,7 @@ py_plot_lig <- py_plot("Lignin", "CLB") +
 
 py_plot_sg <- py_plot("S/G", "1334/1276") +
   labs(
-    x = expression(paste("S"[R], " * G"[R]^{
+    x = expression(paste(bold("S")[R], " * ",bold("G")[R]^{
       -1
     })),
     y = expression(paste("1334 cm"^-1, "/ 1276 cm"^-1))
@@ -4291,7 +4293,7 @@ py_plot_sg <- py_plot("S/G", "1334/1276") +
 
 py_plot_cho <- py_plot("GCHO/lig", "1625/lig") +
   labs(
-    x = expression(paste("G"[CHO], " * lignin"^-1)),
+    x = expression(paste(bold("G")[CHO], " * lignin"^-1)),
     y = expression(paste("1625 cm"^-1, "/ CLB"))
   ) +
   scale_y_continuous(breaks = c(0, 0.4, 0.8), labels = c("0", "0.4", "0.8")) +
@@ -4470,10 +4472,10 @@ py_rmn_corr <- left_join(py, py_rmn) %>%
     unit = ordered(unit, levels = c("Lignin", "G-R", "G-CHOH", "S-R", "H-R", "R-CHO")),
     units_parsed = factor(unit, labels = c(
       "Lignin",
-      "G[R]",
-      "G[CHOH]",
-      "S[R]",
-      "H[R]",
+      "bold(G)[R]",
+      "bold(G)[CHOH]",
+      "bold(S)[R]",
+      "bold(H)[R]",
       "R[CHO]"
     ))
   )
@@ -4762,7 +4764,7 @@ py_plot_lig <- py_plot("Lignin", "CLB", col = "black") +
 
 py_plot_sg <- py_plot("S/G", "1334/1276") +
   labs(
-    x = expression(paste("S"[R], " * G"[R]^{
+    x = expression(paste(bold("S")[R], " * ", bold("G")[R]^{
       -1
     })),
     y = expression(paste("1334 cm"^-1, "/ 1276 cm"^-1))
@@ -4771,7 +4773,7 @@ py_plot_sg <- py_plot("S/G", "1334/1276") +
 
 py_plot_cho <- py_plot("GCHO/lig", "1625/lig") +
   labs(
-    x = expression(paste("G"[CHO], " * lignin"^-1)),
+    x = expression(paste(bold("G")[CHO], " * lignin"^-1)),
     y = expression(paste("1625 cm"^-1, "/ CLB"))
   ) +
   scale_y_continuous(breaks = c(0, 0.4, 0.8), labels = c("0", "0.4", "0.8")) +
