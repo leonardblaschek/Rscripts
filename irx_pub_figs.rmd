@@ -1125,7 +1125,7 @@ rmn_data_corrected <- rmn_data_corrected %>%
     AUC = MESS::auc(wavenumber, corrected.intensity),
     scaled = corrected.intensity / AUC,
     scaled_lig = corrected.intensity / (
-      corrected.intensity[wavenumber == 1603] + 2 * corrected.intensity[wavenumber == 1334]
+      (corrected.intensity[wavenumber == 1603] / 2) + corrected.intensity[wavenumber == 1334]
     )
   )
 
@@ -1220,7 +1220,7 @@ rmn_adj <- rmn_sum_long %>%
 rmn_adj_letters <- letter_groups(rmn_adj,
   value,
   cell.type,
-  "tukey",
+  "kruskal",
   variable,
   print_position = "below",
   print_adjust = 0.5

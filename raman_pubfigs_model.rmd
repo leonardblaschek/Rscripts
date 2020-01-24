@@ -955,7 +955,7 @@ rmn_data_corrected <- rmn_data_corrected %>%
     AUC_381 = MESS::auc(wavenumber, corrected.intensity, from = 376, to = 398),
     scaled = corrected.intensity / AUC,
     scaled_lig = corrected.intensity / (
-      corrected.intensity[wavenumber == 1603] + 2 * corrected.intensity[wavenumber == 1334]
+      (corrected.intensity[wavenumber == 1603] / 2) + corrected.intensity[wavenumber == 1334]
     ),
     scaled_max = corrected.intensity / corrected.intensity[wavenumber == 1603],
     scaled_cellu = corrected.intensity / corrected.intensity[wavenumber == 381]
@@ -2944,7 +2944,7 @@ py_rmn <- rmn_data_avg %>%
     id_cols = c(genotype, cell.type), names_from = wavenumber,
     values_from = mean.scaled
   ) %>%
-  mutate("CLB" = (`1603` / 4.6) + `1334`) %>%
+  mutate("CLB" = (`1603` / 2) + `1334`) %>%
   group_by(genotype) %>%
   summarise_if(is.numeric, mean) %>%
   select(-genotype) %>%
