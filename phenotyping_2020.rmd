@@ -1,0 +1,105 @@
+---
+title: "Laccase Phenotyping 2020"
+author: "Leonard Blaschek"
+date: "16/01/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(qrencoder)
+library(cowplot)
+library(grid)
+library(gridExtra)
+library(tidyverse)
+
+cm_size <- function(x) x / 2.54
+```
+
+## Experimental plan
+
+This phenotyping experiment will hopefully create the basis for the coming laccase papers.
+
+### Planting & growth
+
+Planting:
+
+* 3 independent growth instances in Jan-Mar, Mar-May and May-Jul
+* 6 plants per genotype per growth instance of the triples, quadruples and quintuple 
+  + of this, 1 plant is to be harvested at 30 cm stem height and ground for RNA and possibly bulk activity
+* 2/3 of soil to 1/3 of vermiculite
+* Pest treatment with Bt-toxin, to avoid the weird phenotypes associated with (excessive) nematode treatment
+
+Growth conditions:
+
+* 23:00-06:00
+  + 18&deg;C
+  + 50% humidity 
+  + 0 µmol m^-2^ s^-1^ irradiance
+* 06:00-07:00
+  + 20&deg;C
+  + 50% humidity 
+  + 60 µmol m^-2^ s^-1^ irradiance
+* 07:00-22:00
+  + 22&deg;C
+  + 50% humidity 
+  + 100 µmol m^-2^ s^-1^ irradiance
+* 22:00-23:00
+  + 20&deg;C
+  + 50% humidity 
+  + 60 µmol m^-2^ s^-1^ irradiance
+  
+
+  
+### Phenotyping
+
+Singling out should be done ~1 day after germination. After that, the trays will be imaged every day from the top. Colour card central on the right side, tray QR-code on the top right side.
+
+Camera settings (prel.):
+
+* 35 mm objective
+* 1/60 s exposure time
+* f16 aperture
+* 12800 ISO sensitivity
+
+After bolting, plants should be imaged every day from the side. Colour card on the right side, level with the pot. QR-code taped to the pot. Blue plastic stick for support (ordered today). I might do images from 2 sides, with two QR-codes specifying the angle.
+
+Camera settings (prel.):
+
+* 35 mm objective
+* 1/60 s exposure time
+* f16 aperture
+* 12800 ISO sensitivity
+
+
+## QR-code generation
+
+```{r cars}
+
+genotypes <- c("WT", 
+               "lac4x5x10x12x17", 
+               "lac5x10x12x17",
+               "lac4x10x12x17",
+               "lac4x5x12x17",
+               "lac4x5x10x17",
+               "lac4x5x10x12")
+replicates <- c(1:5)
+
+plants <- expand_grid("genotype" = genotypes, "replicate" = replicates) %>%
+  unite("plant", genotype, replicate)
+
+qrc <- function(plant) {
+png(paste0("qr_codes/", plant, ".png"), height = 900, width = 900, units = "px")
+par(mar=c(0,0,0,0))
+plot1 <- image(qrencode_raster(plant), 
+      asp=1, col=c("white", "black"), axes=FALSE, 
+      xlab="", ylab="",
+      xlim = c(0, 1), ylim = c(0, 1.1))
+text(plant, x = 0.5, y = 1.05, cex = 4)
+dev.off()
+}
+
+apply(plants, 1, qrc)
+  
+```
+
