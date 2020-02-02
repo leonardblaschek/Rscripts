@@ -1763,7 +1763,7 @@ dev.off()
 
 pop_irx <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Poplar/poplar_irx.csv")
 
-#### create reference at the heigth of the cambium for distance calculation ####
+#### create reference at the heigth of the cambium for distance calculation 
 pop_irx_ref <- pop_irx %>%
   filter(object == "ref") %>%
   select(c(
@@ -1779,7 +1779,7 @@ pop_irx_ref$ref.y2 <- pop_irx_ref$Y
 pop_irx_ref$ref.x1 <- pop_irx_ref$X - (pop_irx_ref$Length / 2)
 pop_irx_ref$ref.x2 <- pop_irx_ref$X + (pop_irx_ref$Length / 2)
 
-#### merge reference into data frame ####
+#### merge reference into data frame 
 pop_irx <- pop_irx %>%
   filter(object != "ref") %>%
   full_join(select(pop_irx_ref, -X, -Y, -Length),
@@ -1787,7 +1787,7 @@ pop_irx <- pop_irx %>%
   ) %>%
   mutate(genotype = ordered(genotype, levels = c("WT", "c4h", "ccr1")))
 
-#### calculate difference of the centre of each vessel to the cambium ####
+#### calculate difference of the centre of each vessel to the cambium 
 pop_irx$Distance <-
   apply(
     pop_irx[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
@@ -1820,19 +1820,23 @@ pop_irx <- pop_irx %>%
     genotype = recode(genotype,
                       "c4h" = "C4H-RNAi",
                       "ccr1" = "CCR1-RNAi")
-  )
+  ) %>%
+  group_by(genotype, replicate) %>%
+  mutate(rel.dist = Distance / max(Distance)) %>%
+  filter(genotype != "CCR1-RNAi")
 
-pop_dist <- ggplot(pop_irx, aes(x = Distance, y = Mean)) +
+pop_dist <- ggplot(pop_irx, aes(x = rel.dist, y = Mean)) +
   geom_point(aes(fill = type),
              shape = 21,
              size = 2,
              alpha = 0.75,
              stroke = 0.2
   ) +
-  scale_fill_manual(values = pal_flame_disc[c(2,3)], name = "Vessel type") +
+  scale_fill_manual(values = pal_flame_disc[c(2,3)], name = "TE type") +
   theme_leo() +
-  labs(x = "Distance from cambium [µm]",
-       y = "Coniferaldehyde in vessels") +
+  labs(x = "Distance from cambium",
+       y = "Coniferaldehyde in TEs") +
+  scale_x_continuous(breaks = c(0,1), labels = c("Cambium", "Pith")) +
   geom_smooth(
     method = "lm",
     span = 1,
@@ -1841,7 +1845,7 @@ pop_dist <- ggplot(pop_irx, aes(x = Distance, y = Mean)) +
     linetype = 2
   ) +
     theme(axis.ticks = element_blank(),
-          legend.position = c(0.9, 0.9)) +
+          legend.position = "top") +
   facet_wrap(~ genotype, nrow = 3)
 
 pdf("pop_dist_pres.pdf", width = 6, height = 3)
