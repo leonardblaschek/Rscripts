@@ -74,7 +74,7 @@ ggplot(py, aes(x = genotype, y = mean, ymin = mean - st_dev, ymax = mean + st_de
       expression(italic("cad4")),
       expression(italic("cad5")),
       expression(paste(italic("cad4"), "x", italic("cad5"))),
-      expression(paste(italic("Aspen"), " WT")),
+      expression(paste(italic("Poplar"), " WT")),
       expression(paste(italic("Spruce"), " WT"))
     )
   ) +
