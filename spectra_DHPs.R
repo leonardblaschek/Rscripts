@@ -277,6 +277,8 @@ spectra$smooth <-
     partial = TRUE
   )
 
+write.csv(spectra, "DHP_spectra.csv")
+
 #### Colour Calculations ####
 data(illuminants)
 

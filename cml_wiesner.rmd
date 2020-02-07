@@ -129,6 +129,8 @@ cml_data <- read_csv(
     # absorbance.scaled = scale_range(absorbance)
   )
 
+write_csv(cml_data, "line_profiles.csv")
+
 cml_data_avg <- cml_data %>%
   ungroup() %>%
   group_by(genotype) %>%

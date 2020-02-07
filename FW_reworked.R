@@ -20,6 +20,8 @@ fw_data <- read_csv("/home/leonard/Documents/Uni/Phloroglucinol/foodweb.csv") %>
     adj.cell.type = recode(adj.cell.type, "V" = "MX"),
     od = ODx255 / 255 # Pixel values of the measured image were multiplied by 255 for better visualisation
   )
+
+write_csv(fw_data, "cooperativity_At.csv")
  
 #average by individual plant
 fw_avg <- fw_data %>%

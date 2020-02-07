@@ -62,6 +62,8 @@ staining$cell.type <-
 #### calculate correct hue value ####
 staining$hue <- ((staining$H + 128) / 255) * 360
 
+write.csv(staining, "timeline_stain.csv")
+
 
 #### subtract background ####
 staining$point <- NA
@@ -129,7 +131,7 @@ fading <-
   read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/fading_WT.csv")
 
 
-#### slices are in 15 s intervals, starting at 0 ####
+#### time is coded as 0(0h), 15(12h), 30(24h), and 45(24h + restaining) (sorry) ####
 fading$time <- (fading$slice * 15) - 15
 fading$OD <- ifelse(fading$OD > 1 , NA, fading$OD)
 fading$time <- as.factor(as.character(fading$time))
@@ -158,6 +160,8 @@ fading[301:350 + rep(seq(0, (nrow(fading) - 50), by = 350), each = 50), 2] <-
   "PH"
 
 fading$hue <- ((fading$H + 128) / 255) * 360
+
+write.csv(fading, "timeline_fade.csv")
 
 fading$cell.type <- ordered(fading$cell.type)
 
@@ -211,6 +215,7 @@ timeline_fade$thickness <- revalue(timeline_fade$thickness, c(
   "100" = "100 µm",
   "150" = "150 µm")
 )
+
 
 #### manipulate values for correct placement on the continuous scale ####
 timeline_fade$time <- revalue(timeline_fade$time, c(

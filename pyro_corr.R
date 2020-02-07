@@ -131,6 +131,8 @@ py$Lignin <-
   ifelse(py$variable == "mean", rowSums(py[, 3:28]), sqrt(rowSums(py[, 3:28] ^
                                                                     2)))
 
+write_csv(py, "pyrolysis_At.csv")
+
 py.melt <-
   melt(
     subset(py, select = c(1, 2, 29:34)),

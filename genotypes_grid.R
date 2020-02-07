@@ -103,6 +103,8 @@ phlog.monol$hue <- ((phlog.monol$h.stained + 128) / 255 * 360)
 phlog.monol$replicate <-
   as.factor(as.character(phlog.monol$replicate))
 
+write.csv(phlog.monol, "cell_types_At.csv")
+
 
 #### calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. for the unlignified phloem ####
 phlog.monol$diff <-
