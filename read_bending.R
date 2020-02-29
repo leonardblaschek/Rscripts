@@ -1,14 +1,6 @@
 library(tidyverse)
 
-# bending <- read_delim("/home/leonard/Documents/Uni/PhD/IRX/Bending/raw/WT A 26cm.txt",
-#                       delim = ";",
-#                       skip = grep("Raw Data", readLines("/home/leonard/Documents/Uni/PhD/IRX/Bending/raw/WT A 26cm.txt")),
-#                       col_types = "cccccc",
-#                       col_names = FALSE) %>%
-#   fill(X1) %>%
-#   filter(X2 != "Time" & X2 != "(s)")
-
-
+#### fah1 ####
 bending_files <-
   list.files(
     path = "/home/leonard/Documents/Uni/PhD/IRX/Bending/raw/",
@@ -66,8 +58,60 @@ bending_data <- bending_data %>%
          replicate = str_remove(replicate, "\\d\\dcm"),
          replicate = str_remove(replicate, " "),
          replicate = as.factor(replicate),
-         genotype = ordered(recode(genotype, "Fah1" = "fah1"), levels = c("WT", "fah1"))) %>%
+         section = as.factor(section),
+         genotype = ordered(recode(genotype, "Fah1" = "fah1"), levels = c("WT", "fah1", "cad4xcad5", "4cl1x4cl2x4cl3"))) %>%
   mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
+
+#### cad4xcad5 ####
+bending_files <-
+  list.files(
+    path = "/home/leonard/Documents/Uni/PhD/IRX/Bending/cad_raw/",
+    pattern = "*.txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_delim(flnm,
+             delim = ";",
+             skip = grep("Raw Data", readLines(flnm)),
+             col_types = "ccccc",
+             col_names = FALSE
+  ) %>%
+    # fill(X1) %>%
+    filter(X1 != "Time" & X1 != "(s)") %>%
+    mutate(
+      filename = basename(flnm),
+      filename = str_remove(filename, ".txt"),
+      genotype = "cad4xcad5"
+    ) %>%
+    rename(
+      "time" = X1,
+      "displacement" = X2,
+      "force" = X3,
+      "strain" = X4,
+      "stress" = X5
+    ) %>%
+    separate(filename, into = c("section", "replicate"), sep = "_")
+}
+
+bending_data_cad <- lapply(bending_files, read_plus) %>%
+  bind_rows() %>%
+  mutate(replicate = as.factor(replicate),
+         section = as.factor(section),
+         genotype = factor(genotype, levels = c("WT", "fah1", "cad4xcad5", "4cl1x4cl2x4cl3"))) %>%
+  mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
+
+#### 4cl1x2x3 ###
+
+bending_4cl <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/bending_curve.csv") %>%
+  mutate(genotype = ordered(genotype, levels = c("WT", "fah1", "cad4xcad5", "4cl1x4cl2x4cl3")),
+         replicate = as.factor(replicate),
+         section = factor("base"))
+
+#### figures ####
+bending_data_complete <- bind_rows(bending_data, bending_data_cad) %>%
+  bind_rows(bending_4cl)
 
 bending_pre <- bending_data %>%
   group_by(genotype, replicate, section) %>%
@@ -82,7 +126,7 @@ dev.off()
 
 
 curves <- ggplot(
-  data = bending_data,
+  data = bending_data_complete,
   aes(x = strain, y = stress)
 ) +
   # geom_vline(xintercept = 0.65,
@@ -96,21 +140,21 @@ curves <- ggplot(
   #          y = 8.5,
   #          hjust = 0,
   #          vjust = 0) +
-  geom_line(aes(group = interaction(genotype, replicate, section)),
-            size = 0.2,
-            alpha = 0.15
-  ) +
+geom_line(aes(group = interaction(genotype, replicate, section)),
+          size = 0.2,
+          alpha = 0.15
+) +
   geom_smooth(aes(colour = genotype),
               size = 0.4
   ) +
-  scale_color_manual(values = pal_ostwald_disc[c(1, 3)]) +
+  # scale_color_manual(values = pal_ostwald_disc) +
   theme_leo() +
   xlim(0, 3) +
   labs(
     x = "Flexural strain [%]",
     y = "Flexural stress [MPa]"
   ) +
-  facet_wrap(~genotype, nrow = 2)
+  facet_wrap(~genotype, nrow = 1)
 
 pdf("bending_curves_fah.pdf", width = onecol / 2, height = onecol / 2)
 curves

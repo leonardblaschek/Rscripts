@@ -113,10 +113,10 @@ scale_max <- function(x) {
 #   x / max(x[wavenumber > 1590 & wavenumber < 1610])
 # }
 
-# Physiologia dimensions
-twocol <- 16.6 / 2.54
-onehalfcol <- 12.5 / 2.54
-onecol <- 8 / 2.54
+# ACS dimensions
+twocol <- 7
+onehalfcol <- 5
+onecol <- 3.33
 ggtext_size <- 8 / (14 / 5)
 ```
 
@@ -231,106 +231,15 @@ rmn_models <- rmn_models %>%
       ))
   ), gamma = ordered(gamma, levels = rev(c("oh", "cho", "cooh"))))
 
+```
 
-spectra_plot <- ggplot(filter(rmn_models, unit %in% c("G", "S"))) +
-  geom_text_repel(
-    data = tibble(
-      wavenumber = rep(c(1656, 1620, 1600, 1334, 1276), 2),
-      unit = rep(c("G", "S"), each = 5, len = 10),
-      gamma = rep("COOH", 10),
-      scaled = rep(1, 10)
-    ),
-    aes(
-      label = wavenumber,
-      x = wavenumber,
-      y = scaled
-    ),
-    angle = 90,
-    hjust = 0.5,
-    direction = "x",
-    min.segment.length = 0,
-    segment.size = 0.4,
-    nudge_y = -0.25,
-    segment.colour = "grey85",
-    family = "Helvetica",
-    size = ggtext_size
-  ) +
-  annotate("segment",
-    x = c(1656, 1620, 1600, 1334, 1276),
-    xend = c(1656, 1620, 1600, 1334, 1276),
-    y = 1,
-    yend = Inf,
-    colour = "grey85",
-    size = 0.4
-  ) +
-  geom_ridgeline(aes(
-    x = wavenumber,
-    y = gamma,
-    height = rollmean(scaled, 3, na.pad = TRUE),
-    # fill = state,
-    colour = state,
-  ),
-  alpha = 0.5,
-  size = 0.2,
-  # colour = NA,
-  fill = NA,
-  scale = 2.5,
-  min_height = -0.05
-  ) +
-  geom_ridgeline(
-    data = tibble(
-      wavenumber = rep(300:1700, 3),
-      gamma = rep(c("cooh", "oh", "cooh"), each = 1401),
-      unit = rep(c("G", "S", "S"), each = 1401),
-      state = "poly",
-      scaled = 0
-    ),
-    aes(
-      x = wavenumber,
-      y = gamma,
-      height = rollmean(scaled, 3, na.pad = TRUE),
-      # fill = state,
-      colour = state
-    ),
-    alpha = 0.5,
-    size = 0.2,
-    # colour = NA,
-    fill = NA,
-    linetype = 2,
-    scale = 2.5,
-    min_height = -0.002
-  ) +
-  scale_fill_manual(values = c("poly" = "#d73027", "mono" = "#4575b4")) +
-  scale_colour_manual(values = c("poly" = "#d73027", "mono" = "#4575b4")) +
-  scale_x_reverse(
-    limits = c(1700, 300),
-    # sec.axis = sec_axis(~., breaks = unique(peak_pres$peak))
-  ) +
-  scale_y_discrete(
-    labels = c(
-      expression("R"[COOH]),
-      expression("R"[CHO]),
-      expression("R"[CHOH])
-    )
-  ) +
-  labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
-  theme_leo() +
-  theme(
-    # panel.spacing = unit(5, "mm"),
-    axis.title.y = element_blank(),
-    strip.text = element_text(size = 8),
-    axis.text.x.top = element_text(
-      angle = 90,
-      vjust = 0.5,
-      hjust = 1
-    ),
-  ) +
-  facet_wrap(~unit, ncol = 2)
+#### Plot figure 1
 
-
+```{r model compounds plot, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
 #### Upset plot ####
 peak_pres <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/synth_peak_presence.csv") %>%
   complete(peak, compound, fill = list(present = "no")) %>%
+  filter(peak > 1000) %>%
   separate(compound, into = c("state", "unit", "gamma"), sep = "-", remove = FALSE) %>%
   mutate(
     compound = ordered(compound,
@@ -342,11 +251,11 @@ peak_pres <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/synth_peak_presence
           "poly-g-cho",
           "mono-g-cho",
           "mono-g-cooh",
-          "mono-5h-cooh",
           "mono-s-oh",
           "poly-s-cho",
           "mono-s-cho",
           "mono-s-cooh",
+          "mono-5h-cooh",
           "mono-c-cooh",
           "mono-h-cooh"
         ))
@@ -358,38 +267,46 @@ peak_pres <- read_csv("/home/leonard/Documents/Uni/PhD/Raman/synth_peak_presence
     gamma = ordered(gamma, levels = rev(c("oh", "cho", "cooh")))
   )
 
-peak_pres_max <- peak_pres %>%
-  group_by(peak) %>%
-  summarise(
-    max = max(compound[present == "yes"]),
-    min = min(compound[present == "yes"])
-  )
+# peak_pres_max <- peak_pres %>%
+#   group_by(peak) %>%
+#   summarise(
+#     max = max(compound[present == "yes"]),
+#     min = min(compound[present == "yes"])
+#   )
 
 peak_upset <- ggplot(peak_pres) +
+  # geom_point(
+  #   data = filter(peak_pres, present == "no"),
+  #   aes(
+  #     x = reorder(peak, -as.numeric(peak)),
+  #     y = compound,
+  #     colour = state,
+  #     alpha = present,
+  #     size = present
+  #   ),
+  #   shape = 20
+  # ) +
+  geom_segment(aes(
+    y = Inf,
+    yend = -Inf,
+    x = reorder(peak, -as.numeric(peak)),
+    xend = reorder(peak, -as.numeric(peak))
+  ),
+  size = 0.2,
+  colour = "grey85") +
+  # geom_segment(
+  #   data = peak_pres_max,
+  #   aes(
+  #     group = peak,
+  #     y = min,
+  #     yend = max,
+  #     x = reorder(peak, -as.numeric(peak)),
+  #     xend = reorder(peak, -as.numeric(peak))
+  #   ),
+  #   size = 0.2
+  # ) +
   geom_point(
-    data = filter(peak_pres, present == "no"),
-    aes(
-      x = reorder(peak, -as.numeric(peak)),
-      y = compound,
-      colour = state,
-      alpha = present,
-      size = present
-    ),
-    shape = 20
-  ) +
-  geom_segment(
-    data = peak_pres_max,
-    aes(
-      group = peak,
-      y = min,
-      yend = max,
-      x = reorder(peak, -as.numeric(peak)),
-      xend = reorder(peak, -as.numeric(peak))
-    ),
-    size = 0.2
-  ) +
-  geom_point(
-    data = filter(peak_pres, present == "yes"),
+    data = peak_pres,
     aes(
       x = reorder(peak, -as.numeric(peak)),
       y = compound,
@@ -407,11 +324,11 @@ peak_upset <- ggplot(peak_pres) +
     expression(paste(bold("G")[CHO])),
     expression(paste(bold("G")[CHO])),
     expression(paste(bold("G")[COOH])),
-    expression(paste(bold("5H")[COOH])),
     expression(paste(bold("S")[CHOH])),
     expression(paste(bold("S")[CHO])),
     expression(paste(bold("S")[CHO])),
     expression(paste(bold("S")[COOH])),
+    expression(paste(bold("5H")[COOH])),
     expression(paste(bold("C")[COOH])),
     expression(paste(bold("H")[COOH]))
   ))) +
@@ -440,7 +357,103 @@ peak_upset <- ggplot(peak_pres) +
 # peak_upset
 # dev.off()
 
-pdf("Raman_figure1.pdf", width = twocol, height = 5)
+spectra_plot <- ggplot(filter(rmn_models, unit %in% c("G", "S"))) +
+  # geom_text_repel(
+  #   data = tibble(
+  #     wavenumber = rep(c(1656, 1620, 1600, 1334, 1276), 2),
+  #     unit = rep(c("G", "S"), each = 5, len = 10),
+  #     gamma = rep("COOH", 10),
+  #     # filename = rep("mono-g-oh", 10),
+  #     scaled = rep(1, 10)
+  #   ),
+  #   aes(
+  #     label = wavenumber,
+  #     x = wavenumber,
+  #     y = scaled
+  #   ),
+  #   angle = 90,
+  #   hjust = 0.5,
+  #   direction = "x",
+  #   min.segment.length = 0,
+  #   segment.size = 0.4,
+  #   nudge_y = -0.25,
+  #   segment.colour = "grey85",
+  #   family = "Helvetica",
+  #   size = ggtext_size
+  # ) +
+  annotate("segment",
+    x = peak_pres$peak,
+    xend = peak_pres$peak,
+    y = 1,
+    yend = Inf,
+    colour = "grey85",
+    size = 0.2
+  ) +
+  geom_ridgeline(aes(
+    x = wavenumber,
+    y = interaction(gamma, unit),
+    height = scaled,
+    fill = state,
+    colour = state,
+  ),
+  alpha = 0.5,
+  size = 0.2,
+  # colour = NA,
+  # fill = NA,
+  scale = 2.5,
+  min_height = -0.05
+  ) +
+  geom_ridgeline(
+    data = tibble(
+      wavenumber = rep(300:1700, 3),
+      gamma = rep(c("cooh", "oh", "cooh"), each = 1401),
+      unit = rep(c("G", "S", "S"), each = 1401),
+      state = "poly",
+      scaled = 0
+    ),
+    aes(
+      x = wavenumber,
+      y = interaction(gamma, unit),
+      height = rollmean(scaled, 3, na.pad = TRUE),
+      # fill = state,
+      colour = state
+    ),
+    alpha = 0.5,
+    size = 0.2,
+    # colour = NA,
+    fill = NA,
+    linetype = 2,
+    scale = 2.5,
+    min_height = -0.002
+  ) +
+  scale_fill_manual(values = c("poly" = "#d73027", "mono" = "#4575b4")) +
+  scale_colour_manual(values = c("poly" = "#d73027", "mono" = "#4575b4")) +
+  scale_x_reverse(
+    limits = c(1700, 1000),
+    # sec.axis = sec_axis(~., breaks = unique(peak_pres$peak))
+  ) +
+  scale_y_discrete(
+    labels = c(
+      expression(paste(bold("G")[COOH])),
+      expression(paste(bold("G")[CHO])),
+      expression(paste(bold("G")[CHOH])),
+      expression(paste(bold("S")[COOH])),
+      expression(paste(bold("S")[CHO])),
+      expression(paste(bold("S")[CHOH]))
+    )
+  ) +
+  labs(x = expression(paste("Wavenumber [cm"^-1, "]"))) +
+  theme_leo() +
+  theme(
+    # panel.spacing = unit(5, "mm"),
+    axis.title.y = element_blank(),
+    axis.text.y = element_text(hjust = 0),
+    strip.text = element_text(size = 8),
+    panel.border = element_blank(),
+    axis.ticks = element_blank()
+  ) 
+
+pdf("Raman_figure1.pdf", width = twocol, height = 6)
 plot_grid(spectra_plot,
   peak_upset,
   labels = c("A", "B"),
@@ -766,156 +779,135 @@ dev.off()
 ```{r load and correct mutant spectra, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
 #### import and tidy Raman data ####
-rmn_files <-
-  list.files(
-    path = "/home/leonard/Documents/Uni/PhD/IRX/RAMAN/nuoendagula/",
-    pattern = "*.txt",
-    recursive = TRUE,
-    full.names = TRUE
-  )
-
-read_plus <- function(flnm) {
-  read_tsv(flnm,
-    comment = "#",
-    col_names = FALSE,
-    skip = 25,
-    cols_only(
-      X1 = col_number(),
-      X2 = col_number()
-    )
-  ) %>%
-    mutate(
-      filename = flnm,
-      exp_time = readLines(flnm) %>%
-        str_split("\t") %>%
-        grep("Exposure Time: .* s", ., value = T) %>%
-        str_remove_all("#Exposure Time: | s") %>%
-        as.numeric(),
-      pwr = readLines(flnm) %>%
-        str_split("\t") %>%
-        grep("Excitation Power: .* mW", ., value = T) %>%
-        str_remove_all("#Excitation Power: | mW") %>%
-        as.numeric(),
-      nd_fltr = 1 - (readLines(flnm) %>%
-        str_split("\t") %>%
-        grep("% \\([0-9]{3}/255\\)", ., value = T) %>%
-        str_remove_all("#ND Filter : | % \\([0-9]{3}/255\\)") %>%
-        as.numeric() / 100)
-    )
-}
-
-rmn_data <- lapply(rmn_files, read_plus) %>%
-  bind_rows()
-
+# rmn_files <-
+#   list.files(
+#     path = "/home/leonard/Documents/Uni/PhD/IRX/RAMAN/nuoendagula/",
+#     pattern = "*.txt",
+#     recursive = TRUE,
+#     full.names = TRUE
+#   )
+# 
+# read_plus <- function(flnm) {
+#   read_tsv(flnm,
+#     comment = "#",
+#     col_names = FALSE,
+#     skip = 25,
+#     cols_only(
+#       X1 = col_number(),
+#       X2 = col_number()
+#     )
+#   ) %>%
+#     mutate(
+#       filename = flnm,
+#       exp_time = readLines(flnm) %>%
+#         str_split("\t") %>%
+#         grep("Exposure Time: .* s", ., value = T) %>%
+#         str_remove_all("#Exposure Time: | s") %>%
+#         as.numeric(),
+#       pwr = readLines(flnm) %>%
+#         str_split("\t") %>%
+#         grep("Excitation Power: .* mW", ., value = T) %>%
+#         str_remove_all("#Excitation Power: | mW") %>%
+#         as.numeric(),
+#       nd_fltr = 1 - (readLines(flnm) %>%
+#         str_split("\t") %>%
+#         grep("% \\([0-9]{3}/255\\)", ., value = T) %>%
+#         str_remove_all("#ND Filter : | % \\([0-9]{3}/255\\)") %>%
+#         as.numeric() / 100)
+#     )
+# }
+# 
+# rmn_data <- lapply(rmn_files, read_plus) %>%
+#   bind_rows()
+# 
+# # rmn_data <- rmn_data %>%
+# #   select(c(1:3))
+# 
+# rmn_data$filename <- basename(rmn_data$filename)
+# 
+# rmn_data$filename <-
+#   str_replace(rmn_data$filename, fixed("fah 1"), "fah1")
+# 
 # rmn_data <- rmn_data %>%
-#   select(c(1:3))
-
-rmn_data$filename <- basename(rmn_data$filename)
-
-rmn_data$filename <-
-  str_replace(rmn_data$filename, fixed("fah 1"), "fah1")
-
-rmn_data <- rmn_data %>%
-  distinct(X1, filename, .keep_all = TRUE) %>%
-  separate(
-    filename,
-    into = c("genotype", "replicate", "cell.type", "technical"),
-    sep = "\\s*#|-|\\s",
-    extra = "merge"
-  ) %>%
-  rename("wavenumber" = X1, "intensity" = X2) %>%
-  mutate(
-    genotype = recode(
-      genotype,
-      "4cl1＆2" = "4cl1x4cl2",
-      "cad4＆5" = "cad4xcad5",
-      "ccoaomt" = "ccoaomt1",
-      "ccr1" = "ccr1-3",
-      "col.o" = "Col-0",
-      "Col.0" = "Col-0",
-      "ccr1＆fah1" = "ccr1xfah1"
-    ),
-    cell.type = recode(cell.type,
-      "px" = "PX",
-      "SX" = "SMX",
-      "MX" = "PMX"
-    ),
-    replicate = str_extract(
-      replicate,
-      "\\d"
-    ),
-    technical = str_extract(
-      technical,
-      "(\\d)+"
-    ),
-    wavenumber = round(wavenumber, digits = 0)
-  ) %>%
-  filter(cell.type != "？？") %>%
-  group_by(genotype, cell.type, replicate, technical) %>%
-  mutate(intensity = intensity / (exp_time * pwr * nd_fltr)) %>%
-  select(-exp_time, -pwr, -nd_fltr)
-
-#### baseline correct Raman data ####
-rmn_data_wide <- rmn_data %>%
-  group_by(genotype, cell.type, replicate, technical) %>%
-  mutate(group_id = row_number()) %>%
-  spread(wavenumber, intensity) %>%
-  select(-group_id) %>%
-  summarise_all(funs(sum(., na.rm = TRUE)))
-
-rmn_data_mat <- as.matrix(rmn_data_wide[, -c(1:4)])
-rownames(rmn_data_mat) <- paste(rmn_data_wide$genotype,
-  rmn_data_wide$cell.type,
-  rmn_data_wide$replicate,
-  rmn_data_wide$technical,
-  sep = "_"
-)
-
-rmn_data_correction <- baseline.als(rmn_data_mat,
-  lambda = 5,
-  p = 0.01,
-  maxit = 100
-)
-rmn_data_corrected <- as_tibble(rmn_data_correction$corrected, rownames = NA)
-
-rmn_data_corrected <- rmn_data_corrected %>%
-  rownames_to_column() %>%
-  separate(rowname, sep = "_", into = c("genotype", "cell.type", "replicate", "technical"), remove = TRUE) %>%
-  gather(key = "wavenumber", value = "corrected.intensity", -c(genotype, cell.type, replicate, technical)) %>%
-  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X."), replacement = "-")) %>%
-  mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X"), replacement = "")) %>%
-  mutate(wavenumber = as.numeric(wavenumber)) %>%
-  group_by(genotype, cell.type, replicate, technical) %>%
-  inner_join(., rmn_data, by = c("genotype", "cell.type", "replicate", "technical", "wavenumber")) %>%
-  ungroup() %>%
-  filter(genotype != "ccr1xfah1" &
-    wavenumber %in% c(300:1700) &
-    cell.type %in% c("IF", "PMX")) %>%
-  anti_join(tibble(genotype = "cad4xcad5",
-                   cell.type = "PMX",
-                   replicate = "4",
-                   technical = "2")) %>%
-  mutate(
-    genotype = ordered(genotype,
-      levels = c(
-        "Col-0",
-        "4cl1",
-        "4cl2",
-        "4cl1x4cl2",
-        "ccoaomt1",
-        "fah1",
-        "omt1",
-        "ccr1-3",
-        "cad4",
-        "cad5",
-        "cad4xcad5"
-      )
-    ),
-    cell.type = recode(cell.type, "PMX" = "VB")
-  )
-
-# write_csv(rmn_data_corrected, "rmn_data_corrected.csv")
-# rmn_data_corrected <- read_csv("rmn_data_corrected.csv", col_types = "ccccnnn") %>%
+#   distinct(X1, filename, .keep_all = TRUE) %>%
+#   separate(
+#     filename,
+#     into = c("genotype", "replicate", "cell.type", "technical"),
+#     sep = "\\s*#|-|\\s",
+#     extra = "merge"
+#   ) %>%
+#   rename("wavenumber" = X1, "intensity" = X2) %>%
+#   mutate(
+#     genotype = recode(
+#       genotype,
+#       "4cl1＆2" = "4cl1x4cl2",
+#       "cad4＆5" = "cad4xcad5",
+#       "ccoaomt" = "ccoaomt1",
+#       "ccr1" = "ccr1-3",
+#       "col.o" = "Col-0",
+#       "Col.0" = "Col-0",
+#       "ccr1＆fah1" = "ccr1xfah1"
+#     ),
+#     cell.type = recode(cell.type,
+#       "px" = "PX",
+#       "SX" = "SMX",
+#       "MX" = "PMX"
+#     ),
+#     replicate = str_extract(
+#       replicate,
+#       "\\d"
+#     ),
+#     technical = str_extract(
+#       technical,
+#       "(\\d)+"
+#     ),
+#     wavenumber = round(wavenumber, digits = 0)
+#   ) %>%
+#   filter(cell.type != "？？") %>%
+#   group_by(genotype, cell.type, replicate, technical) %>%
+#   mutate(intensity = intensity / (exp_time * pwr * nd_fltr)) %>%
+#   select(-exp_time, -pwr, -nd_fltr)
+# 
+# #### baseline correct Raman data ####
+# rmn_data_wide <- rmn_data %>%
+#   group_by(genotype, cell.type, replicate, technical) %>%
+#   mutate(group_id = row_number()) %>%
+#   spread(wavenumber, intensity) %>%
+#   select(-group_id) %>%
+#   summarise_all(funs(sum(., na.rm = TRUE)))
+# 
+# rmn_data_mat <- as.matrix(rmn_data_wide[, -c(1:4)])
+# rownames(rmn_data_mat) <- paste(rmn_data_wide$genotype,
+#   rmn_data_wide$cell.type,
+#   rmn_data_wide$replicate,
+#   rmn_data_wide$technical,
+#   sep = "_"
+# )
+# 
+# rmn_data_correction <- baseline.als(rmn_data_mat,
+#   lambda = 5,
+#   p = 0.01,
+#   maxit = 100
+# )
+# rmn_data_corrected <- as_tibble(rmn_data_correction$corrected, rownames = NA)
+# 
+# rmn_data_corrected <- rmn_data_corrected %>%
+#   rownames_to_column() %>%
+#   separate(rowname, sep = "_", into = c("genotype", "cell.type", "replicate", "technical"), remove = TRUE) %>%
+#   gather(key = "wavenumber", value = "corrected.intensity", -c(genotype, cell.type, replicate, technical)) %>%
+#   mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X."), replacement = "-")) %>%
+#   mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X"), replacement = "")) %>%
+#   mutate(wavenumber = as.numeric(wavenumber)) %>%
+#   group_by(genotype, cell.type, replicate, technical) %>%
+#   inner_join(., rmn_data, by = c("genotype", "cell.type", "replicate", "technical", "wavenumber")) %>%
+#   ungroup() %>%
+#   filter(genotype != "ccr1xfah1" &
+#     wavenumber %in% c(300:1700) &
+#     cell.type %in% c("IF", "PMX")) %>%
+#   anti_join(tibble(genotype = "cad4xcad5",
+#                    cell.type = "PMX",
+#                    replicate = "4",
+#                    technical = "2")) %>%
 #   mutate(
 #     genotype = ordered(genotype,
 #       levels = c(
@@ -931,8 +923,29 @@ rmn_data_corrected <- rmn_data_corrected %>%
 #         "cad5",
 #         "cad4xcad5"
 #       )
-#     )
+#     ),
+#     cell.type = recode(cell.type, "PMX" = "VB")
 #   )
+
+# write_csv(rmn_data_corrected, "rmn_data_corrected.csv")
+rmn_data_corrected <- read_csv("rmn_data_corrected.csv", col_types = "ccccnnn") %>%
+  mutate(
+    genotype = ordered(genotype,
+      levels = c(
+        "Col-0",
+        "4cl1",
+        "4cl2",
+        "4cl1x4cl2",
+        "ccoaomt1",
+        "fah1",
+        "omt1",
+        "ccr1-3",
+        "cad4",
+        "cad5",
+        "cad4xcad5"
+      )
+    )
+  )
 
 # lig_peak <- rmn_data_corrected %>%
 #   group_by(genotype, cell.type, replicate, technical) %>%
@@ -1020,7 +1033,7 @@ spectra <- function(x) {
     geom_ridgeline(aes(
       x = wavenumber,
       y = genotype,
-      height = rollmean(mean.scaled, 3, na.pad = TRUE),
+      height = mean.scaled,
       fill = genotype,
       group = genotype
     ),
@@ -1092,7 +1105,7 @@ auc_boxes <- function(x) {
     genotype,
     "tukey",
     print_position = "above",
-    print_adjust = 2
+    print_adjust = 1.5
   )
 
   ggplot(data = filter(rmn_data_auc, cell.type == x), aes(x = genotype, y = AUC / 10000)) +
@@ -1126,7 +1139,8 @@ auc_boxes <- function(x) {
       data = mutant_ridge_letters,
       aes(label = groups),
       family = "Helvetica",
-      size = ggtext_size
+      size = ggtext_size,
+      hjust = 0
     ) +
     coord_flip() +
     facet_wrap(~cell.type)
@@ -1241,7 +1255,7 @@ right <- plot_grid(
   auc_boxes("IF"),
   spectra_VB,
   auc_boxes("VB"),
-  rel_widths = c(0.75, 0.2, 0.8, 0.2),
+  rel_widths = c(1, 0.2, 0.8, 0.2),
   ncol = 4,
   align = "h"
 )
@@ -1250,7 +1264,7 @@ pdf("Raman_figure3.pdf", width = twocol, height = 4)
 plot_grid(left,
   right,
   ncol = 2,
-  rel_widths = c(0.175, 1),
+  rel_widths = c(0.16, 1),
   label_size = 10,
   label_fontfamily = "Helvetica",
   labels = c("A", "B")
@@ -1294,112 +1308,112 @@ kable(selected_peaks,
 
 ```{r iterative opls-da, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
-rmn_data_spread <- rmn_data_corrected %>%
-  pivot_wider(
-    id_cols = c(genotype, cell.type, replicate, technical),
-    names_from = wavenumber,
-    values_from = scaled
-  ) %>%
-  unite("genocell", genotype, cell.type, remove = F) %>%
-  ungroup()
-
-celltype_list <- list(
-  "IF",
-  "VB"
-)
-geno_list <- list(
-  "Col-0",
-  "4cl1",
-  "4cl2",
-  "4cl1x4cl2",
-  "ccoaomt1",
-  "fah1",
-  "omt1",
-  "ccr1-3",
-  "cad4",
-  "cad5",
-  "cad4xcad5"
-)
-
-genocell_list <- expand.grid(geno_list, celltype_list) %>%
-  unite(genocell_1, Var1, Var2) %>%
-  mutate(genocell_2 = genocell_1) %>%
-  expand(genocell_1, genocell_2) %>%
-  filter(genocell_1 != genocell_2) %>%
-  unite("comb", genocell_1, genocell_2, sep = ",") %>%
-  lst() %>%
-  unlist()
-
-### compute and save OPLS-DA iterations ####
-oplsda_iter <- function(x, y) {
-  splinter <- str_split(y, fixed(","))
-  genocell_1 <- splinter[[1]][[1]]
-  genocell_2 <- splinter[[1]][[2]]
-  rmn_mat <- data.matrix(x %>%
-    filter(genocell %in% c(genocell_1, genocell_2)) %>%
-    select(-genotype, -cell.type, -replicate, -technical, -genocell))
-  rwnms <- x %>%
-    filter(genocell %in% c(genocell_1, genocell_2)) %>%
-    select(genotype, cell.type, replicate, technical) %>%
-    unite("ID", genotype, cell.type, replicate, technical, sep = "_")
-  rownames(rmn_mat) <- rwnms$ID
-  rmn_meta <- as.matrix(x %>%
-    filter(genocell %in% c(genocell_1, genocell_2)) %>%
-    select(genotype, cell.type, replicate, technical, genocell))
-
-  genocell <- rmn_meta[, "genocell"]
-  if (nrow(rmn_mat) < 7) {
-    rmn_oplsda <- opls(rmn_mat, genocell, predI = 1, orthoI = 1, crossvalI = nrow(rmn_mat))
-  } else {
-    rmn_oplsda <- opls(rmn_mat, genocell, predI = 1, orthoI = 1, crossvalI = 7)
-  }
-
-  loading <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
-    rename(loading = p1) %>%
-    mutate(wavenumber = as.numeric(wavenumber))
-  return(loading)
-}
-
-loadings <- vector("list", 1)
-for (i in genocell_list) {
-  loadings[[i]] <- oplsda_iter(rmn_data_spread, i)
-}
-
-loadings_df <- loadings[-1] %>%
-  enframe() %>%
-  unnest() %>%
-  spread(key = wavenumber, value = loading) %>%
-  separate(name, sep = ",", into = c("genocell_1", "genocell_2")) %>%
-  separate(genocell_1, sep = "_", into = c("genotype_1", "cell.type_1")) %>%
-  separate(genocell_2, sep = "_", into = c("genotype_2", "cell.type_2"))
-
-loadings_df <- loadings_df[!duplicated(t(apply(loadings_df[c("genotype_1", "cell.type_1", "genotype_2", "cell.type_2")], 1, sort))), ]
-
-write_csv(loadings_df, "loadings_df.csv")
-
-loadings_df_mean <- loadings_df %>%
-  pivot_longer(cols = -c(cell.type_1, cell.type_2, genotype_1, genotype_2),
-               names_to = "wavenumber",
-               values_to = "loading", ) %>%
-  mutate(wavenumber = as.numeric(wavenumber)) %>%
-  group_by(wavenumber) %>%
-  summarise(loading.mean = mean(abs(loading)))
-
-write_csv(loadings_df_mean, "loadings_df_mean.csv")
-
-rmn_data_loading <- rmn_data_corrected %>%
-  group_by(wavenumber) %>%
-  summarise(
-    mean.scaled = mean(scaled, na.rm = TRUE)
-  ) %>%
-  left_join(loadings_df_mean)
-
-write_csv(rmn_data_loading, "rmn_data_loading.csv")
+# rmn_data_spread <- rmn_data_corrected %>%
+#   pivot_wider(
+#     id_cols = c(genotype, cell.type, replicate, technical),
+#     names_from = wavenumber,
+#     values_from = scaled
+#   ) %>%
+#   unite("genocell", genotype, cell.type, remove = F) %>%
+#   ungroup()
+# 
+# celltype_list <- list(
+#   "IF",
+#   "VB"
+# )
+# geno_list <- list(
+#   "Col-0",
+#   "4cl1",
+#   "4cl2",
+#   "4cl1x4cl2",
+#   "ccoaomt1",
+#   "fah1",
+#   "omt1",
+#   "ccr1-3",
+#   "cad4",
+#   "cad5",
+#   "cad4xcad5"
+# )
+# 
+# genocell_list <- expand.grid(geno_list, celltype_list) %>%
+#   unite(genocell_1, Var1, Var2) %>%
+#   mutate(genocell_2 = genocell_1) %>%
+#   expand(genocell_1, genocell_2) %>%
+#   filter(genocell_1 != genocell_2) %>%
+#   unite("comb", genocell_1, genocell_2, sep = ",") %>%
+#   lst() %>%
+#   unlist()
+# 
+# ### compute and save OPLS-DA iterations ####
+# oplsda_iter <- function(x, y) {
+#   splinter <- str_split(y, fixed(","))
+#   genocell_1 <- splinter[[1]][[1]]
+#   genocell_2 <- splinter[[1]][[2]]
+#   rmn_mat <- data.matrix(x %>%
+#     filter(genocell %in% c(genocell_1, genocell_2)) %>%
+#     select(-genotype, -cell.type, -replicate, -technical, -genocell))
+#   rwnms <- x %>%
+#     filter(genocell %in% c(genocell_1, genocell_2)) %>%
+#     select(genotype, cell.type, replicate, technical) %>%
+#     unite("ID", genotype, cell.type, replicate, technical, sep = "_")
+#   rownames(rmn_mat) <- rwnms$ID
+#   rmn_meta <- as.matrix(x %>%
+#     filter(genocell %in% c(genocell_1, genocell_2)) %>%
+#     select(genotype, cell.type, replicate, technical, genocell))
+# 
+#   genocell <- rmn_meta[, "genocell"]
+#   if (nrow(rmn_mat) < 7) {
+#     rmn_oplsda <- opls(rmn_mat, genocell, predI = 1, orthoI = 1, crossvalI = nrow(rmn_mat))
+#   } else {
+#     rmn_oplsda <- opls(rmn_mat, genocell, predI = 1, orthoI = 1, crossvalI = 7)
+#   }
+# 
+#   loading <- as_tibble(getLoadingMN(rmn_oplsda), rownames = "wavenumber") %>%
+#     rename(loading = p1) %>%
+#     mutate(wavenumber = as.numeric(wavenumber))
+#   return(loading)
+# }
+# 
+# loadings <- vector("list", 1)
+# for (i in genocell_list) {
+#   loadings[[i]] <- oplsda_iter(rmn_data_spread, i)
+# }
+# 
+# loadings_df <- loadings[-1] %>%
+#   enframe() %>%
+#   unnest() %>%
+#   spread(key = wavenumber, value = loading) %>%
+#   separate(name, sep = ",", into = c("genocell_1", "genocell_2")) %>%
+#   separate(genocell_1, sep = "_", into = c("genotype_1", "cell.type_1")) %>%
+#   separate(genocell_2, sep = "_", into = c("genotype_2", "cell.type_2"))
+# 
+# loadings_df <- loadings_df[!duplicated(t(apply(loadings_df[c("genotype_1", "cell.type_1", "genotype_2", "cell.type_2")], 1, sort))), ]
+# 
+# write_csv(loadings_df, "loadings_df.csv")
+# 
+# loadings_df_mean <- loadings_df %>%
+#   pivot_longer(cols = -c(cell.type_1, cell.type_2, genotype_1, genotype_2),
+#                names_to = "wavenumber",
+#                values_to = "loading", ) %>%
+#   mutate(wavenumber = as.numeric(wavenumber)) %>%
+#   group_by(wavenumber) %>%
+#   summarise(loading.mean = mean(abs(loading)))
+# 
+# write_csv(loadings_df_mean, "loadings_df_mean.csv")
+# 
+# rmn_data_loading <- rmn_data_corrected %>%
+#   group_by(wavenumber) %>%
+#   summarise(
+#     mean.scaled = mean(scaled, na.rm = TRUE)
+#   ) %>%
+#   left_join(loadings_df_mean)
+# 
+# write_csv(rmn_data_loading, "rmn_data_loading.csv")
 
 #### read in OPLS-DA iterations if previously computed ####
-# loadings_df <- read_csv("loadings_df.csv")
-# rmn_data_loading <- read_csv("rmn_data_loading.csv")
-# loadings_df_mean <- read_csv("loadings_df_mean.csv")
+loadings_df <- read_csv("loadings_df.csv")
+rmn_data_loading <- read_csv("rmn_data_loading.csv")
+loadings_df_mean <- read_csv("loadings_df_mean.csv")
 ```
 
 ```{r opls-da clustering, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
@@ -1432,23 +1446,26 @@ heatmap <- ggplot(loadings_long) +
     fill = loading
   )) +
   scale_x_reverse(expand = c(0, 0)) +
-  scale_fill_viridis_c() +
+  scale_fill_viridis_c(
+    limits = c(0, 0.125),
+    breaks = c(0, 0.05, 0.1)) +
   labs(y = "Pairwise OPLS-DAs") +
-  guides(fill = guide_legend(title = "Absolute\nloading")) +
+  guides(fill = guide_colourbar(title = "Absolute\nloading")) +
   theme_leo() +
   theme(
     axis.text = element_blank(),
     axis.title.x = element_blank(),
     axis.ticks = element_blank(),
     legend.justification = c(1, 1),
-    legend.position = c(0.995, 0.995),
+    legend.position = c(0.997, 0.985),
     legend.background = element_rect(
       fill = rgb(1, 1, 1, 0.75),
       colour = NA
     ),
     legend.direction = "horizontal",
     legend.key.width = unit(4, "mm"),
-    legend.key.height = unit(4, "mm"),
+    legend.key.height = unit(2, "mm"),
+    legend.margin = margin(0.5, 0.5, 0.5, 0.5, "mm"),
     plot.margin = unit(c(2, 0.25, 0, 3), "mm")
   )
 
@@ -1471,11 +1488,11 @@ rmn_data_loading <- rmn_data_corrected %>%
     mutate(wavenumber = as.numeric(wavenumber)))
 
 loadings_avg <- ggplot(data = rmn_data_loading, aes(
-  y = rollmean(mean.scaled, 3, na.pad = TRUE),
+  y = mean.scaled,
   x = wavenumber
 )) +
   geom_ridgeline_gradient(aes(
-    height = 0.01 - rollmean(mean.scaled, 3, na.pad = TRUE),
+    height = 0.01 - mean.scaled,
     fill = loading.mean
   ),
   colour = NA
@@ -1487,9 +1504,10 @@ loadings_avg <- ggplot(data = rmn_data_loading, aes(
     x = expression(paste("Wavenumber [cm"^-1, "]")),
     y = "Normalised intensity"
   ) +
-  scale_fill_viridis_c() +
+  scale_fill_viridis_c(limits = c(0, 0.07),
+                       breaks = c(0, 0.03, 0.06)) +
   theme_leo() +
-  guides(fill = guide_legend(title = "Mean absolute\nloading")) +
+  guides(fill = guide_colorbar(title = "Mean absolute\nloading")) +
   geom_label_repel(aes(label = peak),
     nudge_y = 0.0025,
     family = "Helvetica",
@@ -1503,14 +1521,15 @@ loadings_avg <- ggplot(data = rmn_data_loading, aes(
   ) +
   theme(
     legend.justification = c(1, 1),
-    legend.position = c(0.995, 0.995),
+    legend.position = c(0.997, 0.99),
     legend.background = element_rect(
       fill = rgb(1, 1, 1, 0.75),
       colour = NA
     ),
     legend.direction = "horizontal",
-    legend.key.width = unit(4, "mm"),
-    legend.key.height = unit(4, "mm"),
+    legend.key.width = unit(4.5, "mm"),
+    legend.key.height = unit(2, "mm"),
+    legend.margin = margin(0.5, 0.5, 0.5, 0.5, "mm"),
     # panel.border = element_blank(),
     axis.text.y = element_blank(),
     axis.ticks.y = element_blank(),
@@ -1532,8 +1551,9 @@ plot_grid(heatmap,
   # axis = "l",
   label_size = 10,
   label_fontfamily = "Helvetica",
-  label_x = -0.005,
-  label_y = 1.03
+  hjust = 0
+  # label_x = -0.005,
+  # label_y = 1.03
 )
 dev.off()
 ```
@@ -1669,7 +1689,8 @@ total_corr <- ggplot(data = py_rmn_corr) +
     axis.ticks = element_blank(),
     axis.text = element_blank(),
     strip.text = element_text(size = 8),
-    legend.key.width = unit(4, "mm")
+    legend.key.width = unit(4, "mm"),
+    plot.margin = unit(c(0.75, 2, 2, 2), "mm")
   ) +
   facet_grid(reorder(wavenumber, as.numeric(wavenumber)) ~ units_parsed, labeller = label_parsed)
 
@@ -1897,7 +1918,7 @@ py_plot_lig <- py_plot("Lignin", "CLB") +
     x = expression(paste("Lignin * total pyrolysate"^-1)),
     y = expression(paste("CLB [AU * AUC"^-1, "]"))
   ) +
-  scale_y_continuous(breaks = c(0, 0.005, 0.01), labels = c("0", "0.005", "0.01")) +
+  # scale_y_continuous(breaks = c(0, 0.005, 0.01), labels = c("0", "0.005", "0.01")) +
   scale_x_continuous(labels = c("0", "0.05", "0.1", "0.15"))
 
 py_plot_sg <- py_plot("S/G", "1334/1276") +
@@ -1915,7 +1936,7 @@ py_plot_cho <- py_plot("GCHO/lig", "1625/lig") +
     x = expression(paste(bold("G")[CHO], " * lignin"^-1)),
     y = expression(paste("1625 cm"^-1, "/ CLB"))
   ) +
-  scale_y_continuous(breaks = c(0, 0.4, 0.8), labels = c("0", "0.4", "0.8")) +
+  # scale_y_continuous(breaks = c(0, 0.4, 0.8), labels = c("0", "0.4", "0.8")) +
   scale_x_continuous(labels = c("0", "0.1", "0.2", "0.3", "0.4")) +
   geom_point(
     data = filter(py_rmn_corr, unit == "GCHO/lig" & wavenumber == "1625/lig" & genotype == "cad4xcad5"),
@@ -1970,7 +1991,7 @@ py_plot_snooh <- py_plot("SnoOH", "1334") +
   scale_y_continuous(breaks = c(0, 0.0015, 0.003), labels = c("0", "0.0015", "0.003")) +
   scale_x_continuous(breaks = c(0, 0.01, 0.02), labels = c("0", "0.01", "0.02"))
 
-py_plot_soh <- py_plot("S-OH", "1334") +
+py_plot_s <- py_plot("S", "1334") +
   labs(
     x = expression(paste("S-OH")),
     y = expression(paste("1334 cm"^-1))
@@ -1993,7 +2014,7 @@ py_plot_snocho <- py_plot("SnoCHO", "1334") +
   )
 
 
-pdf("Raman_figure5.pdf", width = onehalfcol, height = 5)
+pdf("Raman_figure5.pdf", width = twocol, height = 6)
 right <- plot_grid(py_plot_lig,
   py_plot_sg,
   py_plot_cho,
@@ -2014,9 +2035,9 @@ plot_grid(plot_grid(total_corr),
   label_fontfamily = "Helvetica",
   # label_x = -0.005,
   # label_y = 1.01,
-  rel_widths = c(1, 0.6),
+  rel_widths = c(1, 0.4),
   ncol = 2,
-  align = "hv",
+  align = "v",
   axis = "t"
 )
 dev.off()
@@ -2406,10 +2427,10 @@ rel_lig <- ggplot(data = filter(rmn_data_corr, genotype != "Col-0")) +
 
 schemes <-
   rasterGrob(image_read_pdf(
-    "/home/leonard/Dropbox/Raman manuscript/Edits/Raman_figure7.pdf"
+    "/home/leonard/Dropbox/Raman manuscript/Submission/ACS/2020-02_revision/Edits/Raman_figure7.pdf"
   ))
 
-pdf("Raman_figure6.pdf", width = twocol, height = 8)
+pdf("Raman_figure6.pdf", width = 5, height = 6)
 plot_grid(
   rel_auc,
   rel_lig,
@@ -2421,7 +2442,8 @@ plot_grid(
   # label_x = -0.005,
   # label_y = 1.01,
   # rel_widths = c(0.7, 0.5),
-  ncol = 1
+  ncol = 1,
+  rel_heights = c(1, 1, 0.8)
   # align = "hv",
   # axis = "l"
 )
@@ -2985,7 +3007,7 @@ s6 <- ggplot(data = rmn_data_ridge) +
   geom_ridgeline(aes(
     x = wavenumber,
     y = genotype,
-    height = rollmean(scaled, 10, na.pad = TRUE),
+    height = scaled,
     fill = genotype,
     group = interaction(genotype, replicate, technical)
   ),
@@ -3307,7 +3329,7 @@ supp_spectra <- ggplot(rmn_model_supp) +
   geom_ridgeline(aes(
     x = wavenumber,
     y = filename,
-    height = rollmean(scaled, 3, na.pad = TRUE),
+    height = scaled,
     fill = filename,
     # colour = state
   ),
@@ -3560,7 +3582,7 @@ supp_spectra <- ggplot(rmn_models785_corrected) +
   geom_ridgeline(aes(
     x = wavenumber,
     y = filename,
-    height = rollmean(scaled, 20, na.pad = TRUE),
+    height = scaled,
     fill = filename,
     # colour = state
   ),
