@@ -433,22 +433,22 @@ em_collapse_plot <- function(cond) {
     ) + coord_cartesian(ylim = c(0, 100))
 }
 
-cpd_plot <- em_collapse_plot("CPD") + labs(y = "After CPD [%]") +
-  theme(legend.position = "bottom",
-        axis.text.x = element_blank(),
-        axis.title.x = element_blank(),
-        axis.ticks.x = element_blank())
+cpd_plot <- em_collapse_plot("CPD") + labs(y = "After CPD [%]") 
+  # theme(legend.position = "bottom",
+  #       axis.text.x = element_blank(),
+  #       axis.title.x = element_blank(),
+  #       axis.ticks.x = element_blank())
 # cpd_plot$layers[[2]]$aes_params$alpha <- 0
 # cpd_plot$layers[[3]]$aes_params$alpha <- 0
 
-ad_plot <- em_collapse_plot("AD") + labs(y = "After air drying [%]") +
-  theme(strip.text = element_blank())
+ad_plot <- em_collapse_plot("AD") + labs(y = "After air drying [%]") 
+  # theme(strip.text = element_blank())
 
-pdf("em_collapse.pdf", width = onecol * 0.75, height = onecol * 0.7)
+pdf("em_collapse.pdf", width = onecol, height = onecol * 0.3)
 plot_grid(
   cpd_plot,
   ad_plot,
-  nrow = 2,
+  nrow = 1,
   rel_heights = c(1, 1)
 )
 dev.off()
@@ -592,7 +592,8 @@ dev.off()
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 medium_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/WT_medium.csv") %>%
-  pivot_longer(cols = c(stiffness, strength), values_to = "value", names_to = "variable")
+  pivot_longer(cols = c(stiffness, strength), values_to = "value", names_to = "variable") %>%
+  mutate(medium = ordered(medium, levels = c("Water", "Air", "Sorbitol")))
 
 rmn_violin <- function(x) {
   letters <- letter_groups(medium_data %>% filter(variable == x),
@@ -612,12 +613,12 @@ rmn_violin <- function(x) {
     #           alpha = 0.25) +
     geom_quasirandom(
       aes(fill = medium),
-      dodge.width = 0.6,
+      # dodge.width = 0.6,
       shape = 21,
       # width = 0.1,
       # colour = NA,
       alpha = 0.75,
-      size = 1.5,
+      size = 1,
       stroke = 0.2
     ) +
     # geom_boxplot(
@@ -660,14 +661,22 @@ rmn_violin <- function(x) {
     theme(
       text = element_text(family = "Helvetica"),
       legend.position = "none",
-      axis.title.x = element_blank()
-    )
+      # axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      panel.border = element_blank(),
+      axis.line.x = element_line(size = 0.2),
+      axis.line.y = element_line(size = 0.2)
+    ) +
+    coord_flip()
 }
 
 medium_strength <- rmn_violin("strength") +
-  labs(y = "Flexural strength [MPa]")
+  labs(y = "Strength [MPa]") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.x = element_line(size = 0.2))
 medium_stiffness <- rmn_violin("stiffness") +
-  labs(y = "Flexural stiffness [MPa]")
+  labs(y = "Stiffness [MPa]")
 
 pdf("bending_medium.pdf", width = onecol / 1.25, height = onecol / 3)
 hydration <- plot_grid(
@@ -684,73 +693,201 @@ hydration
 dev.off()
 ```
 
-### Bending curves
+### Mutant bending
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-curve_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/bending_curve.csv") %>%
-  mutate(genotype = ordered(genotype, levels = c("WT", "4cl1x4cl2x4cl3")))
+#### fah1 ####
+bending_files <-
+  list.files(
+    path = "/home/leonard/Documents/Uni/PhD/IRX/Bending/fah1_raw/",
+    pattern = "*.txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
 
-curves <- ggplot(
-  data = curve_data,
-  aes(x = strain, y = stress)
-) +
-  geom_vline(xintercept = 0.65,
-             size = 0.2,
-             linetype = 2) +
-  annotate("text",
-           label = "WT breaking point",
-           family = "Helvetica",
-           size = ggtext_size,
-           x = 0.7,
-           y = 8.5,
-           hjust = 0,
-           vjust = 0) +
-  geom_line(aes(group = interaction(genotype, replicate)),
-    size = 0.2,
-    alpha = 0.15
-  ) +
-  geom_smooth(aes(colour = genotype),
-    size = 0.4
-  ) +
-  scale_color_manual(values = pal_ostwald_disc[c(1, 3)]) +
-  theme_leo() +
-  xlim(0, 3) +
-  labs(
-    x = "Flexural strain [%]",
-    y = "Flexural stress [MPa]"
-  ) +
-  facet_wrap(~genotype, nrow = 2)
+read_plus <- function(flnm) {
+  read_delim(flnm,
+    delim = ";",
+    skip = grep("Raw Data", readLines(flnm)),
+    col_types = "cccccc",
+    col_names = FALSE
+  ) %>%
+    fill(X1) %>%
+    filter(X2 != "Time" & X2 != "(s)") %>%
+    mutate(
+      filename = basename(flnm)
+    ) %>%
+    rename(
+      "section" = X1,
+      "time" = X2,
+      "displacement" = X3,
+      "force" = X4,
+      "strain" = X5,
+      "stress" = X6
+           )
+}
 
-pdf("bending_curves.pdf", width = onecol / 2, height = onecol / 2)
-curves
-dev.off()
-```
+fahA <- read_delim(bending_files[1],
+                   delim = ";",
+                   skip = grep("Raw Data", readLines(bending_files[1])),
+                   col_types = "cccccc",
+                   col_names = FALSE) %>%
+  mutate(filename = basename(bending_files[1])) %>%
+  fill(X1) %>%
+  filter(X2 != "Displacement" & X2 != "(mm)") %>%
+  rename(
+    "section" = X1,
+    "displacement" = X2,
+    "force" = X3,
+    "strain" = X4,
+    "stress" = X5
+  )
 
-### S influence
+bending_data <- lapply(bending_files[-1], read_plus) %>%
+  bind_rows()
 
-```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-s_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/stiffness_s.csv") %>%
-  tidyr::fill(everything()) %>%
-  pivot_longer(cols = c(stiffness, strength), values_to = "value", names_to = "variable") %>%
-  mutate(genotype = ordered(genotype, levels = c("WT", "fah1")))
+bending_data <- bending_data %>%
+  bind_rows(fahA) %>%
+  separate(filename, into = c("genotype", "replicate"), sep = " ", extra = "merge") %>%
+  mutate(replicate = str_remove(replicate, "Air"),
+         replicate = str_remove(replicate, ".txt"),
+         replicate = str_remove(replicate, "\\d\\dcm"),
+         replicate = str_remove(replicate, " "),
+         replicate = as.factor(replicate),
+         section = as.factor(section),
+         experiment = factor("fah1", levels = c("4cl", "fah1", "cad")),
+         genotype = ordered(recode(genotype, "Fah1" = "fah1"), levels = c("WT", "fah1", "cad4xcad5", "4cl1x4cl2x4cl3"))) %>%
+  mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
 
-s_test <- s_data %>% filter(variable == "stiffness")
-p_values <- s_test %>%
-  group_by(section) %>%
-  transmute(p_value = broom::tidy(
-    t.test(value[genotype == "WT"], value[genotype == "fah1"])
-  )[["p.value"]]) %>%
-  mutate(p_value = round(p_value, digits = 3))
+read_stiffness <- function(flnm) {
+  read_delim(flnm,
+             delim = ";",
+             skip = 1,
+             col_names = FALSE
+  ) %>%
+    select(-X1) %>%
+    filter(str_detect(X2, 'Fah1|WT')) %>%
+    rename("name" = X2,
+           "modulus" = X3,
+           "max.stress" = X4,
+           "AUC" = X5,
+           "N.max.stress" = X6) %>%
+    mutate(name = str_remove(name, " Air"),
+           experiment = factor("fah1", levels = c("4cl", "fah1", "cad"))) %>%
+    separate(name, into = c("genotype", "replicate", "sample"), extra = "merge") %>%
+    mutate(genotype = ordered(recode(genotype, "Fah1" = "fah1"), levels = c("WT", "fah1", "cad4xcad5", "4cl1x4cl2x4cl3")),
+           replicate = as.factor(replicate),
+           sample = as.factor(sample)) %>%
+    mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
+}
 
-rmn_violin <- function(x) {
-  s_test <- s_data %>% filter(variable == x)
-  p_value <- broom::tidy(
-    t.test(s_test$value[s_test$genotype == "WT"], s_test$value[s_test$genotype == "fah1"])
-  )[["p.value"]] %>%
-    formatC(., format = "e", digits = 0)
+stiffness_fah1 <- lapply(bending_files, read_stiffness) %>%
+  bind_rows()
 
+#### cad4xcad5 ####
+bending_files <-
+  list.files(
+    path = "/home/leonard/Documents/Uni/PhD/IRX/Bending/cad_raw/",
+    pattern = "*.txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_delim(flnm,
+             delim = ";",
+             skip = grep("Raw Data", readLines(flnm)),
+             col_types = "ccccc",
+             col_names = FALSE
+  ) %>%
+    # fill(X1) %>%
+    filter(X1 != "Time" & X1 != "(s)") %>%
+    mutate(
+      filename = basename(flnm),
+      filename = str_remove(filename, ".txt"),
+      genotype = "cad4xcad5"
+    ) %>%
+    rename(
+      "time" = X1,
+      "displacement" = X2,
+      "force" = X3,
+      "strain" = X4,
+      "stress" = X5
+    ) %>%
+    separate(filename, into = c("section", "replicate"), sep = "_")
+}
+
+bending_data_cad <- lapply(bending_files, read_plus) %>%
+  bind_rows() %>%
+  mutate(replicate = as.factor(replicate),
+         section = as.factor(section),
+         experiment = factor("cad", levels = c("4cl", "fah1", "cad")),
+         genotype = factor(genotype, levels = c("WT", "fah1", "cad4xcad5", "4cl1x4cl2x4cl3"))) %>%
+  mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
+
+read_stiffness <- function(flnm) {
+  read_delim(flnm,
+             delim = ";",
+             skip = 1,
+             col_names = FALSE
+  ) %>%
+    select(-X1) %>%
+    filter(str_detect(X2, 'top|mid|Base')) %>%
+    rename("name" = X2,
+           "modulus" = X3,
+           "max.stress" = X4) %>%
+    mutate(experiment = factor("cad", levels = c("4cl", "fah1", "cad")),
+           genotype = factor("cad4xcad5", levels = c("WT", "fah1", "cad4xcad5", "4cl1x4cl2x4cl3"))) %>%
+    separate(name, into = c("replicate", "sample"), extra = "merge") %>%
+    mutate(replicate = as.factor(replicate),
+           sample = as.factor(sample)) %>%
+    mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
+}
+
+bending_files_stiff <- bending_files %>%
+  str_subset(pattern = fixed("_1."))
+
+stiffness_cad <- lapply(bending_files_stiff, read_stiffness) %>%
+  bind_rows()
+
+#### 4cl1x2x3 ####
+
+bending_4cl <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/bending_curve.csv") %>%
+  mutate(genotype = ordered(genotype, levels = c("WT", "fah1", "cad4xcad5", "4cl1x4cl2x4cl3")),
+         replicate = as.factor(replicate),
+         experiment = factor("4cl", levels = c("4cl", "fah1", "cad")),
+         section = factor("base"))
+
+stiffness_4cl <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/stiffness_4cl.csv") %>%
+  mutate(genotype = factor(genotype, levels = c("WT", "fah1", "cad4xcad5", "4cl1x4cl2x4cl3")),
+         experiment = factor("4cl", levels = c("4cl", "fah1", "cad")),
+         sample = as.factor(sample))
+
+#### figures ####
+bending_data_complete <- bind_rows(bending_data, bending_data_cad) %>%
+  bind_rows(bending_4cl)
+
+bending_pre <- bending_data_complete %>%
+  group_by(genotype, replicate, section) %>%
+  summarise(break_point = strain[stress == max(stress)],
+            strength = max(stress[strain < 3]))
+
+stiffness_complete <- stiffness_fah1 %>%
+  bind_rows(stiffness_cad, stiffness_4cl) %>%
+  select(-AUC, -N.max.stress) %>%
+  pivot_longer(cols = c(modulus, max.stress), names_to = "variable", values_to = "value")
+
+flex_violin <- function(x) {
+  letters <- letter_groups(stiffness_complete %>% filter(variable == x),
+                           value,
+                           genotype,
+                           "tukey",
+                           print_position = "below",
+                           print_adjust = 0.5
+  )
+  
   ggplot(
-    data = s_data %>% filter(variable == x),
+    data = stiffness_complete %>% filter(variable == x),
     aes(x = genotype, y = value)
   ) +
     # geom_line(aes(group = interaction(cell.type, variable, cell, measurement)),
@@ -777,59 +914,63 @@ rmn_violin <- function(x) {
     #   fatten = 1,
     #   width = 0.25
     # ) +
-    geom_violin(
-      # aes(group = interaction(days, cell.type),
-      # fill = cell.type
-      # ),
-      draw_quantiles = 0.5,
-      fill = "white",
-      colour = "black",
-      alpha = 0.85,
-      width = 0.2,
-      position = position_dodge(width = 0.6),
-      size = 0.2,
-      scale = "width"
-    ) +
-    annotate("text",
-      x = 2.5,
-      y = 0,
-      label = paste("italic(P)==", p_value),
-      parse = TRUE,
-      size = ggtext_size,
-      family = "Helvetica",
-      hjust = 1
-    ) +
-    scale_x_discrete(labels = c("WT", expression(italic("fah1")))) +
-    scale_fill_manual(values = pal_ostwald_disc[c(1, 3)]) +
+  geom_violin(
+    # aes(group = interaction(days, cell.type),
+    # fill = cell.type
+    # ),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+  ) +
+    geom_text(
+    data = letters,
+    aes(label = groups),
+    size = ggtext_size,
+    family = "Helvetica",
+    position = position_dodge(width = 0.6)
+  ) +
+    scale_x_discrete(labels = rev(c("WT", 
+                                expression(italic("fah1")),
+                                expression(italic("cad4x5")),
+                                expression(italic("4cl1x2x3")))),
+                     limits = rev(levels(stiffness_complete$genotype))) +
+    scale_fill_manual(values = c(pal_ostwald_disc[1], 
+                                 pal_ostwald_disc[3], 
+                                 pal_ostwald_disc[3], 
+                                 pal_ostwald_disc[3])) +
+    # scale_fill_gradientn(colours = pal_ostwald_cont, trans = "reverse")
     expand_limits(y = 0) +
     scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
     theme_leo() +
     theme(
       text = element_text(family = "Helvetica"),
       legend.position = "none",
-      axis.title.x = element_blank()
-    )
+      axis.title.y = element_blank(),
+      panel.border = element_blank(),
+      axis.line.x = element_line(size = 0.2),
+      axis.line.y = element_line(size = 0.2)
+    ) +
+    coord_flip()
 }
 
-medium_strength <- rmn_violin("strength") +
-  labs(y = "Flexural strength [MPa]")
-medium_stiffness <- rmn_violin("stiffness") +
-  labs(y = "Flexural stiffness [MPa]")
 
-pdf("s_influence.pdf", width = onecol / 1.25, height = onecol / 3)
-s_inf <- plot_grid(
-  medium_strength,
-  medium_stiffness,
-  labels = c("E", "F"),
-  # vjust = 1,
-  nrow = 1,
-  label_size = 10,
-  rel_widths = c(1, 1.1),
-  label_fontfamily = "Helvetica"
-)
-s_inf
-dev.off()
+violin_strength <- flex_violin("max.stress") +
+  labs(y = "Strength [MPa]") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.x = element_line(size = 0.2))
+
+violin_stiffness <- flex_violin("modulus") +
+  labs(y = "Stiffness [MPa]") +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05)),
+                     breaks = c(0, 3000, 6000))
 ```
+
 ### assemble bending figure
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
@@ -838,44 +979,87 @@ dev.off()
 WT <-
   rasterGrob(
     readPNG(
-      "/home/leonard/Dropbox/IRX manuscript/Edits/cropped_images/WT_plant.png"
+      "/home/leonard/Documents/Uni/PhD/IRX/Bending/Images/bending_adjusted.png"
     )
   )
 
+#### Biochemical data ####
+
+biochem_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/bending_biochem.csv")
+
+biochem <- ggplot(biochem_data,
+                  aes(x = genotype)) +
+  geom_point(aes(size = lignin,
+                 y = 1,
+                 colour = genotype),
+             alpha = 0.5,
+             shape = 16) +
+  geom_point(aes(size = s.g,
+                 y = 2,
+                 colour = genotype),
+             alpha = 0.5,
+             shape = 16) +
+  geom_text(aes(label = round(lignin * 100, digits = 0),
+                y = 1),
+            family = "Helvetica",
+            size = ggtext_size,
+            hjust = 0.5) +
+  geom_text(aes(label = round(s.g, digits = 2),
+                y = 2),
+            family = "Helvetica",
+            size = ggtext_size,
+            hjust = 0.5) +
+  theme_leo() +
+  scale_size_area(max_size = 10) +
+  theme(axis.text.y = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        axis.text.x = element_text(hjust = 0.5),
+        axis.line.x = element_line(size = 0.2)) +
+  scale_y_continuous(limits = c(0.5, 2.5),
+                     breaks = c(1, 2),
+                     labels = c("Total\nlignin [%]","S/G\nratio")) +
+  scale_colour_manual(values = rev(c(pal_ostwald_disc[1], 
+                                 pal_ostwald_disc[3], 
+                                 pal_ostwald_disc[3], 
+                                 pal_ostwald_disc[3]))) +
+  scale_x_discrete(limits = rev(levels(stiffness_complete$genotype))) +
+  coord_flip()
+
 #### plot grid ####
 
-top <- plot_grid(
-  plot_grid(WT,
-    labels = c("A"),
-    label_fontfamily = "Helvetica",
-    label_colour = "white",
-    # vjust = 1,
-    label_size = 10
-  ),
-  hydration,
-  ncol = 2,
-  labels = c("", "B"),
+top <- plot_grid(WT,
+  medium_stiffness,
+  medium_strength,
+  ncol = 3,
+  labels = c("", "B", "C"),
   label_fontfamily = "Helvetica",
   label_size = 10,
-  # vjust = 1,
-  rel_widths = c(1, 2)
+  rel_widths = c(0.72, 1, 0.75)
 )
-
 bottom <- plot_grid(
-  curves,
-  s_inf,
-  ncol = 2,
-  labels = c("D", ""),
+  violin_stiffness,
+  violin_strength,
+  biochem,
+  ncol = 3,
+  labels = c("D", "E", "F"),
   label_fontfamily = "Helvetica",
   label_size = 10,
   # vjust = 1,
-  rel_widths = c(1, 1)
+  # hjust = 0,
+  rel_widths = c(1, 0.75, 0.6),
+  align = "h"
 )
 
-
-pdf("IRX_figure4.pdf", width = onecol, height = onecol)
-plot_grid(top, bottom,
-  nrow = 2,
+pdf("IRX_figure5_recover.pdf", width = onecol, height = onecol * 0.85)
+plot_grid(top,
+  bottom,
+  ncol = 1,
+  labels = c("A", ""),
+  label_colour = "white",
+  label_fontfamily = "Helvetica",
+  label_size = 10,
   rel_heights = c(1, 1)
 )
 dev.off()
@@ -3286,6 +3470,93 @@ dev.off()
 ```
 
 ### Bending
+
+#### Curves
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+pdf("break_point.pdf", height = onecol / 2, width = onecol / 2)
+ggplot(bending_pre, aes(x = genotype, y = break_point)) +
+  geom_quasirandom(size = 0.75,
+                   alpha = 0.5,
+                   shape = 16) +
+  geom_violin(alpha = 0.5,
+              colour = "black",
+              size = 0.2,
+              draw_quantiles = 0.5) +
+  theme_leo()
+dev.off()
+
+bending_data_complete <- bending_data_complete %>%
+  mutate(stiff = "Stiffness",
+         str = "Strength")
+
+curves <- ggplot(
+  data = bending_data_complete,
+  aes(x = strain, y = stress)
+) +
+  # geom_vline(xintercept = 0.65,
+  #            size = 0.2,
+  #            linetype = 2) +
+  # annotate("text",
+  #          label = "WT breaking point",
+  #          family = "Helvetica",
+  #          size = ggtext_size,
+  #          x = 0.7,
+  #          y = 8.5,
+  #          hjust = 0,
+  #          vjust = 0) +
+# geom_line(aes(group = interaction(genotype, replicate, section)),
+#           size = 0.2,
+#           alpha = 0.15
+# ) +
+  geom_smooth(aes(colour = genotype),
+              size = 0.4
+  ) +
+  geom_smooth(data = filter(bending_data_complete, 
+                            genotype == "WT" &
+                              strain < 0.25),
+              aes(x = strain,
+                  y = stress),
+              method = "lm",
+              se = F,
+              fullrange = T,
+              colour = "black",
+              linetype = 2,
+              size = 0.2) +
+  geom_line(data = filter(bending_data_complete, genotype == "WT"),
+            aes(x = strain, y = 13.25),
+            linetype = 2,
+            colour = "black",
+            size = 0.2) +
+  geom_text(data = filter(bending_data_complete, genotype == "WT")[1, ],
+            aes(x = 3, y = 13.75, label = str),
+            hjust = 1,
+            vjust = 0,
+            family = "Helvetica",
+            size = ggtext_size) +
+  geom_text(data = filter(bending_data_complete, genotype == "WT")[1, ],
+            aes(x = 3, y = 82.5, label = stiff),
+            hjust = 1,
+            vjust = 0,
+            angle = 44,
+            family = "Helvetica",
+            size = ggtext_size) +
+  scale_colour_manual(values = c(pal_ostwald_disc[1], 
+                                 pal_ostwald_disc[3], 
+                                 pal_ostwald_disc[3], 
+                                 pal_ostwald_disc[3])) +
+  theme_leo() +
+  xlim(0, 3) +
+  labs(
+    x = "Strain [%]",
+    y = "Stress [MPa]"
+  ) +
+  facet_wrap(~genotype, nrow = 2)
+
+pdf("bending_curves.pdf", width = onecol, height = onecol)
+curves
+dev.off()
+```
 
 #### Hydration influence
 
