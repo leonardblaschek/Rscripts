@@ -2,17 +2,77 @@
 title: "Laccase Phenotyping 2020"
 author: "Leonard Blaschek"
 date: "16/01/2020"
-output: html_document
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(showtext)
 library(qrencoder)
 library(cowplot)
 library(grid)
 library(gridExtra)
 library(tidyverse)
+library(ggrepel)
+library(cowplot)
 
+#### import Helvetica ####
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 10,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.125,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        size = 10,
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        size = 10,
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.title = element_text(
+        colour = "black",
+        size = 10
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = 10),
+      legend.key.height = unit(4, "mm"),
+      plot.title = element_text(
+        size = 10,
+        hjust = 0
+      ),
+      complete = TRUE
+    )
+}
+
+ggtext_size <- 10 / (14 / 5)
 cm_size <- function(x) x / 2.54
 ```
 
@@ -74,7 +134,7 @@ Camera settings (prel.):
 
 ## QR-code generation
 
-```{r cars}
+```{r, message=FALSE, results=FALSE}
 
 genotypes <- c("WT", 
                "lac4x5x10x12x17", 
@@ -100,6 +160,73 @@ dev.off()
 }
 
 apply(plants, 1, qrc)
-  
 ```
 
+## Adjusted camera settings
+
+To avoid saturation in the colour reference card, the following settings have proven optimal:
+
+* 50 mm objective
+* 1/125 s exposure time
+* f5.6 aperture
+* 2000 ISO sensitivity
+* Incandescent white balance
+
+## Harvesting 2020-04-16--2020-04-21
+
+```{r message=FALSE}
+siliques <- read_csv(
+  "/home/leonard/Documents/Uni/PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_siliques.csv"
+  )
+
+pheno_data <- read_csv(
+  "/home/leonard/Documents/Uni/PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_harvesting.csv"
+  ) %>%
+  left_join(siliques %>%
+              pivot_longer(-c(genotype, rep), names_to = "sil", values_to = "length") %>%
+              group_by(genotype, rep) %>%
+              summarise(mean.sil.length = mean(length))
+  ) %>%
+  group_by(genotype, rep) %>%
+  mutate(total.sil = mat.sil + green.sil,
+         senescence = green.sil / total.sil)
+  
+pheno_pca <- pheno_data %>%
+  unite("ID", genotype, rep)
+
+pca_result <- prcomp(pheno_pca[, -1], center = TRUE, scale. = TRUE)
+rownames(pca_result$x) <- pheno_pca$ID
+
+gg_pca <- as_tibble(pca_result$x, rownames = NA) %>%
+  rownames_to_column(var = "ID") %>%
+  separate(ID, sep = "_", into = c("genotype", "replicate"))
+
+ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
+  geom_hline(yintercept = 0, linetype = 1, size = 0.2) +
+  geom_vline(xintercept = 0, linetype = 1, size = 0.2) +
+  stat_ellipse(geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
+  stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2, size = 0.2) +
+  geom_point(
+    size = 3,
+    stroke = 0.4,
+    alpha = 0.75,
+    shape = 21
+  ) +
+  geom_text_repel(data = filter(gg_pca, replicate == "4"), 
+                                aes(label = genotype),
+                  min.segment.length = 0,
+                  family = "Helvetica",
+                  size = ggtext_size) +
+  labs(
+    x = "PC 1 (Size and weight)",
+    y = "PC 2 (Degree of senescence)"
+  ) +
+  scale_fill_viridis_d() +
+  theme_leo() +
+  theme(
+    plot.margin = unit(c(2, 2, 3, 2), "mm")
+  )
+
+plot_grid(factoextra::fviz_contrib(pca_result, choice = "var", axes = 1, top = 5),
+          factoextra::fviz_contrib(pca_result, choice = "var", axes = 2, top = 5))
+```

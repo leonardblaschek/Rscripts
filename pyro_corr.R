@@ -347,6 +347,152 @@ pdf("pyro_corr_both_log.pdf", width = 5, height = 5)
 p
 dev.off()
 
+#### papperstidning figure ####
+
+theme_leo <- function(base_size = 8,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.2,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        size = 8,
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        size = 8,
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.title = element_text(
+        colour = "black",
+        size = 8
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.2),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = 8),
+      legend.key.height = unit(4, "mm"),
+      legend.margin = unit(c(0, 0, 0, 0), "mm"),
+      plot.margin = unit(c(2, 2, 2, 2), "mm"),
+      complete = TRUE
+    )
+}
+
+py_papper <- subset(py.corr, residue == "Coniferaldehyde" & cell.type == "Total")
+
+papper_plot <- ggplot(py_papper,
+       aes(
+         x = log(value),
+         y = log(mean.OD2),
+         ymin = log(mean.OD2) - (0.434 * (SD.OD2 / mean.OD2)),
+         ymax = log(mean.OD2) + (0.434 * (SD.OD2 / mean.OD2)),
+         xmin = log(value) - (0.434 * (sd / value)),
+         xmax = log(value) + (0.434 * (sd / value))
+       )) +
+  # geom_rect(
+  #   data = subset(adj.r.sq),
+  #   # aes(fill = r),
+  #   xmin = -Inf,
+  #   xmax = Inf,
+  #   ymin = -Inf,
+  #   ymax = Inf,
+  #   alpha = 0.5
+  # ) +
+  # scale_fill_distiller(palette = "Greens", direction = 1) +
+  geom_point(
+    # aes(colour = WT),
+    shape = 16,
+    size = 2,
+    alpha = 0.5
+  ) +
+  geom_errorbar(
+    # aes(colour = WT),
+                size = 0.2,
+                width = 0.05,
+                alpha = 0.8) +
+  geom_errorbarh(
+    # aes(colour = WT),
+                 size = 0.2,
+                 height = 0.025,
+                 alpha = 0.8) +
+  # scale_colour_manual(values = c("#000000", "#e20000")) +
+  geom_smooth(
+    method = lm,
+    colour = "black",
+    linetype = 2,
+    size = 0.25,
+    se = FALSE
+  ) +
+  theme_leo() +
+  # theme(
+  #   text = element_text(size = 12, family = 'Helvetica'),
+  #   strip.text.x = element_text(
+  #     size = 6,
+  #     hjust = 0,
+  #     vjust = 0,
+  #     face = "italic",
+  #     colour = "black"
+  #   ),
+  #   strip.text.y = element_text(
+  #     size = 6,
+  #     hjust = 0.5,
+  #     vjust = 0,
+  #     face = "italic",
+  #     colour = "black"
+  #   ),
+  #   panel.grid.minor = element_blank(),
+  #   panel.grid.major.x = element_blank(),
+  #   legend.position = "none",
+  #   panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+  #   axis.ticks = element_line(
+  #     size = 0.25,
+  #     lineend = "square",
+  #     color = "black"
+  #   ),
+  #   axis.title = element_text(size = 6, colour = "black"),
+  #   axis.text = element_text(size = 6, colour = "black"),
+  # ) +
+  labs(x = expression(paste("Log"[italic("e")], "(coniferaldehyd)")),
+       y = expression(paste("Log"[italic("e")], "(wiesner test)")))
+  # scale_x_continuous(breaks = c(-9, -6, -3)) +
+  # scale_y_continuous(breaks = c(0, -2, -4), limits = c(-5, 1)) +
+  # facet_grid(residue ~ cell.type) 
+  # geom_text(
+  #   data = subset(adj.r.sq, residue == "Coniferaldehyde" & cell.type == "Total"),
+  #   aes(label = paste("R² = ", round(r, 3))),
+  #   y = -1,
+  #   family = "Helvetica",
+  #   colour = "black",
+  #   size = 6 / (14/5),
+  #   hjust = 0
+  # ) +
+  # geom_text(
+  #   data = subset(corr, residue == "Coniferaldehyde" & cell.type == "Total"),
+  #   aes(label = r),
+  #   y = -1.2,
+  #   family = "Helvetica",
+  #   colour = "black",
+  #   size = 6 / (14/5),
+  #   hjust = 0
+  # )
+pdf("papper_plot.pdf", height = 1.5, width = 2)
+papper_plot
+dev.off()
+
 #### supplemental regressions ####
 
 py <-

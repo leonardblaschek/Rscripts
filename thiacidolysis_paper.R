@@ -68,6 +68,26 @@ rmn_sum <- rmn_data_corrected %>%
   group_by(genotype, cell.type) %>%
   summarise_if(is.numeric, mean, na.rm = TRUE)
 
+rmn_sd <- rmn_data_corrected %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  summarise(
+    "total_lignin" = (scaled[wavenumber == 1603] / 2) + scaled[wavenumber == 1334],
+    "GOH_rel" = scaled_lig[wavenumber == 1664],
+    # "GOH.G" = scaled_lig[wavenumber == 1664] / scaled_lig[wavenumber == 1603],
+    "GOH_tot" = scaled[wavenumber == 1664],
+    "G_tot" = scaled[wavenumber == 1603],
+    "G_rel" = scaled_lig[wavenumber == 1603],
+    "S.G" = scaled[wavenumber == 1334] / scaled[wavenumber == 1276],
+    "GCHO_rel" = scaled_lig[wavenumber == 1625],
+    "GCHO_tot" = scaled[wavenumber == 1625],
+    "S_rel" = scaled_lig[wavenumber == 1334],
+    "S_tot" = scaled[wavenumber == 1334],
+    # "cellulose" = scaled[wavenumber == 1099] + scaled[wavenumber == 381],
+    # "AUC" = mean(AUC)
+  ) %>%
+  group_by(genotype, cell.type) %>%
+  summarise_if(is.numeric, sd, na.rm = TRUE)
+
 #### import and tidy Wiesner test data ####
 wiesner.data <-
   read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
@@ -163,10 +183,65 @@ wiesner.data.pre <- wiesner.data %>%
   ) %>%
   select(genotype, cell.type, replicate, mean.OD1)
 
-wiesner_avg <- wiesner.data.pre %>%
+wiesner_sum <- wiesner.data.pre %>%
   group_by(genotype, cell.type) %>%
-  summarise(wiesner_mean = mean(mean.OD1))
+  summarise(wiesner_mean = mean(mean.OD1),
+            wiesner_sd = sd(mean.OD1))
 
-thio_data <- left_join(rmn_sum, wiesner_avg) 
+phlog_lac <- read_csv("/home/leonard/Documents/Uni/Master/Master thesis/Phenotyping/phlog_lac.csv") %>%
+  group_by(genotype, cell.type) %>%
+  summarise(wiesner_mean = mean(OD.adj., na.rm = TRUE),
+            wiesner_sd = sd(OD.adj., na.rm = TRUE))
 
-write_csv(thio_data, path = "histo_data.csv")
+wiesner_avg <- wiesner_sum %>%
+  bind_rows(phlog_lac %>% 
+              filter(genotype == "lac4x17") %>%
+              mutate(cell.type = recode(cell.type,
+                                        "MX" = "PMX"))) %>%
+  select(- wiesner_sd) %>%
+  filter(cell.type %in% c("PMX", "PX", "IF", "SMX"))
+
+wiesner_sd <- wiesner_sum %>%
+  bind_rows(phlog_lac %>% 
+              filter(genotype == "lac4x17") %>%
+              mutate(cell.type = recode(cell.type,
+                                        "MX" = "PMX"))) %>%
+  select(- wiesner_mean) %>%
+  filter(cell.type %in% c("PMX", "PX", "IF", "SMX"))
+
+thio_mean <- full_join(rmn_sum, wiesner_avg) 
+
+thio_sd <- full_join(rmn_sd, wiesner_sd) 
+
+write_csv(thio_mean, path = "histo_mean.csv")
+
+write_csv(thio_sd, path = "histo_sd.csv")
+
+rmn_pre <- rmn_data_corrected %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  summarise(
+    "GCHO_tot" = scaled[wavenumber == 1625]
+  ) %>%
+  group_by(genotype, cell.type, replicate) %>%
+  summarise_if(is.numeric, mean, na.rm = TRUE)
+
+wiesner_ratio <- wiesner.data.pre %>%
+  left_join(rmn_pre) %>%
+  filter(cell.type %in% c("PMX", "PX", "SMX", "IF")) %>%
+  group_by(genotype, cell.type, replicate) %>%
+  mutate(ratio = GCHO_tot / mean.OD1) %>%
+  group_by(genotype, cell.type) %>%
+  summarise(mean_ratio = mean(ratio, na.rm = T),
+            sd_ratio = sd(ratio, na.rm = T))
+
+write_csv(wiesner_ratio, path = "wiesner_ratio.csv")
+
+
+#### spectra ####
+
+planta <- rmn_data_avg %>%
+  filter(genotype %in% c("Col-0", "cad4xcad5"))
+vitro <- rmn_models %>% filter(gamma == "cho")
+
+write_csv(planta, path = "planta.csv")
+write_csv(vitro, path = "vitro.csv")
