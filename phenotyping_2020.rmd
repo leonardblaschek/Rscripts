@@ -8,13 +8,17 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(showtext)
-library(qrencoder)
+# library(qrencoder)
 library(cowplot)
 library(grid)
 library(gridExtra)
 library(tidyverse)
 library(ggrepel)
+library(ggridges)
 library(cowplot)
+library(jsonlite)
+library(slider)
+library(lubridate)
 
 #### import Helvetica ####
 font_add(
@@ -35,11 +39,11 @@ theme_leo <- function(base_size = 10,
   ) %+replace%
     theme(
       strip.text = element_text(hjust = 0, face = "italic"),
-      axis.ticks = element_line(
-        size = 0.125,
-        lineend = "square",
-        color = "black"
-      ),
+      # axis.ticks = element_line(
+      #   size = 0.125,
+      #   lineend = "square",
+      #   color = "black"
+      # ),
       axis.text.x = element_text(
         size = 10,
         colour = "black", # flipped coords
@@ -59,7 +63,7 @@ theme_leo <- function(base_size = 10,
       ),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      # panel.border = element_rect(fill = NA, color = "black", size = 0.25),
       panel.spacing = unit(1.5, "mm"),
       legend.position = "none",
       legend.text = element_text(size = 10),
@@ -71,6 +75,12 @@ theme_leo <- function(base_size = 10,
       complete = TRUE
     )
 }
+
+pal_ostwald_disc <- c(
+  "#275d95",
+  "#e8c245",
+  "#d25952"
+)
 
 ggtext_size <- 10 / (14 / 5)
 cm_size <- function(x) x / 2.54
@@ -134,29 +144,32 @@ Camera settings (prel.):
 
 ## QR-code generation
 
-```{r, message=FALSE, results=FALSE}
+```{r, message=FALSE, results=FALSE, eval=FALSE}
 
-genotypes <- c("WT", 
-               "lac4x5x10x12x17", 
-               "lac5x10x12x17",
-               "lac4x10x12x17",
-               "lac4x5x12x17",
-               "lac4x5x10x17",
-               "lac4x5x10x12")
+genotypes <- c(
+  "WT",
+  "lac4x5x10x12x17",
+  "lac5x10x12x17",
+  "lac4x10x12x17",
+  "lac4x5x12x17",
+  "lac4x5x10x17",
+  "lac4x5x10x12"
+)
 replicates <- c(1:5)
 
 plants <- expand_grid("genotype" = genotypes, "replicate" = replicates) %>%
   unite("plant", genotype, replicate)
 
 qrc <- function(plant) {
-png(paste0("qr_codes/", plant, ".png"), height = 900, width = 900, units = "px")
-par(mar=c(0,0,0,0))
-plot1 <- image(qrencode_raster(plant), 
-      asp=1, col=c("white", "black"), axes=FALSE, 
-      xlab="", ylab="",
-      xlim = c(0, 1), ylim = c(0, 1.1))
-text(plant, x = 0.5, y = 1.05, cex = 4)
-dev.off()
+  png(paste0("qr_codes/", plant, ".png"), height = 900, width = 900, units = "px")
+  par(mar = c(0, 0, 0, 0))
+  plot1 <- image(qrencode_raster(plant),
+    asp = 1, col = c("white", "black"), axes = FALSE,
+    xlab = "", ylab = "",
+    xlim = c(0, 1), ylim = c(0, 1.1)
+  )
+  text(plant, x = 0.5, y = 1.05, cex = 4)
+  dev.off()
 }
 
 apply(plants, 1, qrc)
@@ -176,22 +189,34 @@ To avoid saturation in the colour reference card, the following settings have pr
 
 ```{r message=FALSE}
 siliques <- read_csv(
-  "/home/leonard/Documents/Uni/PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_siliques.csv"
-  )
+  "/home/leonard/Dropbox/2020-01_LAC_phenotyping/2020-04-16_siliques.csv"
+) %>%
+  mutate(rep = as.character(rep))
 
 pheno_data <- read_csv(
-  "/home/leonard/Documents/Uni/PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_harvesting.csv"
-  ) %>%
+  "/home/leonard/Dropbox/2020-01_LAC_phenotyping/2020-04-16_harvesting.csv"
+) %>%
+  mutate(rep = as.character(rep)) %>%
   left_join(siliques %>%
-              pivot_longer(-c(genotype, rep), names_to = "sil", values_to = "length") %>%
-              group_by(genotype, rep) %>%
-              summarise(mean.sil.length = mean(length))
-  ) %>%
+    pivot_longer(-c(genotype, rep), names_to = "sil", values_to = "length") %>%
+    group_by(genotype, rep) %>%
+    summarise(mean.sil.length = mean(length))) %>%
   group_by(genotype, rep) %>%
-  mutate(total.sil = mat.sil + green.sil,
-         senescence = green.sil / total.sil)
-  
+  mutate(
+    total.sil = mat.sil + green.sil,
+    senescence = green.sil / total.sil
+  )
+
 pheno_pca <- pheno_data %>%
+  ungroup() %>%
+  mutate(genotype = recode(genotype,
+      "lac4/5/10/12/17" = "Q",
+      "lac5/10/12/17" = "Q-4",
+      "lac4/10/12/17" = "Q-5",
+      "lac4/5/12/17" = "Q-10",
+      "lac4/5/10/17" = "Q-12",
+      "lac4/5/10/12" = "Q-17"
+    )) %>%
   unite("ID", genotype, rep)
 
 pca_result <- prcomp(pheno_pca[, -1], center = TRUE, scale. = TRUE)
@@ -201,7 +226,7 @@ gg_pca <- as_tibble(pca_result$x, rownames = NA) %>%
   rownames_to_column(var = "ID") %>%
   separate(ID, sep = "_", into = c("genotype", "replicate"))
 
-ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
+pca_plot <- ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
   geom_hline(yintercept = 0, linetype = 1, size = 0.2) +
   geom_vline(xintercept = 0, linetype = 1, size = 0.2) +
   stat_ellipse(geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
@@ -212,11 +237,13 @@ ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
     alpha = 0.75,
     shape = 21
   ) +
-  geom_text_repel(data = filter(gg_pca, replicate == "4"), 
-                                aes(label = genotype),
-                  min.segment.length = 0,
-                  family = "Helvetica",
-                  size = ggtext_size) +
+  geom_text_repel(
+    data = filter(gg_pca, replicate == "4"),
+    aes(label = genotype),
+    min.segment.length = 0,
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
   labs(
     x = "PC 1 (Size and weight)",
     y = "PC 2 (Degree of senescence)"
@@ -227,6 +254,296 @@ ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
     plot.margin = unit(c(2, 2, 3, 2), "mm")
   )
 
-plot_grid(factoextra::fviz_contrib(pca_result, choice = "var", axes = 1, top = 5),
-          factoextra::fviz_contrib(pca_result, choice = "var", axes = 2, top = 5))
+plot_grid(
+  factoextra::fviz_contrib(pca_result, choice = "var", axes = 1, top = 5),
+  factoextra::fviz_contrib(pca_result, choice = "var", axes = 2, top = 5)
+)
+
+pdf("pheno_PCA.pdf", width = cm_size(20), height = cm_size(10))
+pca_plot
+dev.off()
+```
+
+### Image based phenotyping
+
+#### Hue
+
+```{r message=FALSE}
+pcv_data <- fromJSON("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/front/output/2020-05-11_lab_segmentation/results.json")
+hues <- pcv_data$entities$observations$hue_frequencies %>%
+  mutate(
+    date = pcv_data$entities$metadata$timestamp$value,
+    replicate = pcv_data$entities$metadata$frame$value,
+    genotype = pcv_data$entities$metadata$id$value
+  ) %>%
+  select(genotype, replicate, date, "count" = value, "hue" = label, ) %>%
+  unnest(cols = c(count, hue))
+
+circular_mean_hue <- pcv_data$entities$observations$hue_circular_mean %>%
+  mutate(
+    date = pcv_data$entities$metadata$timestamp$value,
+    replicate = pcv_data$entities$metadata$frame$value,
+    genotype = pcv_data$entities$metadata$id$value
+  ) %>%
+  select(genotype, replicate, date, "mean_hue" = value)
+
+hues <- hues %>%
+  filter(hue != 1) %>%
+  group_by(genotype, replicate) %>%
+  left_join(circular_mean_hue) %>%
+  mutate(
+    pixel_count = sum(count),
+    count_scaled = count / pixel_count,
+    rolling_count = slide_dbl(count_scaled, mean, .before = 3)
+  ) 
+
+hues_avg <- hues %>%
+  ungroup() %>%
+  mutate(genotype = ordered(genotype,
+                            levels = c(
+                              "Col-0",
+                              "Q",
+                              "Q-4",
+                              "Q-5",
+                              "Q-10",
+                              "Q-12",
+                              "Q-17"
+                            ))) %>%
+  group_by(genotype, hue) %>%
+  summarise(count_mean = mean(count_scaled),
+            mean_mean = mean(mean_hue)) %>%
+  group_by(genotype) %>%
+  mutate(rolling_mean = slide_dbl(count_mean, mean, .before = 3))
+
+H <- round(((1:20) / 20), digits = 2)
+S <- 0.7
+V <- 0.85
+
+hue_values <- NULL
+for (i in H) {
+  hue_values[i * 20] <- (hsv(i, S, V))
+}
+
+
+pheno_avg <- pheno_data %>%
+  group_by(genotype) %>%
+  summarise_if(is.numeric, mean) %>%
+  mutate(genotype = recode(genotype,
+      "lac4/5/10/12/17" = "Q",
+      "lac5/10/12/17" = "Q-4",
+      "lac4/10/12/17" = "Q-5",
+      "lac4/5/12/17" = "Q-10",
+      "lac4/5/10/17" = "Q-12",
+      "lac4/5/10/12" = "Q-17"
+    ))
+
+hue_dens <- ggplot() +
+  geom_density_ridges_gradient(
+    data = hues_avg,
+    aes(
+      x = hue,
+      height = rolling_mean,
+      y = reorder(genotype, mean_mean),
+      # y = genotype,
+      fill = hue
+    ),
+    # scale = 10,
+    stat = "identity",
+    size = 0.2
+  ) +
+  # geom_density_ridges(
+  #   data = hues,
+  #   aes(
+  #     x = hue,
+  #     height = rolling_count,
+  #     y = genotype,
+  #     group = interaction(genotype, replicate)
+  #   ),
+  #   # scale = 10,
+  #   fill = NA,
+  #   colour = rgb(0, 0, 0, 0.25),
+  #   stat = "identity",
+  #   size = 0.2
+  # ) +
+  # geom_text(data = pheno_avg,
+  #           aes(label = paste("Senescence index =", round(senescence, digits = 2)),
+  #               y = genotype),
+  #           x = 100,
+  #           family = "Helvetica",
+  #           size = ggtext_size,
+  #           hjust = 0,
+  #           vjust = 1.1) +
+  scale_fill_gradientn(colors = hue_values) +
+  scale_x_continuous(limits = c(0, 150)) +
+  labs(x = "Hue",
+       y = "") +
+  theme_leo()
+
+pdf("harvest_hue.pdf", width = cm_size(10), height = cm_size(10))
+hue_dens
+dev.off()
+```
+
+#### Height
+```{r message=FALSE}
+pcv_data <- fromJSON("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/front/output/2020-05-11_lab_segmentation/results.json")
+heights <- as.tibble(pcv_data$entities$observations$height$value) %>%
+  mutate(
+    longest_path = pcv_data$entities$observations$longest_path$value,
+    date = pcv_data$entities$metadata$timestamp$value,
+    rep = pcv_data$entities$metadata$frame$value,
+    genotype = pcv_data$entities$metadata$id$value
+  )
+
+scale_factor <- read_csv("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/front/output/2020-05-11_lab_segmentation/size_marker.csv",
+  col_names = c("id", "space")
+) %>%
+  mutate(id = str_remove(id, fixed(".jpg"))) %>%
+  separate(id, into = c("date", "genotype", "rep"), sep = "_")
+
+heights <- heights %>%
+  left_join(scale_factor) %>%
+  mutate(
+    scaled_height = value / space,
+    scaled_path = longest_path / space,
+    genotype = recode(genotype,
+      Q = "lac4/5/10/12/17",
+      `Q-4` = "lac5/10/12/17",
+      `Q-5` = "lac4/10/12/17",
+      `Q-10` = "lac4/5/12/17",
+      `Q-12` = "lac4/5/10/17",
+      `Q-17` = "lac4/5/10/12"
+    )
+  ) %>%
+  left_join(pheno_data %>% select(genotype, rep, apparent.height, stretched.height),
+    by = c("genotype", "rep")
+  )
+
+height_validation <- ggplot(
+  data = heights,
+  aes(
+    x = scaled_height,
+    y = apparent.height
+  )
+) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+height_validation
+
+summary(lm(heights$scaled_height ~ heights$apparent.height))
+
+height_validation <- ggplot(
+  data = heights,
+  aes(
+    x = scaled_path,
+    y = stretched.height,
+    colour = genotype
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    colour = "blue"
+  )
+
+height_validation
+
+summary(lm(heights$scaled_path ~ heights$stretched.height))
+```
+
+#### Rosette growth
+
+```{r message=FALSE}
+#### read-in function ###
+read_plus <- function(flnm) {
+  json <- fromJSON(flnm)
+  json$observations$area$value %>%
+    as_tibble() %>%
+    mutate(filename = basename(flnm))
+}
+
+#### load data ###
+rosette_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/top/renamed/nikon_images/",
+    pattern = "*.json",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+tray_id <- read_csv("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/top/renamed/tray_id.csv",
+  col_types = "cccc"
+)
+
+size_marker <- read_csv("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/top/renamed/nikon_images/output/size_marker_trays.csv",
+  col_names = c("filename", "space")
+) %>%
+  separate(filename, into = c("date", "tray"), sep = "_") %>%
+  mutate(
+    date = ymd(date),
+    tray = str_remove(tray, fixed(".jpg"))
+  )
+
+rosette_area <- lapply(rosette_files, read_plus) %>%
+  bind_rows() %>%
+  separate(filename, into = c("date", "tray", "plant"), sep = "_") %>%
+  mutate(
+    date = ymd(date),
+    tray = str_remove(tray, fixed(".jpg")),
+    plant = str_remove(plant, fixed(".json"))) %>%
+  left_join(tray_id) %>%
+  left_join(size_marker) %>%
+  mutate(area = value / space,
+         mutation = case_when(genotype == "Col-0" ~ "WT",
+                              TRUE ~ "mutant")) %>%
+  group_by(genotype, date) %>%
+  mutate(area_avg = mean(area)) %>%
+  group_by(genotype) %>%
+  mutate(max = max(area_avg)) %>%
+  filter(date > "2020-01-27")
+
+rosette_growth <- ggplot(
+  data = rosette_area,
+  aes(
+    x = date,
+    y = area
+  )
+) +
+  geom_line(aes(
+    colour = mutation,
+    group = interaction(genotype, replicate)
+  ),
+  size = 0.2,
+  alpha = 0.25
+  ) +
+  geom_line(aes(
+    colour = mutation,
+    group = genotype,
+    y = area_avg
+  )) +
+  theme_leo() +
+  coord_cartesian(clip = "off") +
+  scale_x_date(limits = c(ymd("20200127"), ymd("20200214"))) +
+  geom_text_repel(
+    data = distinct(rosette_area, max),
+    x = ymd("20200212"),
+    aes(
+      y = max,
+      label = genotype
+    ),
+    family = "Helvetica",
+    segment.colour = "grey75",
+    hjust = 0,
+    direction = "y",
+    nudge_x = 0.5,
+    min.segment.length = 0
+  ) +
+  labs(x = "Date",
+       y = "Rosette Area [scaled px]") +
+  scale_colour_manual(values = pal_ostwald_disc[c(3,1)])
+
+pdf("rosette_growth.pdf", width = cm_size(10), height = cm_size(10))
+rosette_growth
+dev.off()
 ```
