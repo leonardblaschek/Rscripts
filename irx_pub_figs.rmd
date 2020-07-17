@@ -1518,7 +1518,7 @@ rmn_sum <- rmn_data_corrected %>%
     # "G_tot" = scaled[wavenumber == 1603],
     "G_rel" = scaled_lig[wavenumber == 1603],
     "S.G" = scaled[wavenumber == 1334] / scaled[wavenumber == 1276],
-    "GCHO.lig" = scaled_lig[wavenumber == 1625],
+    "GCHO_rel" = scaled_lig[wavenumber == 1625],
     "S_rel" = scaled_lig[wavenumber == 1334],
     # "S_tot" = scaled[wavenumber == 1334],
     "cellulose" = scaled[wavenumber == 1099] + scaled[wavenumber == 381],
@@ -2277,7 +2277,7 @@ TM.multigroup <- function(x) {
       # GOH_tot +
       S_rel +
       # S_tot +
-      # GCHO.lig +
+      # GCHO_rel +
       total_lignin,
     data = filter(drop_na(rmn_irx), cell.type == x)
     ),
@@ -2355,7 +2355,7 @@ psem_px <- psem(
     # GOH_tot +
     S_rel +
     # S_tot +
-    # GCHO.lig +
+    # GCHO_rel +
     # total_lignin:mean.OD1 +
     total_lignin,
   data = filter(drop_na(rmn_irx), cell.type == "PX")
@@ -2415,7 +2415,7 @@ psem_pmx <- psem(
     # GOH_tot +
     S_rel +
     # S_tot +
-    # GCHO.lig +
+    GCHO_rel +
     # total_lignin:mean.OD1 +
     total_lignin,
   data = filter(drop_na(rmn_irx), cell.type == "PMX")
@@ -2438,6 +2438,7 @@ coefs <- coefs %>%
       species = "Arabidopsis"
     ))
 plot(psem_pmx)
+summary(psem_pmx)
 ```
 
 ### SEM for SMX
@@ -2471,7 +2472,7 @@ psem_smx <- psem(
     # GOH_tot +
     # S_rel +
     # S_tot +
-    # GCHO.lig +
+    # GCHO_rel +
     # total_lignin:mean.OD1 +
     total_lignin,
   data = filter(drop_na(rmn_irx), cell.type == "SMX")
@@ -2566,7 +2567,7 @@ find_interactions <- function(x) {
       # GOH_rel,
       GOH.G,
       S_rel,
-      # GCHO.lig,
+      # GCHO_rel,
       # S.G
     ) %>%
     drop_na()
@@ -2597,7 +2598,7 @@ best_model <- find_interactions("PX")
 mean.OD1_total_lignin <- interact_plot(best_model,
   pred = mean.OD1, modx = total_lignin,
   colors = c("black", "black", "black"),
-  x.label = "Wiesner stain",
+  x.label = expression(paste("Total "*bold(G)[CHO])),
   y.label = "Convexity"
 ) +
   theme_leo() +
@@ -2629,7 +2630,7 @@ total_lignin_Perim.$layers[[1]]$aes_params$size <- 0.4
 S_rel_Perim. <- interact_plot(best_model,
   pred = S_rel, modx = Perim.,
   colors = c("black", "black", "black"),
-  x.label = "S-lignin",
+  x.label = expression(paste(bold(S))),
   y.label = "Convexity"
 ) +
   theme_leo() +
@@ -2648,7 +2649,7 @@ S_rel_Perim.$layers[[1]]$aes_params$size <- 0.4
 mean.OD1_Perim. <- interact_plot(best_model,
   pred = mean.OD1, modx = Perim.,
   colors = c("black", "black", "black"),
-  x.label = "Wiesner stain",
+  x.label = expression(paste("Total "*bold(G)[CHO])),
   y.label = "Convexity"
 ) +
   theme_leo() +
@@ -2661,7 +2662,7 @@ mean.OD1_Perim.$layers[[1]]$aes_params$size <- 0.4
 GOH.G_mean.OD1 <- interact_plot(best_model,
   pred = GOH.G, modx = mean.OD1,
   colors = c("black", "black", "black"),
-  x.label = "Coniferyl alcohol",
+  x.label = expression(paste(bold(G)[CHOH])),
   y.label = "Convexity"
 ) +
   theme_leo() +
@@ -2686,6 +2687,47 @@ px
 dev.off()
 
 #### primary metaxylem ####
+find_interactions <- function(x) {
+  rmn_irx <- filter(rmn_irx, cell.type == x) %>%
+    select(
+      convexity,
+      Perim.,
+      # n_f,
+      # n_p,
+      n_v,
+      cellulose,
+      mean.OD1,
+      total_lignin,
+      # AUC,
+      # G_rel,
+      # GOH_rel,
+      GOH.G,
+      S_rel,
+      GCHO_rel,
+      # S.G
+    ) %>%
+    drop_na()
+
+  model.null <- lm(convexity ~ 1,
+    data = rmn_irx
+  )
+  model.full <- lm(convexity ~ (.)^2,
+    data = rmn_irx
+  )
+
+  best_model <- step(model.null,
+    scope = list(upper = model.full),
+    direction = "both",
+    data = rmn_irx
+  )
+
+  print(tidy(best_model) %>%
+    select(term) %>%
+    filter(str_detect(term, fixed(":"))))
+
+  best_model
+}
+
 best_model <- find_interactions("PMX")
 
 n_v_mean.OD1 <- interact_plot(best_model,
@@ -2701,10 +2743,10 @@ n_v_mean.OD1 <- interact_plot(best_model,
   )
 n_v_mean.OD1$layers[[1]]$aes_params$size <- 0.4
 
-n_v_total_lignin <- interact_plot(best_model,
-  pred = n_v, modx = total_lignin,
+GCHO_rel_total_lignin <- interact_plot(best_model,
+  pred = GCHO_rel, modx = total_lignin,
   colors = c("black", "black", "black"),
-  x.label = "Vessel adjacency",
+  x.label = expression(paste("Terminal "*bold(G)[CHO])),
   y.label = "Convexity"
 ) +
   theme_leo() +
@@ -2712,15 +2754,31 @@ n_v_total_lignin <- interact_plot(best_model,
     legend.position = c(0.75, 0.8),
     panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5))
   )
-n_v_total_lignin$layers[[1]]$aes_params$size <- 0.4
+GCHO_rel_total_lignin$layers[[1]]$aes_params$size <- 0.4
+
+mean.OD1_total_lignin <- interact_plot(best_model,
+  pred = mean.OD1, modx = total_lignin,
+  colors = c("black", "black", "black"),
+  x.label = expression(paste("Total "*bold(G)[CHO])),
+  y.label = "Convexity"
+) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5))
+  )
+mean.OD1_total_lignin$layers[[1]]$aes_params$size <- 0.4
 
 pdf("PMX_interactions.pdf", height = onecol, width = onecol / 2)
 pmx <- plot_grid(
   "",
   "",
   "",
-  "",
-  n_v_total_lignin + theme(legend.position = "none"),
+  mean.OD1_total_lignin + theme(legend.position = "none"),
+  GCHO_rel_total_lignin + theme(legend.position = "none"),
   "",
   n_v_mean.OD1 + theme(legend.position = "none"),
   ncol = 1
@@ -2729,12 +2787,53 @@ pmx
 dev.off()
 
 #### secondary metaxylem ####
+find_interactions <- function(x) {
+  rmn_irx <- filter(rmn_irx, cell.type == x) %>%
+    select(
+      convexity,
+      Perim.,
+      # n_f,
+      # n_p,
+      n_v,
+      cellulose,
+      mean.OD1,
+      total_lignin,
+      # AUC,
+      # G_rel,
+      # GOH_rel,
+      GOH.G,
+      S_rel,
+      # GCHO_rel,
+      # S.G
+    ) %>%
+    drop_na()
+
+  model.null <- lm(convexity ~ 1,
+    data = rmn_irx
+  )
+  model.full <- lm(convexity ~ (.)^2,
+    data = rmn_irx
+  )
+
+  best_model <- step(model.null,
+    scope = list(upper = model.full),
+    direction = "both",
+    data = rmn_irx
+  )
+
+  print(tidy(best_model) %>%
+    select(term) %>%
+    filter(str_detect(term, fixed(":"))))
+
+  best_model
+}
+
 best_model <- find_interactions("SMX")
 
 GOH.G_mean.OD1 <- interact_plot(best_model,
   pred = GOH.G, modx = mean.OD1,
   colors = c("white", "white", "white"),
-  x.label = "Coniferyl alcohol",
+  x.label = expression(paste(bold(G)[CHOH])),
   y.label = "Convexity"
 ) +
   theme_leo() +
@@ -2747,7 +2846,7 @@ GOH.G_mean.OD1$layers[[1]]$aes_params$size <- 0.4
 mean.OD1_total_lignin <- interact_plot(best_model,
   pred = mean.OD1, modx = total_lignin,
   colors = c("white", "white", "white"),
-  x.label = "Wiesner stain",
+  x.label = expression(paste("Total "*bold(G)[CHO])),
   y.label = "Convexity"
 ) +
   theme_leo() +
@@ -2811,7 +2910,7 @@ find_interactions <- function(x) {
       # GOH_rel,
       GOH.G,
       S_rel,
-      # GCHO.lig,
+      # GCHO_rel,
       # S.G
     ) %>%
     drop_na()
@@ -2862,7 +2961,7 @@ plot_interactions <- function(ct, t1, t2) {
       # GOH_rel,
       GOH.G,
       S_rel,
-      # GCHO.lig,
+      # GCHO_rel,
       # S.G
     ) %>%
     drop_na()

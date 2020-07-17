@@ -1,4 +1,5 @@
 library(tidyverse)
+library(tukeygrps)
 
 rmn_data_corrected <- read_csv("rmn_data_corrected.csv", col_types = "ccccnnn") %>%
   mutate(
@@ -237,12 +238,20 @@ wiesner_ratio <- wiesner.data.pre %>%
   left_join(rmn_pre) %>%
   filter(cell.type %in% c("PMX", "PX", "SMX", "IF")) %>%
   group_by(genotype, cell.type, replicate) %>%
-  mutate(ratio = GCHO_tot / mean.OD1) %>%
-  group_by(genotype, cell.type) %>%
-  summarise(mean_ratio = mean(ratio, na.rm = T),
-            sd_ratio = sd(ratio, na.rm = T))
+  mutate(ratio = GCHO_tot / mean.OD1) 
+# %>%
+#   group_by(genotype, cell.type) %>%
+#   summarise(mean_ratio = mean(ratio, na.rm = T),
+#             sd_ratio = sd(ratio, na.rm = T))
 
 write_csv(wiesner_ratio, path = "wiesner_ratio.csv")
+
+wiesner_stats <- wiesner_ratio %>%
+  unite("geno_cell", genotype, cell.type) %>%
+  letter_groups(.,
+                               ratio,
+                               geno_cell,
+                               "tukey")
 
 
 #### spectra ####
