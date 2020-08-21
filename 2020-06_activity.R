@@ -161,7 +161,7 @@ data <- data %>%
   group_by(genotype, replicate, substrate, treatment, date, cell.type) %>%
   mutate(value = case_when(
     variable == "absorbance" ~
-    value - value[variable == "absorbance" & time == 20],
+    value - value[variable == "absorbance" & time == 60],
     TRUE ~ value
   ))
 

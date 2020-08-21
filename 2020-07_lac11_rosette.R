@@ -105,10 +105,6 @@ twocol <- 18 / 2.54
 onehalfcol <- 14 / 2.54
 onecol <- 9 / 2.54
 
-# test <- fromJSON("/home/leonard/Documents/Uni/PhD/Phenotyping/2020-05_lac11_segregating/34_3.jpg_13.json")
-# test$observations$hue_circular_mean
-# test$observations$area$value
-
 #### read-in function ####
 read_plus <- function(flnm) {
   json <- fromJSON(flnm)
