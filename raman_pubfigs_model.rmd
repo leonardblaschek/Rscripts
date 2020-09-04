@@ -233,6 +233,27 @@ rmn_models <- rmn_models %>%
 
 ```
 
+#### Export model spectra
+```{r model compounds, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
+
+rmn_model_export_raw <- rmn_models %>%
+  select(state:intensity) %>%
+  pivot_wider(id_cols = c(state:gamma), names_from = wavenumber, values_from = intensity) %>%
+  select(order(as.numeric(as.character(colnames(.))))) %>%
+  select(state:gamma, everything())
+
+rmn_model_export_scaled <- rmn_models %>%
+  select(state:wavenumber, scaled) %>%
+  pivot_wider(id_cols = c(state:gamma), names_from = wavenumber, values_from = scaled) %>%
+  select(order(as.numeric(as.character(colnames(.))))) %>%
+  select(state:gamma, everything())
+  
+
+write_excel_csv(rmn_model_export_raw, "model_spectra_raw.csv")
+write_excel_csv(rmn_model_export_scaled, "model_spectra_scaled.csv")
+```
+
+
 #### Plot figure 1
 
 ```{r model compounds plot, fig.showtext = TRUE, out.width = '100%', warning = FALSE, message = FALSE, echo = FALSE}
@@ -3189,7 +3210,7 @@ rmn_fluo_auc <- rmn_models_fluo %>%
   mutate(
     wavenumber = round(as.numeric(wavenumber), digits = 0),
   ) %>%
-  left_join(read_csv("/home/leonard/Dropbox/Raman manuscript/R data/monomer_params.csv")) %>%
+  left_join(read_csv("/home/leonard/Documents/Uni/PhD/Raman manuscript/R data/monomer_params.csv")) %>%
   filter(wavenumber %in% c(300:1700)) %>%
   group_by(filename) %>%
   mutate(fluo_AUC = MESS::auc(wavenumber, intensity)) %>%
