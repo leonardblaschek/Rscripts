@@ -4988,3 +4988,56 @@ coef_tab <- kable(coefs,
 readr::write_file(coef_tab, "sem_coef_tab.txt")
 ```
 
+### Drought experiment conditions
+
+```{r} 
+transpiration <- read_csv(
+  "/home/leonard/Documents/Uni/PhD/IRX/Drought/evapotranspiration.csv"
+) %>%
+  pivot_longer(-c(medium, time), names_to = "plant", values_to = "transp_rate") %>%
+  mutate(
+    genotype = unlist(str_extract_all(plant, "[:alpha:]+")),
+    genotype = ordered(recode(genotype, "CAD" = "cad4x5"),
+      levels = c("WT", "cad4x5")
+    ),
+    replicate = unlist(str_extract_all(plant, "[:digit:]+")),
+    medium = ordered(medium,
+      levels = c("Water", "10% PEG", "20% PEG")
+    ),
+    transp_rate = transp_rate * 1000
+  ) %>%
+  select(-plant)
+
+conditions <- read_csv(
+  "/home/leonard/Documents/Uni/PhD/IRX/Drought/chamber_conditions.csv"
+  ) %>%
+  fill(everything()) %>%
+  group_by(genotype) %>%
+  mutate(genotype = ordered(recode(genotype, "CAD" = "cad4x5"),
+      levels = c("WT", "cad4x5")
+    ),
+    time = row_number()) 
+
+transp_cond <- transpiration %>%
+  left_join(conditions)
+
+transp <- ggplot(transp_cond,
+                 aes(x = time,
+                     y = transp_rate,
+                     colour = genotype)) +
+  geom_line(aes(group = interaction(genotype, replicate)),
+            size = 0.1,
+            alpha = 0.25) +
+  geom_smooth(aes(group = genotype)) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
+  facet_wrap(~ medium,
+             ncol = 1)
+
+pdf("transpiration_supplement.pdf", width = twocol, height = onecol)
+transp
+dev.off()
+
+```
+
