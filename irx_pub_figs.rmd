@@ -4166,6 +4166,29 @@ rmn_pop_test
 dev.off()
 ```
 
+#### Export scaled spectra
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+export_raw <- rmn_pop_scaled %>%
+  select(-c(AUC, scaled, scaled_lig)) %>%
+  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
+  pivot_wider(id_cols = c(genotype, replicate, technical, TE), 
+              names_from = wavenumber,
+              values_from = corrected.intensity) %>%
+  select(genotype, replicate, technical, TE, order(as.numeric(colnames(.))))
+
+export_scaled <- rmn_pop_scaled %>%
+  select(-c(AUC, corrected.intensity, scaled_lig)) %>%
+  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
+  pivot_wider(id_cols = c(genotype, replicate, technical, TE), 
+              names_from = wavenumber,
+              values_from = scaled) %>%
+  select(genotype, replicate, technical, TE, order(as.numeric(colnames(.))))
+
+write_excel_csv(export_raw, "soil_poplar_raw.csv")
+write_excel_csv(export_scaled, "soil_poplar_scaled.csv")
+```
+
 #### Load shape data
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
@@ -5006,37 +5029,136 @@ transpiration <- read_csv(
     ),
     transp_rate = transp_rate * 1000
   ) %>%
-  select(-plant)
+  select(-plant) %>%
+  group_by(medium, genotype, time) %>%
+  mutate(mean_transp = mean(transp_rate))
 
 conditions <- read_csv(
   "/home/leonard/Documents/Uni/PhD/IRX/Drought/chamber_conditions.csv"
-  ) %>%
+) %>%
   fill(everything()) %>%
   group_by(genotype) %>%
-  mutate(genotype = ordered(recode(genotype, "CAD" = "cad4x5"),
+  mutate(
+    genotype = ordered(recode(genotype, "CAD" = "cad4x5"),
       levels = c("WT", "cad4x5")
     ),
-    time = row_number()) 
+    time = row_number()
+  ) %>%
+  pivot_longer(-c(time, genotype))
 
-transp_cond <- transpiration %>%
-  left_join(conditions)
 
-transp <- ggplot(transp_cond,
-                 aes(x = time,
-                     y = transp_rate,
-                     colour = genotype)) +
-  geom_line(aes(group = interaction(genotype, replicate)),
-            size = 0.1,
-            alpha = 0.25) +
-  geom_smooth(aes(group = genotype)) +
+transp <- ggplot(
+  transpiration,
+  aes(
+    x = time,
+    y = transp_rate,
+    linetype = medium,
+    colour = genotype
+  )
+) +
+  geom_line(aes(group = interaction(medium, replicate)),
+    size = 0.1,
+    alpha = 0.25
+  ) +
+  # geom_line(aes(y = mean_transp)) +
+  geom_smooth(aes(
+    group = medium,
+    # fill = medium
+  ),
+  size = 0.2,
+  se = T
+  ) +
+  labs(
+    y = "Evapotranspiration [mg min<sup>-1</sup>]",
+    x = "Time [min]"
+  ) +
+  expand_limits(x = 0) +
   theme_leo() +
-  theme(legend.position = "bottom") +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    axis.title.y = ggtext::element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      vjust = 0
+    ),
+    strip.text = element_blank()
+  ) +
+  scale_x_continuous(breaks = c(0, 5, 10, 15, 20)) +
+  scale_colour_brewer(palette = "Set2") +
+  # scale_fill_brewer(palette = "Set2") +
   scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
-  facet_wrap(~ medium,
-             ncol = 1)
+  # scale_colour_grey(start = 0.9, end = 0.1) +
+  guides(colour = "none",
+         linetype = guide_legend(override.aes = list(colour = "black",
+                                                     fill = "white",
+                                                     size = 0.4))) +
+  facet_wrap(~genotype,
+    ncol = 2
+  )
 
-pdf("transpiration_supplement.pdf", width = twocol, height = onecol)
-transp
+hum <- ggplot(conditions %>% filter(name == "humidity"),
+                aes(x = time,
+                    y = value,
+                    colour = genotype)) +
+  geom_line(size = 0.2) +
+  expand_limits(y = 0) +
+  theme_leo() +
+  labs(y = "Humidity [%]") +
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = ggtext::element_textbox_simple(
+          orientation = "left-rotated",
+          halign = 0.5,
+          vjust = 0
+          )) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
+  facet_wrap(~genotype, ncol = 2)
+
+ill <- ggplot(conditions %>% filter(name == "illumination"),
+                aes(x = time,
+                    y = value,
+                    colour = genotype)) +
+  geom_line(size = 0.2) +
+  expand_limits(y = 0) +
+  theme_leo() +
+  labs(y = "Illumination [cm<sup>-2</sup> s<sup>-1</sup>]") +
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = ggtext::element_textbox_simple(
+          orientation = "left-rotated",
+          halign = 0.5,
+          vjust = 0
+          ),
+        strip.text = element_blank()) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
+  facet_wrap(~genotype, ncol = 2)
+
+temp <- ggplot(conditions %>% filter(name == "temperature"),
+                aes(x = time,
+                    y = value,
+                    colour = genotype)) +
+  geom_line(size = 0.2) +
+  expand_limits(y = 0) +
+  theme_leo() +
+  labs(y = "Temperature [°C]") +
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = ggtext::element_textbox_simple(
+          orientation = "left-rotated",
+          halign = 0.5,
+          vjust = 0
+          ),
+        strip.text = element_blank()) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
+  facet_wrap(~genotype, ncol = 2)
+
+
+pdf("transpiration_supplement.pdf", width = twocol, height = onecol * 0.9)
+hum / ill / temp / transp + plot_layout(heights = c(0.5, 0.5, 0.5 , 1))
 dev.off()
 
 ```
