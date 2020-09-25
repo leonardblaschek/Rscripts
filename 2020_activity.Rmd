@@ -1,0 +1,716 @@
+---
+title: "Laccase activity"
+author: "Leonard Blaschek"
+date: "16/09/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(showtext)
+library(colorspace)
+library(ggrepel)
+library(broom)
+library(ggbeeswarm)
+
+pal_ostwald_cont <- c(
+  "#155DA7",
+  "#0A75B9",
+  # "#0C89C9",
+  "#FED32F",
+  # "#F8A63A",
+  "#EF663A",
+  "#ED4137"
+)
+
+pal_ostwald_disc <- c(
+  "#275d95",
+  "#e8c245",
+  "#d25952"
+)
+
+pal_ostwald_disc_long <- c(
+  "#8fab1d",
+  "#2d7d73",
+  "#1d566f",
+  "#275d95",
+  "#e8c245",
+  "#d25952"
+)
+
+pal_flame <- c(
+  "#1F265D",
+  "#203F8F",
+  "#404678",
+  "#897B88",
+  "#E7BBA2",
+  "#FFEDC3",
+  "#FEFEFE"
+)
+
+pal_flame_disc <- c(
+  "#ffedc3",
+  "#897b88",
+  "#1f265d"
+)
+
+# import Helvetica
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+showtext_auto()
+
+# generating plot theme
+theme_leo <- function(base_size = 6,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.125,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        size = 6,
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        size = 6,
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.title = element_text(
+        colour = "black",
+        size = 6
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      # panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      axis.line = element_line(size = 0.2),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = 6),
+      legend.key.height = unit(4, "mm"),
+      plot.title = element_text(
+        size = 6,
+        hjust = 0
+      ),
+      complete = TRUE
+    )
+}
+
+ggtext_size <- 6 / (14 / 5)
+twocol <- 18 / 2.54
+onehalfcol <- 14 / 2.54
+onecol <- 9 / 2.54
+```
+
+## WT inactivation
+
+```{r}
+
+data <- read_csv("/data/PhD/Laccase_activity/2020-09_activity/DAF/2020-09-18_inactivation/2020-09-18_inactivation.csv",
+) %>%
+  mutate(time = slice * interval) %>%
+  select(-c(slice, interval)) %>%
+  group_by(time, genotype, replicate, technical, substrate, treatment, pH, date, cell_type) %>%
+  mutate(point = row_number())
+
+#### subtract water column and background ####
+data <- data %>%
+  group_by(time, genotype, replicate, substrate, technical, treatment, pH, date) %>%
+  mutate(
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
+    ) %>%
+  group_by(genotype, replicate, substrate, technical, treatment, pH, date, cell_type, point) %>%
+  mutate(
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == 100]
+    )
+
+nested_data <- data %>%
+  filter(time >= 100 & time <= 230) %>%
+  select(-mean_absorbance, -corrected_absorbance) %>%
+  nest(time, zeroed_absorbance, median_hue) %>%
+  mutate(
+    fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  filter(term == "time")
+
+raw_absorbance <- ggplot(
+  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = treatment
+  )
+  ) +
+  annotate("rect",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = 100,
+           xmax = 230,
+           fill = "grey95") +
+  geom_line(aes(group = interaction(point, treatment, technical)),
+            alpha = 0.1,
+            size = 0.2) +
+  geom_smooth(size = 0.2,
+              se = F) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  # coord_cartesian(xlim = c(60, 100)) +
+  facet_wrap(~cell_type) 
+
+activity_grid <- ggplot(
+  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = treatment
+  )
+  ) +
+  annotate("rect",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = 100,
+           xmax = 230,
+           fill = "grey95") +
+  geom_line(aes(group = interaction(treatment, point, technical)),
+            alpha = 0.1,
+            size = 0.2) +
+  geom_smooth(size = 0.2,
+              se = F) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  # coord_cartesian(ylim = c(0, 0.2)) +
+  facet_wrap(~cell_type) 
+
+slopes <- ggplot(nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+                 aes(x = treatment,
+                     y = estimate,
+                     colour = treatment,
+                     shape = as.character(technical))) +
+  geom_quasirandom(aes(group = treatment),
+                   size = 1,
+                   dodge.width = 0.5,
+                   alpha = 0.5) +
+  geom_violin(
+    aes(group = interaction(treatment, genotype)),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.5),
+    size = 0.2,
+    scale = "width") +
+  # scale_colour_manual(values = c("#275d95")) +
+  # scale_x_continuous(breaks = c(4, 5, 6, 7)) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  facet_wrap(~cell_type, ncol = 4)
+
+pdf("WT_inactivation.pdf", width = twocol, height = onecol * 0.5)
+raw_absorbance
+activity_grid
+slopes
+dev.off()
+
+```
+
+### Extension
+
+After overnight incubation, added another 2 µl of 7 mM DAF stock to each well and took a picture every 10 min for 30 cycles.
+
+```{r}
+
+data <- read_csv("/data/PhD/Laccase_activity/2020-09_activity/DAF/2020-09-18_inactivation/2020-09-18_inactivation_extended.csv",
+) %>%
+  mutate(time = slice * interval) %>%
+  select(-c(slice, interval)) %>%
+  group_by(time, genotype, replicate, technical, substrate, treatment, pH, date, cell_type) %>%
+  mutate(point = row_number())
+
+#### subtract water column and background ####
+data <- data %>%
+  group_by(time, genotype, replicate, substrate, technical, treatment, pH, date) %>%
+  mutate(
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
+    ) %>%
+  group_by(genotype, replicate, substrate, technical, treatment, pH, date, cell_type, point) %>%
+  mutate(
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == 100]
+    )
+
+nested_data <- data %>%
+  filter(time >= 100 & time <= 230) %>%
+  select(-mean_absorbance, -corrected_absorbance) %>%
+  nest(time, zeroed_absorbance, median_hue) %>%
+  mutate(
+    fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  filter(term == "time")
+
+raw_absorbance <- ggplot(
+  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = treatment
+  )
+  ) +
+  annotate("rect",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = 100,
+           xmax = 230,
+           fill = "grey95") +
+  geom_line(aes(group = interaction(point, treatment)),
+            alpha = 0.1,
+            size = 0.2) +
+  geom_smooth(size = 0.2,
+              se = F) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  # coord_cartesian(xlim = c(60, 100)) +
+  facet_wrap(~cell_type) 
+
+activity_grid <- ggplot(
+  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = treatment
+  )
+  ) +
+  annotate("rect",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = 100,
+           xmax = 230,
+           fill = "grey95") +
+  geom_line(aes(group = interaction(treatment, point)),
+            alpha = 0.1,
+            size = 0.2) +
+  geom_smooth(size = 0.2,
+              se = F) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  # coord_cartesian(ylim = c(0, 0.2)) +
+  facet_wrap(~cell_type) 
+
+slopes <- ggplot(nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+                 aes(x = treatment,
+                     y = estimate,
+                     colour = treatment)) +
+  geom_quasirandom(dodge.width = 0.5,
+                   alpha = 0.5) +
+  geom_violin(
+    aes(group = interaction(treatment, genotype)),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.5),
+    size = 0.2,
+    scale = "width") +
+  # scale_colour_manual(values = c("#275d95")) +
+  # scale_x_continuous(breaks = c(4, 5, 6, 7)) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  facet_wrap(~cell_type, ncol = 4)
+
+pdf("WT_inactivation_extended.pdf", width = twocol, height = onecol * 0.5)
+raw_absorbance
+activity_grid
+slopes
+dev.off()
+
+```
+
+## Mutants on DAB at pH 5
+
+```{r}
+data <- read_csv("/data/PhD/Laccase_activity/2020-06_activity/2020-06_DAB_activity.csv",
+  skip = 1,
+) %>%
+  mutate(time = slice * interval) %>%
+  select(-c(slice, interval)) %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  mutate(point = row_number())
+
+#### subtract water column and background ####
+data <- data %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
+  mutate(
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
+    ) %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
+  mutate(
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == 100]
+    )
+
+nested_data <- data %>%
+  filter(time >= 100 & time <= 300) %>%
+  select(-mean_absorbance, -corrected_absorbance) %>%
+  nest(time, zeroed_absorbance, median_hue) %>%
+  mutate(
+    fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  filter(term == "time")
+
+activity_grid <- ggplot(
+  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = genotype
+  )
+  ) +
+  annotate("rect",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = 100,
+           xmax = 240,
+           fill = "grey95") +
+  geom_line(aes(group = interaction(genotype, point)),
+            alpha = 0.1,
+            size = 0.2) +
+  geom_smooth(size = 0.2,
+              se = F) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  # coord_cartesian(ylim = c(0, 0.2)) +
+  facet_grid(treatment~cell_type) 
+
+slopes <- ggplot(nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") & treatment == "none"),
+                 aes(x = genotype,
+                     y = estimate,
+                     colour = genotype)) +
+  geom_quasirandom(dodge.width = 0.5,
+                   alpha = 0.5) +
+  geom_violin(
+    aes(group = interaction(treatment, genotype)),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.5),
+    size = 0.2,
+    scale = "width") +
+  # scale_colour_manual(values = c("#275d95")) +
+  # scale_x_continuous(breaks = c(4, 5, 6, 7)) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  facet_wrap(~cell_type, ncol = 4)
+
+pdf("DAB_pH5.pdf", width = twocol, height = onecol * 0.5)
+activity_grid
+slopes
+dev.off()
+```
+
+
+## pH behaviour of the WT on DAF
+
+```{r}
+data <- read_csv(
+  "/data/PhD/Laccase_activity/2020-09_activity/2020-09_lac_activity.csv",
+  comment = '"#'
+) %>%
+  mutate(time = slice * interval) %>%
+  select(-c(slice, interval)) %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  mutate(point = row_number())
+
+#### subtract water column and background ####
+data <- data %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
+  mutate(
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
+    ) %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
+  mutate(
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == 100]
+    )
+
+nested_data <- data %>%
+  filter(time >= 100 & time <= 150) %>%
+  select(-mean_absorbance, -corrected_absorbance) %>%
+  nest(time, zeroed_absorbance, median_hue) %>%
+  mutate(
+    fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  filter(term == "time")
+
+avg_slopes <- nested_data %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  summarise(mean_slope = mean(estimate))
+
+raw_absorbance <- ggplot(
+  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+                    date == "2020-09-14"),
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = cell_type
+  )
+  ) +
+  annotate("rect",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = 100,
+           xmax = 150,
+           fill = "grey95") +
+  geom_line(aes(group = interaction(point, cell_type)),
+            alpha = 0.1,
+            size = 0.2) +
+  geom_smooth(size = 0.2,
+              se = F) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  # coord_cartesian(xlim = c(60, 100)) +
+  facet_grid(treatment~pH) 
+  
+
+activity_grid <- ggplot(
+  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+                    date == "2020-09-14"),
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = cell_type
+  )
+  ) +
+  annotate("rect",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = 100,
+           xmax = 150,
+           fill = "grey95") +
+  geom_smooth(size = 0.2,
+              se = F) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  # coord_cartesian(xlim = c(60, 100)) +
+  facet_grid(treatment ~ pH) 
+  
+
+slopes <- ggplot(nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")&
+                    date == "2020-09-14"),
+                 aes(x = pH,
+                     y = estimate,
+                     colour = treatment)) +
+  geom_quasirandom(dodge.width = 0.5,
+                   alpha = 0.5) +
+  geom_violin(
+    aes(group = interaction(treatment, pH)),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.5),
+    size = 0.2,
+    scale = "width") +
+  scale_colour_manual(values = c("grey80", "#275d95")) +
+  scale_x_continuous(breaks = c(4, 5, 6, 7)) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_wrap(~cell_type, ncol = 4)
+
+pdf("WT_DAF_pH.pdf", width = twocol, height = onecol * 0.5)
+raw_absorbance
+activity_grid
+slopes
+dev.off()
+```
+
+## Mutants on DAF at pH 5
+
+```{r}
+# start and stop of the time-window for linear regressions
+lm_start <- 100
+lm_stop <- 300
+
+
+data <- read_csv(
+  "/data/PhD/Laccase_activity/2020-09_activity/2020-09_lac_activity.csv",
+  comment = '"#'
+) %>%
+  mutate(time = slice * interval) %>%
+  select(-c(slice, interval)) %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  mutate(
+    point = row_number(),
+    replicate = as.character(replicate)
+  )
+
+#### subtract water column and background ####
+data <- data %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
+  mutate(
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
+  ) %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
+  mutate(
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == 100]
+  )
+
+nested_data <- data %>%
+  filter(time >= lm_start & time <= lm_stop) %>%
+  select(-mean_absorbance, -corrected_absorbance) %>%
+  nest(data = c(time, zeroed_absorbance, median_hue)) %>%
+  mutate(
+    fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "time")
+
+data <- data %>%
+  left_join(select(nested_data, c(genotype:point, adj.r.squared)))
+
+avg_slopes <- nested_data %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  summarise(mean_slope = mean(estimate))
+
+data <- data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX", "LP") &
+  pH == 5 &
+  treatment == "none" &
+  adj.r.squared > 0.75)
+nested_data <- nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX", "LP") &
+  pH == 5 &
+  treatment == "none" &
+  adj.r.squared > 0.75)
+
+activity_grid <- ggplot(
+  data,
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = genotype
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = lm_start,
+    xmax = lm_stop,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(genotype, replicate, point, date)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  geom_smooth(
+    data = filter(data, time >= lm_start & time <= lm_stop),
+    size = 0.2,
+    se = F,
+    method = "lm",
+    fullrange = T
+  ) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  # coord_cartesian(xlim = c(60, 100)) +
+  facet_wrap(~cell_type, ncol = 5)
+
+raw_absorbance <- ggplot(
+  data,
+  aes(
+    x = time,
+    y = mean_absorbance,
+    colour = genotype
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = lm_start,
+    xmax = lm_stop,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(genotype, replicate, point, date)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  # geom_smooth(size = 0.2,
+  #             se = F) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  # coord_cartesian(xlim = c(60, 100)) +
+  facet_wrap(~cell_type, ncol = 5)
+
+
+slopes <- ggplot(
+  nested_data,
+  aes(
+    x = genotype,
+    y = estimate,
+    colour = genotype
+  )
+) +
+  geom_quasirandom(aes(
+    shape = replicate,
+    group = genotype
+  ),
+  dodge.width = 0.5,
+  alpha = 0.5
+  ) +
+  geom_violin(
+    aes(group = interaction(treatment, replicate, genotype)),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.5),
+    size = 0.2,
+    scale = "width"
+  ) +
+  # scale_colour_manual(values = c("#275d95")) +
+  # scale_x_continuous(breaks = c(4, 5, 6, 7)) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  facet_wrap(~cell_type, ncol = 5)
+
+pdf("DAF_pH5.pdf", width = twocol, height = onecol * 0.5)
+raw_absorbance
+activity_grid
+slopes
+dev.off()
+```

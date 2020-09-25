@@ -171,7 +171,7 @@ onecol <- 9 / 2.54
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
-eds_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/EDS/eds_data.csv",
+eds_data <- read_csv("/data/PhD/IRX/EDS/eds_data.csv",
   col_types = "ccnnn"
 )
 
@@ -299,7 +299,7 @@ dev.off()
 ## EM drying collapse
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-em_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/EM/AD_collapse.csv") %>%
+em_data <- read_csv("/data/PhD/IRX/EM/AD_collapse.csv") %>%
   pivot_longer(cols = c(PX, MX), names_to = "cell.type", values_to = "count") %>%
   mutate(
     state = ordered(state, levels = c("Fully", "Partially", "Intact")),
@@ -410,7 +410,7 @@ dev.off()
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
-afm_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/AFM/afm_PX.csv") %>%
+afm_data <- read_csv("/data/PhD/IRX/AFM/afm_PX.csv") %>%
   tidyr::fill(everything()) %>%
   mutate(days = as.character(days)) %>%
   pivot_longer(cols = c(modulus, deformation, adhesion), names_to = "variable", values_to = "value") %>%
@@ -541,7 +541,7 @@ dev.off()
 # #### import and tidy Raman data ####
 # rmn_files <-
 #   list.files(
-#     path = "/home/leonard/Documents/Uni/PhD/IRX/RAMAN/nuoendagula/",
+#     path = "/data/PhD/IRX/RAMAN/nuoendagula/",
 #     pattern = "*.txt",
 #     recursive = TRUE,
 #     full.names = TRUE
@@ -753,7 +753,7 @@ rmn_sum <- rmn_data_corrected %>%
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
-spectra_export.switch <- left_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
+spectra_export.switch <- left_join(read_tsv("/data/PhD/IRX/PMX_which_SMX.tsv",
   col_types = "cccc"
 ), rmn_data_corrected) %>%
   mutate(
@@ -762,7 +762,7 @@ spectra_export.switch <- left_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX
   )
 
 spectra_export <- rmn_data_corrected %>%
-  anti_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
+  anti_join(read_tsv("/data/PhD/IRX/PMX_which_SMX.tsv",
     col_types = "cccc"
   )) %>%
   bind_rows(rmn_irx.switch)
@@ -784,7 +784,7 @@ write_excel_csv(spectra_export_scaled, "Raman_spectra_scaled.csv")
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, warning = FALSE, eval = TRUE, echo = FALSE}
 #### import and tidy Wiesner test data ####
 wiesner.data <-
-  read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
+  read.csv("/data/Phloroglucinol/measurements_revisited.csv",
     skip = 2
   )
 
@@ -805,7 +805,7 @@ wiesner.data[251:300 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 5
   "PH"
 
 # import SMX measurements
-wiesner.data.SMX <- read.csv("file:///home/leonard/Documents/Uni/Phloroglucinol/measurements_SMX.csv",
+wiesner.data.SMX <- read.csv("file:///data/Phloroglucinol/measurements_SMX.csv",
   skip = 2
 )
 wiesner.data.SMX$replicate <- as.factor(wiesner.data.SMX$replicate)
@@ -878,18 +878,18 @@ wiesner.data.pre <- wiesner.data %>%
   select(genotype, cell.type, replicate, mean.OD1)
 
 #### import and tidy shape data of the vessels from the Raman measurements ####
-rmn_irx <- read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/raman_IRX_revisited.csv") %>%
+rmn_irx <- read.csv("file:///data/PhD/IRX/raman_IRX_revisited.csv") %>%
   select(genotype:Perim., Circ., Round, Height, Width) %>%
   filter(object == 2) %>%
   select(-object)
 
-raman.nb <- read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/raman_IRX.csv") %>%
+raman.nb <- read.csv("file:///data/PhD/IRX/raman_IRX.csv") %>%
   select(genotype:n_f)
 rmn_irx <- left_join(rmn_irx, raman.nb)
 rmn_irx$replicate <- as.character(rmn_irx$replicate)
 rmn_irx$technical <- as.character(rmn_irx$technical)
 
-raman_convex <- read.csv("/home/leonard/Documents/Uni/PhD/IRX/raman_irx_convex.csv")
+raman_convex <- read.csv("/data/PhD/IRX/raman_irx_convex.csv")
 
 raman_convex$File <-
   str_replace(raman_convex$File, fixed("fah 1"), "fah1")
@@ -934,16 +934,16 @@ rmn_irx <- left_join(rmn_irx, raman_convex)
 # write_csv(rmn_irx, "raman_irx_shape.csv")
 
 #### import and tidy plant height data ####
-raman.heights <- read.csv("file:///home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
+raman.heights <- read.csv("file:///data/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
   select(genotype, replicate, height) %>%
   mutate(genotype = recode(genotype, "col-0" = "Col-0")) %>%
   rename("Plant.height" = "height") %>%
-  rbind(read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/heights_haris.csv"))
+  rbind(read.csv("file:///data/PhD/IRX/heights_haris.csv"))
 raman.heights$replicate <- as.character(raman.heights$replicate)
 
 #### merge data frames ####
 rmn_irx <- left_join(rmn_irx, rmn_sum)
-rmn_irx.switch <- left_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
+rmn_irx.switch <- left_join(read_tsv("/data/PhD/IRX/PMX_which_SMX.tsv",
   col_types = "cccc"
 ), rmn_irx) %>%
   mutate(
@@ -951,7 +951,7 @@ rmn_irx.switch <- left_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_wh
     cell.type = "SMX"
   )
 rmn_irx <- rmn_irx %>%
-  anti_join(read_tsv("/home/leonard/Documents/Uni/PhD/IRX/PMX_which_SMX.tsv",
+  anti_join(read_tsv("/data/PhD/IRX/PMX_which_SMX.tsv",
     col_types = "cccc"
   )) %>%
   bind_rows(rmn_irx.switch)
@@ -1229,7 +1229,7 @@ dev.off()
 
 ```{r figure 3, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 irx_data <-
-  read.csv("file:///home/leonard/Documents/Uni/PhD/IRX/irx_measurements.csv", sep = "\t")
+  read.csv("file:///data/PhD/IRX/irx_measurements.csv", sep = "\t")
 # irx_data <- subset(irx_data, replicate == 1 & technical == 3)
 irx_ref <- subset(irx_data, object == "ref", select = c(1, 2, 3, 6, 7, 27))
 irx_ref$ref.y1 <- irx_ref$Y
@@ -1668,13 +1668,13 @@ summary(psem_smx)
 ### Hydration influence
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-medium_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/WT_medium.csv") %>%
+medium_data <- read_csv("/data/PhD/IRX/Bending/WT_medium.csv") %>%
   pivot_longer(cols = c(stiffness, strength), values_to = "value", names_to = "variable") %>%
   mutate(medium = ordered(medium, levels = c("Water", "Air", "Sorbitol")))
 
 bending_files <-
   list.files(
-    path = "/home/leonard/Documents/Uni/PhD/IRX/Bending/media_raw/",
+    path = "/data/PhD/IRX/Bending/media_raw/",
     pattern = "*.txt",
     recursive = TRUE,
     full.names = TRUE
@@ -1821,7 +1821,7 @@ dev.off()
 #### fah1 ####
 bending_files <-
   list.files(
-    path = "/home/leonard/Documents/Uni/PhD/IRX/Bending/fah1_raw/",
+    path = "/data/PhD/IRX/Bending/fah1_raw/",
     pattern = "*.txt",
     recursive = TRUE,
     full.names = TRUE
@@ -1918,7 +1918,7 @@ stiffness_fah1 <- lapply(bending_files, read_stiffness) %>%
 #### cad4xcad5 ####
 bending_files <-
   list.files(
-    path = "/home/leonard/Documents/Uni/PhD/IRX/Bending/cad_raw/",
+    path = "/data/PhD/IRX/Bending/cad_raw/",
     pattern = "*.txt",
     recursive = TRUE,
     full.names = TRUE
@@ -2138,7 +2138,7 @@ dev.off()
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
-heights <- read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
+heights <- read_csv("/data/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
   select(genotype, height) %>%
   filter(genotype %in% c("col-0", "fah1", "cad4xcad5")) %>%
   mutate(genotype = recode(genotype, "col-0" = "WT")) %>%
@@ -2148,7 +2148,7 @@ heights <- read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenot
     sd.height = sd(height)
   )
 
-biochem_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/bending_biochem.csv") %>%
+biochem_data <- read_csv("/data/PhD/IRX/Bending/bending_biochem.csv") %>%
   group_by(genotype) %>%
   summarise(
     mean.lig.py = mean(lignin.py),
@@ -2304,7 +2304,7 @@ biochem <- ggplot(
 WT <-
   rasterGrob(
     readPNG(
-      "/home/leonard/Documents/Uni/PhD/IRX/Bending/Images/bending_adjusted.png"
+      "/data/PhD/IRX/Bending/Images/bending_adjusted.png"
     )
   )
 
@@ -2355,7 +2355,7 @@ dev.off()
 ### Rosette area
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-rosettes <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Drought/drought_area.csv") %>%
+rosettes <- read_csv("/data/PhD/IRX/Drought/drought_area.csv") %>%
   mutate(
     image = str_remove(image, fixed(".JPG")),
     mean_hue = (mean_hue / 255) * 360
@@ -2446,7 +2446,7 @@ dev.off()
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 transpiration <- read_csv(
-  "/home/leonard/Documents/Uni/PhD/IRX/Drought/evapotranspiration.csv"
+  "/data/PhD/IRX/Drought/evapotranspiration.csv"
 ) %>%
   pivot_longer(-c(medium, time), names_to = "plant", values_to = "transp_rate") %>%
   mutate(
@@ -2561,7 +2561,7 @@ dev.off()
 ### Drought recovery
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-recovery_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Drought/recovery.csv") %>%
+recovery_data <- read_csv("/data/PhD/IRX/Drought/recovery.csv") %>%
   mutate(
     state = ordered(state, levels = rev(c("Recovered", "Partly recovered", "Dead"))),
     medium = ordered(medium, levels = c("Water", "10% PEG", "20% PEG")),
@@ -3333,7 +3333,7 @@ dev.off()
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
 
-pop_irx <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Poplar/poplar_irx.csv")
+pop_irx <- read_csv("/data/PhD/IRX/Poplar/poplar_irx.csv")
 
 #### create reference at the height of the cambium for distance calculation ####
 pop_irx_ref <- pop_irx %>%
@@ -4007,7 +4007,7 @@ dev.off()
 #### import and tidy poplar Raman data ####
 rmn_files <-
   list.files(
-    path = "/home/leonard/Documents/Uni/PhD/IRX/Poplar/2020-08_soil_poplar",
+    path = "/data/PhD/IRX/Poplar/2020-08_soil_poplar",
     pattern = "TE(.*).txt",
     recursive = TRUE,
     full.names = TRUE
@@ -4023,7 +4023,7 @@ read_plus <- function(flnm) {
     mutate(
       filename = str_remove(
         flnm,
-        fixed("/home/leonard/Documents/Uni/PhD/IRX/Poplar/2020-08_soil_poplar/")
+        fixed("/data/PhD/IRX/Poplar/2020-08_soil_poplar/")
       )
     ) %>%
     separate(filename, into = c("genotype", "replicate", "TE"), sep = "([/-])") %>%
@@ -4101,8 +4101,9 @@ rmn_pop_sum <- rmn_pop_scaled %>%
     "S_rel" = scaled_lig[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "S_tot" = scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "cellulose" = 
-      scaled[abs(wavenumber - 1099) == min(abs(wavenumber - 1099))][1] +
-      scaled[abs(wavenumber - 381) == min(abs(wavenumber - 381))][1],
+      scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1] +
+      scaled[abs(wavenumber - 381) == min(abs(wavenumber - 381))][1] +
+      scaled[abs(wavenumber - 1120) == min(abs(wavenumber - 1120))][1],
     "lig.cellu" = total_lignin / cellulose,
     "G.cellu" = G_tot / cellulose,
     "S.G" = scaled_lig[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1] /
@@ -4118,42 +4119,46 @@ rmn_pop_test <- ggplot(rmn_pop_scaled,
        aes(x = wavenumber,
            y = scaled)) +
   scale_x_continuous(trans = "reverse") +
+  geom_vline(xintercept = c(1334, 1120, 1095, 381)) +
   # geom_line(data = filter(rmn_pop_scaled, genotype == "C4H"),
   #           aes(group = interaction(genotype, replicate, technical, TE),
   #               colour = replicate),
   #           alpha = 0.25,
   #           size = 0.1) +
-  geom_line(aes(group = interaction(genotype, replicate, technical, TE),
-                colour = genotype),
-            alpha = 0.05,
-            size = 0.1) +
+  # geom_line(aes(group = interaction(genotype, replicate, technical, TE),
+  #               colour = genotype),
+  #           alpha = 0.05,
+  #           size = 0.1) +
   geom_line(data = data.frame(
     spline(
       rmn_pop_avg$wavenumber[rmn_pop_avg$genotype == "T89"],
       rmn_pop_avg$mean[rmn_pop_avg$genotype == "T89"],
-      n = 750)
+      n = 1500)
     ),
     aes(x = x,
         y = y),
-    colour = pal_ostwald_disc[1]) +
+    colour = pal_ostwald_disc[1], 
+    alpha = 0.75) +
   geom_line(data = data.frame(
     spline(
       rmn_pop_avg$wavenumber[rmn_pop_avg$genotype == "CCR1"],
       rmn_pop_avg$mean[rmn_pop_avg$genotype == "CCR1"],
-      n = 750)
+      n = 1500)
     ),
     aes(x = x,
         y = y),
-    colour = pal_ostwald_disc[2]) +
+    colour = pal_ostwald_disc[2], 
+    alpha = 0.75) +
   geom_line(data = data.frame(
     spline(
       rmn_pop_avg$wavenumber[rmn_pop_avg$genotype == "C4H"],
       rmn_pop_avg$mean[rmn_pop_avg$genotype == "C4H"],
-      n = 750)
+      n = 1500)
     ),
     aes(x = x,
         y = y),
-    colour = pal_ostwald_disc[3]) +
+    colour = pal_ostwald_disc[3], 
+    alpha = 0.75) +
   scale_colour_manual(values = pal_ostwald_disc[c(3,2,1)]) +
   theme_leo() +
   theme(legend.position = "bottom",
@@ -4194,7 +4199,7 @@ write_excel_csv(export_scaled, "soil_poplar_scaled.csv")
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
 pop_irx <- read_csv(
-  "/home/leonard/Documents/Uni/PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_coords.csv"
+  "/data/PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_coords.csv"
   )
 
 #### create reference at the height of the cambium for distance calculation ####
@@ -4254,20 +4259,21 @@ pop_irx$Distance <-
   )
 
 celltypes <- read_csv(
-  "/home/leonard/Documents/Uni/PhD/IRX/Poplar/2020-08_soil_poplar/poplar_cell_types.csv",
-  col_types = "ccccc")
+  "/data/PhD/IRX/Poplar/2020-08_soil_poplar/poplar_cell_types.csv",
+  col_types = "cccccc")
 
 rmn_pop_data <- rmn_pop_sum %>%
   left_join(pop_irx) %>%
   left_join(celltypes) %>%
-  nest(point, x, y)
+  nest(point, x, y) %>%
+  mutate(genotype = recode(genotype, "T89" = "WT"),
+         genotype = ordered(genotype, levels = c("WT", "CCR1", "C4H")))
 
 ```
 
 #### Scatter plots
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-
 
 rmn_lignin_dist <- rmn_pop_data %>%
   # filter(genotype == "T89" &
@@ -4298,22 +4304,27 @@ regressions <- rmn_lignin_dist %>%
   filter(cell_type == "SV") %>%
   select(-replicate, -technical) %>%
   nest(data = c(TE, Distance, value)) %>%
+  group_by(variable) %>%
+  mutate(max = max(map_dbl(data, ~ max(.x$value))),
+         min = max(map_dbl(data, ~ min(.x$value)))) %>%
   group_by(genotype, variable) %>%
   mutate(
     fit = map(data, ~ lm(value ~ Distance, data = .x)),
     tidied = map(fit, glance),
-    Distance = map_dbl(data, ~ max(.x$Distance)),
-    value = map_dbl(data, ~ max(.x$value)),
-    min = map_dbl(data, ~ min(.x$value))
+    Distance = map_dbl(data, ~ max(.x$Distance))
   ) %>%
   unnest(tidied) %>%
   select(-data, -fit) %>%
+  mutate(face = case_when(p.value > 0.05 ~ "plain",
+                          TRUE ~ "bold")) %>%
   group_by(variable) %>%
   mutate(
     Distance = max(Distance),
+    spacer = max - min,
     value = case_when(
-      genotype == "T89" ~ max(value),
-      TRUE ~ max(value) - (0.1 * (max(value) - min))
+      genotype == "WT" ~ max + (0.2 * spacer),
+      genotype == "CCR1" ~ max + (0.1 * spacer),
+      genotype == "C4H" ~ max
     )
   )
 
@@ -4327,9 +4338,13 @@ dist_lig <- ggplot(
     # fill = replicate
   )
 ) +
-  geom_point(shape = 16,
-             alpha = 0.5) +
+  geom_point(
+    # aes(shape = replicate),
+    shape = 16,
+    alpha = 0.5
+    ) +
   geom_smooth(
+    size = 0.5,
     method = "lm",
     se = F
   ) +
@@ -4349,7 +4364,8 @@ dist_lig <- ggplot(
                  ", <i>P</i> = ",
                  format(p.value, scientific = TRUE, digits = 2)
                  ),
-        colour = genotype
+        colour = genotype,
+        fontface = face
         )
   ) +
   # ggrepel::geom_text_repel(aes(label = TE)) +
@@ -4358,7 +4374,7 @@ dist_lig <- ggplot(
   labs(x = "Distance [px]") +
   coord_cartesian(clip = "off") +
   scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
-  scale_colour_manual(values = pal_ostwald_disc[c(3, 1)]) +
+  scale_colour_manual(values = pal_ostwald_disc) +
   facet_wrap(vars(variable),
              scales = "free_y",
              ncol = 3)
@@ -4373,17 +4389,13 @@ dev.off()
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
-p_values <- rmn_pop_data %>%
-  group_by(cell_type) %>%
-  summarise(p_value = broom::tidy(
-      t.test(Solidity[genotype == "T89"], Solidity[genotype == "C4H"])
-    )[["p.value"]]) %>%
-  mutate(
-    p_value = format(p_value, scientific = TRUE, digits = 2),
-    # p_value = round(p_value, digits = 3),
-         genotype = "T89",
-         Solidity = 1
-    )
+letters <- letter_groups(rmn_pop_data,
+                         Solidity,
+                         genotype,
+                         "tukey",
+                         cell_type,
+                         print_position = "below"
+                         )
 
 convexity_poplar <- ggplot(rmn_pop_data,
        aes(x = genotype,
@@ -4412,21 +4424,13 @@ convexity_poplar <- ggplot(rmn_pop_data,
     scale = "width"
     ) +
     geom_text(
-      data = p_values,
-      aes(
-        label = paste0("P=", p_value),
-        y = 0.9,
-        x = 1.5,
-        vjust = 0,
-        fill = NA
-      ),
+      data = letters,
+      aes(label = Letters),
       size = ggtext_size,
-      family = "Helvetica",
-      lineheight = 0.75,
-      position = position_dodge(width = 0.6)
+      family = "Helvetica"
     ) +
     # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
-    scale_fill_manual(values = pal_ostwald_disc[c(3, 1)]) +
+    scale_fill_manual(values = pal_ostwald_disc) +
     # scale_fill_grey(start = 0.9, end = 0.3) +
     # expand_limits(y = 0) +
     # scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
@@ -4443,6 +4447,93 @@ convexity_poplar <- ggplot(rmn_pop_data,
 pdf("poplar_convexity.pdf", width = onecol * 0.5, height = onecol * 0.5)
 convexity_poplar
 dev.off()
+```
+
+#### Model otimisation
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+
+psem_data_pop <- rmn_pop_data %>%
+  ungroup() %>%
+  filter(cell_type == "SV") %>%
+  select(
+    Solidity,
+    n_v,
+    Perim.,
+    # cellulose,
+    total_lignin,
+    # G_rel,
+    S_rel,
+    GOH_rel,
+    GCHO_rel,
+    lig.cellu,
+    Distance,
+  ) %>%
+  drop_na()
+
+# Fit the full model 
+full_model <- lm(Solidity ~., data = psem_data_pop)
+# Stepwise regression model
+step_model <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+summary(step_model)
+
+
+```
+
+#### SEM 
+
+```{r}
+
+psem_data_pop <- rmn_pop_data %>%
+  filter(cell_type == "SV") %>%
+  select(-data, -Length) %>%
+  drop_na()
+
+psem_pop <- psem(
+  lm(Circ. ~
+  # n_v +
+    Solidity,
+  data = psem_data_pop
+  ),
+  lm(convexity ~
+  # n_v +
+    # n_f +
+    # mean.OD1 +
+    # Perim. +
+    # S.G +
+    # G_tot +
+    # GOH_rel +
+    # GOH.G +
+    # G_rel +
+    # GOH_tot +
+    S_rel +
+    # S_tot +
+    GCHO_rel +
+    # total_lignin:mean.OD1 +
+    total_lignin,
+  data = filter(drop_na(rmn_irx), cell.type == "PMX")
+  ),
+  data = filter(drop_na(rmn_irx), cell.type == "PMX")
+)
+ind_claims <- ind_claims %>%
+  bind_rows(summary(psem_pmx)[["dTable"]][, c(1, 4, 5)] %>%
+    mutate(
+      model = "PMX",
+      species = "Arabidopsis",
+      fishC = summary(psem_pmx)[["Cstat"]][["Fisher.C"]],
+      fishP = summary(psem_pmx)[["Cstat"]][["P.Value"]]
+    ))
+
+coefs <- coefs %>%
+  bind_rows(summary(psem_pmx)[["coefficients"]][, c(1:8)] %>%
+    mutate(
+      model = "PMX",
+      species = "Arabidopsis"
+    ))
+plot(psem_pmx)
+summary(psem_pmx)
+
 ```
 
 ### Bending
@@ -4632,7 +4723,7 @@ curves_media <- ggplot(
 #### Hydration influence
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-medium_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/WT_medium.csv") %>%
+medium_data <- read_csv("/data/PhD/IRX/Bending/WT_medium.csv") %>%
   pivot_longer(cols = c(stiffness, strength), values_to = "value", names_to = "variable") %>%
   mutate(variable = recode(variable,
     "stiffness" = "Stiffness",
@@ -4737,14 +4828,14 @@ medium_diameter_box <- ggplot(
 #### Composition influence
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-s_data <- read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/stiffness_s.csv") %>%
-  bind_rows(read_csv("/home/leonard/Documents/Uni/PhD/IRX/Bending/cad_diameters.csv")) %>%
+s_data <- read_csv("/data/PhD/IRX/Bending/stiffness_s.csv") %>%
+  bind_rows(read_csv("/data/PhD/IRX/Bending/cad_diameters.csv")) %>%
   tidyr::fill(everything()) %>%
   mutate(
     genotype = ordered(genotype, levels = c("WT", "fah1", "cad4xcad5"))
   )
 
-heights <- read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
+heights <- read_csv("/data/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
   select(genotype, height) %>%
   filter(genotype %in% c("col-0", "fah1", "cad4xcad5")) %>%
   mutate(
@@ -5015,7 +5106,7 @@ readr::write_file(coef_tab, "sem_coef_tab.txt")
 
 ```{r} 
 transpiration <- read_csv(
-  "/home/leonard/Documents/Uni/PhD/IRX/Drought/evapotranspiration.csv"
+  "/data/PhD/IRX/Drought/evapotranspiration.csv"
 ) %>%
   pivot_longer(-c(medium, time), names_to = "plant", values_to = "transp_rate") %>%
   mutate(
@@ -5034,7 +5125,7 @@ transpiration <- read_csv(
   mutate(mean_transp = mean(transp_rate))
 
 conditions <- read_csv(
-  "/home/leonard/Documents/Uni/PhD/IRX/Drought/chamber_conditions.csv"
+  "/data/PhD/IRX/Drought/chamber_conditions.csv"
 ) %>%
   fill(everything()) %>%
   group_by(genotype) %>%
