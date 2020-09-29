@@ -3,7 +3,7 @@
 
 Listed are all scripts that I used to create figures in published or submitted manuscripts. All scripts are independent of each other. For the used data files, see the respective supplementary files on the journal page. Subfigures that are not listed were done outside of R or by co-authors. Do not hesitate to contact me if something is unclear or missing.  
 
-### Wiesner Test Manuscript, Blaschek _et al._, 2019
+### Blaschek _et al._, Front. Plant Sci. 2020 ([10.3389/fpls.2020.00109](https://doi.org/10.3389/fpls.2020.00109))
 
 #### Figure 1 
 **D** spectra_peaks.R
@@ -38,7 +38,7 @@ Listed are all scripts that I used to create figures in published or submitted m
 GCHO_content.R
 
 
-### Raman Manuscript, Blaschek _et al._, 2019
+### Blaschek _et al._, ACS Sustain. Chem. Eng. 2020 ([10.1021/acssuschemeng.0c00194](https://doi.org/10.1021/acssuschemeng.0c00194))
 
 #### All figures and supplementals
 raman_pubfigs_model.rmd
