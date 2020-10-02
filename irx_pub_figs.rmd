@@ -4008,7 +4008,7 @@ dev.off()
 rmn_files <-
   list.files(
     path = "/data/PhD/IRX/Poplar/2020-08_soil_poplar",
-    pattern = "TE(.*).txt",
+    pattern = "(TE|FI|RP)(.*).txt",
     recursive = TRUE,
     full.names = TRUE
   )
@@ -4032,19 +4032,24 @@ read_plus <- function(flnm) {
       intensity = as.numeric(str_replace(intensity, fixed(","), fixed("."))),
       TE = str_remove(TE, fixed(".txt")),
       technical = str_extract_all(TE, "[:alpha:]+"),
-      TE = str_extract_all(TE, "[:digit:]+")
+      TE = str_extract_all(TE, "[:digit:]+"),
+      cell_type = case_when(str_detect(technical, "TE") ~ "TE",
+                            str_detect(technical, "FI") ~ "fibre",
+                            TRUE ~ "ray")
     ) %>%
     pivot_wider(
-      id_cols = c(genotype, replicate, technical, TE),
+      id_cols = c(genotype, replicate, technical, cell_type, TE),
       names_from = wavenumber,
       values_from = intensity
     ) %>%
-    group_by(genotype, replicate, technical, TE) %>%
+    group_by(genotype, replicate, technical, cell_type, TE) %>%
     nest()
 }
 
 rmn_pop <- lapply(rmn_files, read_plus) %>%
-  bind_rows()
+  bind_rows() %>%
+  filter(cell_type == "TE") %>%
+  select(-cell_type)
 
 #### baseline correction ####
 rmn_als <- function(x) {
