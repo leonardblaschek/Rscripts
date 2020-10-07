@@ -4031,8 +4031,8 @@ read_plus <- function(flnm) {
       wavenumber = as.numeric(str_replace(wavenumber, fixed(","), fixed("."))),
       intensity = as.numeric(str_replace(intensity, fixed(","), fixed("."))),
       TE = str_remove(TE, fixed(".txt")),
-      technical = str_extract_all(TE, "[:alpha:]+"),
-      TE = str_extract_all(TE, "[:digit:]+"),
+      technical = unlist(str_extract_all(TE, "[:alpha:]+")),
+      TE = unlist(str_extract_all(TE, "[:digit:]+")),
       cell_type = case_when(str_detect(technical, "TE") ~ "TE",
                             str_detect(technical, "FI") ~ "fibre",
                             TRUE ~ "ray")
@@ -4049,7 +4049,10 @@ read_plus <- function(flnm) {
 rmn_pop <- lapply(rmn_files, read_plus) %>%
   bind_rows() %>%
   filter(cell_type == "TE") %>%
-  select(-cell_type)
+  ungroup() %>%
+  select(-cell_type) %>%
+  anti_join(read_csv("/data/PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_exclude.csv",
+                     col_types = "cccc"))
 
 #### baseline correction ####
 rmn_als <- function(x) {
@@ -4074,17 +4077,31 @@ rmn_pop_corrected <- rmn_pop %>%
   mutate(wavenumber = as.numeric(wavenumber))
 
 #### filtering and scaling ####
+lig_peak <- rmn_pop_corrected %>%
+  group_by(genotype, replicate, technical, TE) %>%
+  filter(round(wavenumber, digits = 0) %in% c(1550:1650)) %>%
+  mutate(
+    peak_pos = wavenumber[which.max(corrected.intensity)]
+  ) %>%
+  select(-wavenumber, -corrected.intensity) %>%
+  unique()
+
 rmn_pop_scaled <- rmn_pop_corrected %>%
-  filter(wavenumber > 200 & wavenumber < 1700) %>%
+  left_join(lig_peak) %>%
+  group_by(genotype, replicate, technical, TE, wavenumber) %>%
+  mutate(wavenumber = wavenumber + (1600 - peak_pos)) %>%
   group_by(genotype, replicate, technical, TE) %>%
   mutate(
-    wavenumber = wavenumber + 30,
+    # wavenumber = case_when(genotype == "C4H" & replicate == 4 ~ wavenumber,
+    #                        genotype == "T89" & technical == "alignedTE" ~ wavenumber,
+    #                        TRUE ~ wavenumber + 33),
     AUC = MESS::auc(wavenumber, corrected.intensity),
     scaled = corrected.intensity / AUC,
     scaled_lig = corrected.intensity / (
       (corrected.intensity[abs(wavenumber - 1603) == min(abs(wavenumber - 1603))] / 2) + corrected.intensity[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))]
     )
-  )
+  ) %>%
+  filter(wavenumber > 200 & wavenumber < 1700)
 
 rmn_pop_avg <- rmn_pop_scaled %>%
   mutate(wavenumber = round(wavenumber, digits = 0)) %>%
@@ -4098,6 +4115,7 @@ rmn_pop_sum <- rmn_pop_scaled %>%
     corrected.intensity[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "total_lignin" = (scaled[abs(wavenumber - 1603) == min(abs(wavenumber - 1603))][1] / 2) +
       scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
+    "P_rel" = scaled_lig[abs(wavenumber - 1000) == min(abs(wavenumber - 1000))][1],
     "G_rel" = scaled_lig[abs(wavenumber - 1603) == min(abs(wavenumber - 1603))][1],
     "G_tot" = scaled[abs(wavenumber - 1603) == min(abs(wavenumber - 1603))][1],
     "GOH_rel" = scaled_lig[abs(wavenumber - 1664) == min(abs(wavenumber - 1664))][1],
@@ -4124,53 +4142,53 @@ rmn_pop_test <- ggplot(rmn_pop_scaled,
        aes(x = wavenumber,
            y = scaled)) +
   scale_x_continuous(trans = "reverse") +
-  geom_vline(xintercept = c(1334, 1120, 1095, 381)) +
+  geom_vline(xintercept = c(1603,1334, 1120, 1095, 1000, 380)) +
   # geom_line(data = filter(rmn_pop_scaled, genotype == "C4H"),
   #           aes(group = interaction(genotype, replicate, technical, TE),
   #               colour = replicate),
   #           alpha = 0.25,
   #           size = 0.1) +
-  # geom_line(aes(group = interaction(genotype, replicate, technical, TE),
-  #               colour = genotype),
-  #           alpha = 0.05,
-  #           size = 0.1) +
-  geom_line(data = data.frame(
-    spline(
-      rmn_pop_avg$wavenumber[rmn_pop_avg$genotype == "T89"],
-      rmn_pop_avg$mean[rmn_pop_avg$genotype == "T89"],
-      n = 1500)
-    ),
-    aes(x = x,
-        y = y),
-    colour = pal_ostwald_disc[1], 
-    alpha = 0.75) +
-  geom_line(data = data.frame(
-    spline(
-      rmn_pop_avg$wavenumber[rmn_pop_avg$genotype == "CCR1"],
-      rmn_pop_avg$mean[rmn_pop_avg$genotype == "CCR1"],
-      n = 1500)
-    ),
-    aes(x = x,
-        y = y),
-    colour = pal_ostwald_disc[2], 
-    alpha = 0.75) +
-  geom_line(data = data.frame(
-    spline(
-      rmn_pop_avg$wavenumber[rmn_pop_avg$genotype == "C4H"],
-      rmn_pop_avg$mean[rmn_pop_avg$genotype == "C4H"],
-      n = 1500)
-    ),
-    aes(x = x,
-        y = y),
-    colour = pal_ostwald_disc[3], 
-    alpha = 0.75) +
+  geom_line(aes(group = interaction(genotype, replicate, technical, TE),
+                colour = genotype),
+            alpha = 0.25,
+            size = 0.1) +
+  # geom_line(data = data.frame(
+  #   spline(
+  #     rmn_pop_avg$wavenumber[rmn_pop_avg$genotype == "T89"],
+  #     rmn_pop_avg$mean[rmn_pop_avg$genotype == "T89"],
+  #     n = 1500)
+  #   ),
+  #   aes(x = x,
+  #       y = y),
+  #   colour = pal_ostwald_disc[1],
+  #   alpha = 0.75) +
+  # geom_line(data = data.frame(
+  #   spline(
+  #     rmn_pop_avg$wavenumber[rmn_pop_avg$genotype == "CCR1"],
+  #     rmn_pop_avg$mean[rmn_pop_avg$genotype == "CCR1"],
+  #     n = 1500)
+  #   ),
+  #   aes(x = x,
+  #       y = y),
+  #   colour = pal_ostwald_disc[2],
+  #   alpha = 0.75) +
+  # geom_line(data = data.frame(
+  #   spline(
+  #     rmn_pop_avg$wavenumber[rmn_pop_avg$genotype == "C4H"],
+  #     rmn_pop_avg$mean[rmn_pop_avg$genotype == "C4H"],
+  #     n = 1500)
+  #   ),
+  #   aes(x = x,
+  #       y = y),
+  #   colour = pal_ostwald_disc[3],
+  #   alpha = 0.75) +
   scale_colour_manual(values = pal_ostwald_disc[c(3,2,1)]) +
   theme_leo() +
   theme(legend.position = "bottom",
         legend.title = element_blank()) +
   guides(colour = guide_legend(override.aes = list(alpha = 1, size = 1)))
 
-
+# plotly::ggplotly(rmn_pop_test)
 pdf("rmn_pop.pdf", height = 3)
 rmn_pop_test
 dev.off()
@@ -4280,6 +4298,14 @@ rmn_pop_data <- rmn_pop_sum %>%
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
+
+ggplot(rmn_pop_data,
+       aes(x = total_lignin,
+           y = Solidity)
+       )+
+  geom_point(aes(colour = genotype)) +
+  geom_smooth(method = "lm")
+
 rmn_lignin_dist <- rmn_pop_data %>%
   # filter(genotype == "T89" &
   #          replicate == "6" &
@@ -4290,7 +4316,9 @@ rmn_lignin_dist <- rmn_pop_data %>%
          # "Total Lignin (1603 + 2*1334)" = total_lignin,
          # "Total G-units (1603)" = G_tot,
          # "Total S-units (1334)" = S_tot,
+         # "Phenyl" = P_rel,
          "Lignin/Cellulose" = lig.cellu,
+         # "Raw lignin" = unscaled_lignin,
          # "Total G/Cellulose" = G.cellu,
          # "Relative G-units" = G_rel, 
          # "Relative S-units" = S_rel, 
@@ -4394,17 +4422,27 @@ dev.off()
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
+n_TEs <- rmn_pop_data %>%
+  drop_na(genotype, Solidity, cell_type) %>%
+  group_by(genotype, cell_type, replicate) %>%
+  summarise(n = n())
+
 letters <- letter_groups(rmn_pop_data,
-                         Solidity,
+                         P_rel,
                          genotype,
                          "tukey",
                          cell_type,
                          print_position = "below"
                          )
 
-convexity_poplar <- ggplot(rmn_pop_data,
+test <- rmn_pop_data %>%
+  group_by(genotype, cell_type) %>%
+  drop_na(Solidity, cell_type, genotype) %>%
+  summarise(n = n())
+
+convexity_poplar <- ggplot(drop_na(rmn_pop_data, genotype, Solidity, cell_type),
        aes(x = genotype,
-           y = Solidity)) +
+           y = P_rel)) +
   geom_quasirandom(
       aes(fill = genotype),
       # dodge.width = 0.6,
@@ -4439,7 +4477,7 @@ convexity_poplar <- ggplot(rmn_pop_data,
     # scale_fill_grey(start = 0.9, end = 0.3) +
     # expand_limits(y = 0) +
     # scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
-    labs(y = "Convexity") +
+    # labs(y = "Convexity") +
     theme_leo() +
     theme(
       text = element_text(family = "Helvetica"),
@@ -4449,7 +4487,7 @@ convexity_poplar <- ggplot(rmn_pop_data,
     ) +
   facet_wrap(~ cell_type)
 
-pdf("poplar_convexity.pdf", width = onecol * 0.5, height = onecol * 0.5)
+pdf("poplar_P.pdf", width = onecol * 0.5, height = onecol * 0.5)
 convexity_poplar
 dev.off()
 ```
@@ -4463,15 +4501,16 @@ psem_data_pop <- rmn_pop_data %>%
   filter(cell_type == "SV") %>%
   select(
     Solidity,
-    n_v,
+    # n_v,
     Perim.,
-    # cellulose,
+    cellulose,
     total_lignin,
-    # G_rel,
+    G_rel,
     S_rel,
+    P_rel,
     GOH_rel,
     GCHO_rel,
-    lig.cellu,
+    # lig.cellu,
     Distance,
   ) %>%
   drop_na()
@@ -4492,7 +4531,7 @@ summary(step_model)
 
 psem_data_pop <- rmn_pop_data %>%
   filter(cell_type == "SV") %>%
-  select(-data, -Length) %>%
+  select(-data, -Length, -n_v) %>%
   drop_na()
 
 psem_pop <- psem(
@@ -4501,43 +4540,46 @@ psem_pop <- psem(
     Solidity,
   data = psem_data_pop
   ),
-  lm(convexity ~
+  lm(Solidity ~
   # n_v +
+    Distance +
+    cellulose +
+    P_rel +
     # n_f +
     # mean.OD1 +
     # Perim. +
     # S.G +
     # G_tot +
-    # GOH_rel +
+    GOH_rel +
     # GOH.G +
     # G_rel +
     # GOH_tot +
-    S_rel +
+    # S_rel +
     # S_tot +
     GCHO_rel +
     # total_lignin:mean.OD1 +
     total_lignin,
-  data = filter(drop_na(rmn_irx), cell.type == "PMX")
+  data = data.frame(psem_data_pop)
   ),
-  data = filter(drop_na(rmn_irx), cell.type == "PMX")
+  data = data.frame(psem_data_pop)
 )
-ind_claims <- ind_claims %>%
-  bind_rows(summary(psem_pmx)[["dTable"]][, c(1, 4, 5)] %>%
-    mutate(
-      model = "PMX",
-      species = "Arabidopsis",
-      fishC = summary(psem_pmx)[["Cstat"]][["Fisher.C"]],
-      fishP = summary(psem_pmx)[["Cstat"]][["P.Value"]]
-    ))
-
-coefs <- coefs %>%
-  bind_rows(summary(psem_pmx)[["coefficients"]][, c(1:8)] %>%
-    mutate(
-      model = "PMX",
-      species = "Arabidopsis"
-    ))
-plot(psem_pmx)
-summary(psem_pmx)
+# ind_claims <- ind_claims %>%
+#   bind_rows(summary(psem_pmx)[["dTable"]][, c(1, 4, 5)] %>%
+#     mutate(
+#       model = "PMX",
+#       species = "Arabidopsis",
+#       fishC = summary(psem_pmx)[["Cstat"]][["Fisher.C"]],
+#       fishP = summary(psem_pmx)[["Cstat"]][["P.Value"]]
+#     ))
+# 
+# coefs <- coefs %>%
+#   bind_rows(summary(psem_pmx)[["coefficients"]][, c(1:8)] %>%
+#     mutate(
+#       model = "PMX",
+#       species = "Arabidopsis"
+#     ))
+plot(psem_pop)
+summary(psem_pop)
 
 ```
 

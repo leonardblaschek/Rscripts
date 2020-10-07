@@ -161,7 +161,7 @@ read_plus <- function(flnm) {
 }
 
 rmn_c4h <- lapply(rmn_files, read_plus) %>%
-  bind_rows()
+  bind_rows() 
 
 #### baseline correction ####
 rmn_als <- function(x) {
@@ -261,8 +261,8 @@ read_plus <- function(flnm) {
       wavenumber = as.numeric(str_replace(wavenumber, fixed(","), fixed("."))),
       intensity = as.numeric(str_replace(intensity, fixed(","), fixed("."))),
       cell = str_remove(cell, fixed(".txt")),
-      technical = str_extract_all(cell, "[:alpha:]+"),
-      cell = str_extract_all(cell, "[:digit:]+"),
+      technical = unlist(str_extract_all(cell, "[:alpha:]+")),
+      cell = unlist(str_extract_all(cell, "[:digit:]+")),
       cell_type = case_when(str_detect(technical, "TE") ~ "TE",
                             str_detect(technical, "FI") ~ "fibre",
                             TRUE ~ "ray")
@@ -276,8 +276,14 @@ read_plus <- function(flnm) {
     nest()
 }
 
+exclude <- read_csv("/data/PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_exclude.csv",
+                     col_types = "cccc") %>%
+  mutate(cell_type = "TE") %>%
+  rename("cell" = "TE")
+
 rmn_pop <- lapply(rmn_files, read_plus) %>%
-  bind_rows() 
+  bind_rows() %>%
+  anti_join(exclude)
 
 #### baseline correction ####
 rmn_als <- function(x) {
@@ -301,43 +307,107 @@ rmn_pop_corrected <- rmn_pop %>%
   drop_na() %>%
   mutate(wavenumber = as.numeric(wavenumber))
 
+
 #### filtering and scaling ####
-rmn_pop_scaled <- rmn_pop_corrected %>%
-  filter(wavenumber > 200 & wavenumber < 1700) %>%
+
+# rough alignment (30 cm-1 shift)
+lig_peak <- rmn_pop_corrected %>%
+  unite("ID", 
+        genotype, replicate, technical, cell_type, cell, 
+        remove = F,
+        sep = "_") %>%
+  filter(round(wavenumber, digits = 0) %in% c(1560:1640)) %>%
   group_by(genotype, replicate, technical, cell_type, cell) %>%
   mutate(
-    wavenumber = case_when(genotype == "C4H" & replicate == 4 ~ wavenumber,
-                           genotype == "T89" & technical == "alignedTE" ~ wavenumber,
-                           cell_type == "fibre" | cell_type == "ray" ~ wavenumber,
-                           TRUE ~ wavenumber + 33),
+    peak_pos = wavenumber[which.max(corrected.intensity)]
+  ) %>%
+  select(-wavenumber, -corrected.intensity) %>%
+  unique() %>%
+  ungroup() %>%
+  mutate(peak_pos_ref = case_when(genotype == "T89" & cell_type == "TE" ~ 
+                                    peak_pos[ID =="T89_4_alignedTE_TE_1"],
+                                  genotype == "T89" & cell_type == "fibre" ~
+                                    peak_pos[ID =="T89_4_FI_fibre_1"],
+                                  genotype == "CCR1" & cell_type == "TE" ~
+                                    peak_pos[ID =="T89_4_alignedTE_TE_1"],
+                                  genotype == "CCR1" & cell_type == "fibre" ~
+                                    peak_pos[ID =="T89_4_FI_fibre_1"],
+                                  genotype == "C4H" & cell_type == "TE" ~
+                                    peak_pos[ID =="C4H_4_cTE_TE_1"],
+                                  genotype == "C4H" & cell_type == "fibre" ~
+                                    peak_pos[ID =="C4H_4_cFI_fibre_3"],
+                                  TRUE ~ 0)
+  )
+
+rmn_pop_aligned_rough <- rmn_pop_corrected %>%
+  left_join(lig_peak) %>%
+  group_by(genotype, replicate, technical, cell_type, cell, wavenumber) %>%
+  mutate(wavenumber = wavenumber + (peak_pos_ref - peak_pos)) 
+
+rmn_pop_scaled <- rmn_pop_aligned_rough %>%
+  group_by(genotype, replicate, technical, cell_type, cell) %>%
+  mutate(
+    # wavenumber = case_when(genotype == "C4H" & replicate == 4 ~ wavenumber,
+    #                        genotype == "T89" & technical == "alignedTE" ~ wavenumber,
+    #                        cell_type == "fibre" | cell_type == "ray" ~ wavenumber,
+    #                        TRUE ~ wavenumber + 33),
     AUC = MESS::auc(wavenumber, corrected.intensity),
     scaled = corrected.intensity / AUC,
     scaled_lig = corrected.intensity / (
       (corrected.intensity[abs(wavenumber - 1603) == min(abs(wavenumber - 1603))] / 2) + corrected.intensity[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))]
     )
-  )
+  ) %>%
+  filter(wavenumber > 200 & wavenumber < 1700)
+
+celltypes <- read_csv(
+  "/data/PhD/IRX/Poplar/2020-08_soil_poplar/poplar_cell_types.csv",
+  col_types = "cccccc") %>%
+  select(-n_v, "vessel_type" = "cell_type")
+
+rmn_pop_scaled <- rmn_pop_scaled %>%
+  left_join(celltypes,
+            by = c("genotype", "replicate", "technical", "cell" = "TE")) 
 ```
 
 
 ## export poplar
 ```{r}
-rmn_c4h_raw <- rmn_pop_scaled %>%
-  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
-  pivot_wider(id_cols = c(genotype, replicate, technical, cell_type, cell),
-              names_from = wavenumber,
-              values_from = corrected.intensity)
 
-rmn_c4h_raw <- rmn_c4h_raw %>%
-  select(genotype, replicate, technical, cell_type, cell, order(as.numeric(colnames(.))))
+rmn_c4h_raw <- rmn_pop_scaled %>%
+  group_by(genotype, replicate, technical, cell_type, cell, vessel_type) %>%
+  select(wavenumber, corrected.intensity) %>%
+  mutate(wavenumber = round(wavenumber, digits = 1)) %>%
+  complete(wavenumber = seq(200, 1700, 0.1)) %>%
+  arrange(wavenumber) %>%
+  mutate(moving_mean = 
+           RcppRoll::roll_mean(corrected.intensity, n = 30, fill = NA, na.rm = TRUE)
+         ) %>%
+  filter(wavenumber %% 1 %in% c(0, 0.5)) %>%
+  # filter(wavenumber %in% round(rmn_pop_scaled$wavenumber, digits = 1)) %>%
+  pivot_wider(id_cols = c(genotype, replicate, technical, cell_type, vessel_type, cell),
+              names_from = wavenumber,
+              values_from = moving_mean)
+
+# rmn_c4h_raw <- rmn_c4h_raw %>%
+#   select(genotype, replicate, technical, cell_type, vessel_type, cell, order(as.numeric(colnames(.))))
 
 rmn_c4h_auc <- rmn_pop_scaled %>%
-  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
-  pivot_wider(id_cols = c(genotype, replicate, technical, cell_type, cell),
+  group_by(genotype, replicate, technical, cell_type, cell, vessel_type) %>%
+  select(wavenumber, scaled) %>%
+  mutate(wavenumber = round(wavenumber, digits = 1)) %>%
+  complete(wavenumber = seq(200, 1700, 0.1)) %>%
+  arrange(wavenumber) %>%
+  mutate(moving_mean = 
+           RcppRoll::roll_mean(scaled, n = 30, fill = NA, na.rm = TRUE)
+         ) %>%
+  filter(wavenumber %% 1 %in% c(0, 0.5)) %>%
+  # filter(wavenumber %in% round(rmn_pop_scaled$wavenumber, digits = 1)) %>%
+  pivot_wider(id_cols = c(genotype, replicate, technical, cell_type, vessel_type, cell),
               names_from = wavenumber,
-              values_from = scaled)
+              values_from = moving_mean)
 
-rmn_c4h_auc <- rmn_c4h_auc %>%
-  select(genotype, replicate, technical, cell_type, cell, order(as.numeric(colnames(.))))
+# rmn_c4h_auc <- rmn_c4h_auc %>%
+#   select(genotype, replicate, technical, cell_type, vessel_type, cell, order(as.numeric(colnames(.))))
 
 # write_excel_csv(rmn_c4h_values, "Raman_c4h_995.csv")
 write_excel_csv(rmn_c4h_raw, "Raman_Ptc4h_raw.csv")
@@ -503,11 +573,54 @@ dev.off()
 
 ```{r}
 
+rmn_c4h_filled <- rmn_pop_scaled %>%
+  group_by(genotype, replicate, technical, cell_type, cell, vessel_type) %>%
+  select(wavenumber, corrected.intensity) %>%
+  mutate(wavenumber = round(wavenumber, digits = 1)) %>%
+  complete(wavenumber = seq(200, 1700, 0.1)) %>%
+  arrange(wavenumber) %>%
+  mutate(moving_mean = 
+           RcppRoll::roll_mean(corrected.intensity, n = 30, fill = NA, na.rm = TRUE)
+         ) %>%
+  filter(wavenumber %% 1 %in% c(0, 0.5))
+
+rmn_filled_plot <- rmn_c4h_filled %>%
+  filter(cell_type != "ray") %>%
+  group_by(genotype, replicate, technical, cell_type, cell, vessel_type) %>%
+  mutate(ind_mean = mean(moving_mean, na.rm = TRUE)) %>%
+  group_by(genotype, cell_type, vessel_type) %>%
+  mutate(overall_mean = mean(moving_mean, na.rm = TRUE),
+         typical = case_when(
+           abs(overall_mean - ind_mean) == min(abs(overall_mean - ind_mean)) ~ "yes",
+           TRUE ~ "no"))
+
+rmn_filled <- ggplot(rmn_c4h_filled,
+                     aes(x = wavenumber,
+                         y = moving_mean,
+                         colour = genotype)) +
+  geom_line(aes(
+    group = interaction(genotype, replicate, technical, cell)
+  ),
+  alpha = 0.05,
+  size = 0.1
+  ) +
+  geom_line(data = filter(rmn_filled_plot, typical == "yes")) +
+  scale_colour_manual(values = pal_ostwald_disc[c(3, 2, 1)]) +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank()
+  ) +
+  guides(colour = guide_legend(override.aes = list(alpha = 1, size = 1))) +
+  facet_wrap(vessel_type~cell_type, ncol = 1) +
+  scale_x_continuous(trans = "reverse") +
+  geom_vline(xintercept = c(1600, 1334, 1120, 1095, 1000, 381))
+
 rmn_pop_plot <- rmn_pop_scaled %>%
   filter(cell_type != "ray") %>%
-  group_by(genotype, replicate, technical, cell_type, cell) %>%
+  group_by(genotype, replicate, technical, cell_type, cell, vessel_type) %>%
   mutate(ind_mean = mean(scaled)) %>%
-  group_by(genotype, cell_type) %>%
+  group_by(genotype, cell_type, vessel_type) %>%
   mutate(overall_mean = mean(scaled),
          typical = case_when(
            abs(overall_mean - ind_mean) == min(abs(overall_mean - ind_mean)) ~ "yes",
@@ -530,7 +643,7 @@ rmn_pop_test <- ggplot(
   )
 ) +
   scale_x_continuous(trans = "reverse") +
-  # geom_vline(xintercept = c(1334, 1120, 1095, 381)) +
+  geom_vline(xintercept = c(1600, 1334, 1120, 1095, 1000, 381)) +
   # geom_line(data = filter(rmn_pop_scaled, genotype == "C4H"),
   #           aes(group = interaction(genotype, replicate, technical, TE),
   #               colour = replicate),
@@ -583,11 +696,12 @@ rmn_pop_test <- ggplot(
     legend.title = element_blank()
   ) +
   guides(colour = guide_legend(override.aes = list(alpha = 1, size = 1))) +
-  facet_wrap(~cell_type, ncol = 1)
+  facet_wrap(vessel_type~cell_type, ncol = 1)
 
 # plotly::ggplotly(rmn_pop_test)
 
 pdf("rmn_pop.pdf", height = 5)
 rmn_pop_test
+rmn_filled
 dev.off()
 ```
