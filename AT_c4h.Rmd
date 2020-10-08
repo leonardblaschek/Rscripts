@@ -126,7 +126,7 @@ onecol <- 9 / 2.54
 ```{r}
 rmn_files <-
   list.files(
-    path = "/data/PhD/Raman/C4H/spectra",
+    path = "/run/media/leonard/LEONARD/C4H/spectra/",
     pattern = "*.txt",
     recursive = TRUE,
     full.names = TRUE
@@ -145,8 +145,8 @@ read_plus <- function(flnm) {
     separate(flnm, into = c("genotype", "replicate", "cell_type", "cell", "layer"), sep = "_") %>%
     mutate(
       wavenumber = as.numeric(str_replace(wavenumber, fixed(","), fixed("."))),
-      wavenumber = case_when(genotype == "WT" & replicate == 1 ~ wavenumber,
-                             TRUE ~ wavenumber + 33),
+      # wavenumber = case_when(genotype == "WT" & replicate == 1 ~ wavenumber,
+      #                        TRUE ~ wavenumber + 33),
       intensity = as.numeric(str_replace(intensity, fixed(","), fixed("."))),
       layer = case_when(is.na(layer) ~ "full",
                         TRUE ~ layer)
@@ -186,7 +186,31 @@ rmn_c4h_corrected <- rmn_c4h %>%
   mutate(wavenumber = as.numeric(wavenumber))
 
 #### filtering and scaling ####
-rmn_c4h_scaled <- rmn_c4h_corrected %>%
+
+# rough alignment (30 cm-1 shift)
+lig_peak <- rmn_c4h_corrected %>%
+  unite("ID", 
+        genotype, replicate, cell_type, cell, layer,
+        remove = F,
+        sep = "_") %>%
+  filter(round(wavenumber, digits = 0) %in% c(1560:1640)) %>%
+  group_by(genotype, replicate, cell_type, cell, layer) %>%
+  mutate(
+    peak_pos = case_when(ID == "cmp_2_PX_1_full" ~ 1570.57,
+                         ID == "c4h_1_LP_1_full" ~ 1570.50,
+                         TRUE ~ wavenumber[which.max(corrected.intensity)])
+  ) %>%
+  select(-wavenumber, -corrected.intensity) %>%
+  unique() %>%
+  ungroup() %>%
+  mutate(peak_pos_ref = 1598)
+
+rmn_c4h_aligned_rough <- rmn_c4h_corrected %>%
+  left_join(lig_peak) %>%
+  group_by(genotype, replicate, cell_type, cell, wavenumber,layer) %>%
+  mutate(wavenumber = wavenumber + (peak_pos_ref - peak_pos)) 
+
+rmn_c4h_scaled <- rmn_c4h_aligned_rough %>%
   filter(wavenumber > 200 & wavenumber < 1700) %>%
   group_by(genotype, replicate, cell_type, cell, layer) %>%
   mutate(
@@ -195,7 +219,8 @@ rmn_c4h_scaled <- rmn_c4h_corrected %>%
     scaled_lig = corrected.intensity / (
       (corrected.intensity[abs(wavenumber - 1603) == min(abs(wavenumber - 1603))] / 2) + corrected.intensity[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))]
     )
-  )
+  ) %>% 
+  filter(cell_type != "PA")
 
 rmn_c4h_values <- rmn_c4h_scaled %>%
   group_by(genotype, cell_type, replicate, cell) %>%
@@ -209,23 +234,37 @@ rmn_max <- rmn_c4h_scaled %>%
 
 ## export *Arabidopsis*
 ```{r}
-rmn_c4h_raw <- rmn_c4h_scaled %>%
-  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
-  pivot_wider(id_cols = c(genotype, replicate, cell_type, cell, layer),
-              names_from = wavenumber,
-              values_from = corrected.intensity)
 
-rmn_c4h_raw <- rmn_c4h_raw %>%
-  select(genotype, replicate, cell_type, cell, layer, order(as.numeric(colnames(.))))
+rmn_c4h_raw <- rmn_c4h_scaled %>%
+  group_by(genotype, replicate, cell_type, cell, layer) %>%
+  select(wavenumber, corrected.intensity) %>%
+  mutate(wavenumber = round(wavenumber, digits = 1)) %>%
+  complete(wavenumber = seq(200, 1700, 0.1)) %>%
+  arrange(wavenumber) %>%
+  mutate(moving_mean = 
+           RcppRoll::roll_mean(corrected.intensity, n = 30, fill = NA, na.rm = TRUE)
+         ) %>%
+  filter(wavenumber %% 1 %in% c(0, 0.5)) %>%
+  # filter(wavenumber %in% round(rmn_pop_scaled$wavenumber, digits = 1)) %>%
+  pivot_wider(id_cols = c(genotype, replicate, cell_type, layer, cell),
+              names_from = wavenumber,
+              values_from = moving_mean)
 
 rmn_c4h_auc <- rmn_c4h_scaled %>%
-  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
-  pivot_wider(id_cols = c(genotype, replicate, cell_type, cell, layer),
+  group_by(genotype, replicate, cell_type, cell, layer) %>%
+  select(wavenumber, scaled) %>%
+  mutate(wavenumber = round(wavenumber, digits = 1)) %>%
+  complete(wavenumber = seq(200, 1700, 0.1)) %>%
+  arrange(wavenumber) %>%
+  mutate(moving_mean = 
+           RcppRoll::roll_mean(scaled, n = 30, fill = NA, na.rm = TRUE)
+         ) %>%
+  filter(wavenumber %% 1 %in% c(0, 0.5)) %>%
+  # filter(wavenumber %in% round(rmn_pop_scaled$wavenumber, digits = 1)) %>%
+  pivot_wider(id_cols = c(genotype, replicate, cell_type, layer, cell),
               names_from = wavenumber,
-              values_from = scaled)
+              values_from = moving_mean)
 
-rmn_c4h_auc <- rmn_c4h_auc %>%
-  select(genotype, replicate, cell_type, cell, layer, order(as.numeric(colnames(.))))
 
 # write_excel_csv(rmn_c4h_values, "Raman_c4h_995.csv")
 write_excel_csv(rmn_c4h_raw, "Raman_Atc4h_raw.csv")
@@ -417,25 +456,39 @@ write_excel_csv(rmn_c4h_auc, "Raman_Ptc4h_scaled.csv")
 ## plot *Arabidopsis*
 
 ```{r}
-c4h_celltypes <- ggplot(rmn_c4h_scaled,
+
+rmn_c4h_raw <- rmn_c4h_scaled %>%
+  group_by(genotype, replicate, cell_type, cell, layer) %>%
+  select(wavenumber, corrected.intensity) %>%
+  mutate(wavenumber = round(wavenumber, digits = 1)) %>%
+  complete(wavenumber = seq(200, 1700, 0.1)) %>%
+  arrange(wavenumber) %>%
+  mutate(moving_mean = 
+           RcppRoll::roll_mean(corrected.intensity, n = 30, fill = NA, na.rm = TRUE)
+         ) %>%
+  filter(wavenumber %% 1 %in% c(0, 0.5))
+
+
+c4h_celltypes <- ggplot(rmn_c4h_raw,
                         # aes(x = wavenumber,
                         #     y = mean.intensity,
                         #     colour = cell_type)
                         ) +
-  geom_vline(xintercept = 995,
+  geom_vline(xintercept = 993,
              linetype = 2,
-             size = 0.2) +
+             size = 0.1) +
   ggridges::geom_ridgeline(
     aes(x = wavenumber,
-        y = reorder(cell_type, -corrected.intensity),
-        height = corrected.intensity,
-        fill = reorder(cell_type, -corrected.intensity),
+        y = reorder(cell_type, -moving_mean),
+        height = moving_mean,
+        fill = reorder(cell_type, -moving_mean),
         group = interaction(genotype, cell_type, replicate, cell)
         ),
     min_height = -200,
-    scale = 0.0002,
-    size = 0.2,
-    alpha = 0.75
+    scale = 100,
+    size = 0.1,
+    alpha = 0.75,
+    colour = rgb(0,0,0,0.5)
   ) +
   # geom_line(size = 0.2,
   #           alpha = 0.75) +
@@ -449,123 +502,123 @@ c4h_celltypes <- ggplot(rmn_c4h_scaled,
        y ="Intensity (baseline corrected)") +
   facet_wrap(~genotype)
 
-c4h_celltypes_scaled <- ggplot(rmn_c4h_scaled,
-                        # aes(x = wavenumber,
-                        #     y = mean.intensity,
-                        #     colour = cell_type)
-) +
-  geom_vline(xintercept = 995,
-             linetype = 2,
-             size = 0.2) +
-  ggridges::geom_ridgeline(
-    aes(x = wavenumber,
-        y = reorder(cell_type, -corrected.intensity),
-        height = scaled,
-        fill = reorder(cell_type, -corrected.intensity),
-        group = interaction(genotype, cell_type, replicate, cell)
-        ),
-    min_height = -0.02,
-    scale = 200,
-    size = 0.2,
-    alpha = 0.75
-  ) +
-  # geom_line(size = 0.2,
-  #           alpha = 0.75) +
-  theme_leo() +
-  theme(legend.position = "bottom",
-        legend.title = element_blank()) +
-  # scale_colour_brewer(palette = "Dark2") +
-  scale_fill_viridis_d() +
-  scale_x_continuous(trans = "reverse") +
-  labs(x = "Wavenumber",
-       y ="Intensity (corrected and scaled to AUC)") +
-  facet_wrap(~genotype)
+# c4h_celltypes_scaled <- ggplot(rmn_c4h_scaled,
+#                         # aes(x = wavenumber,
+#                         #     y = mean.intensity,
+#                         #     colour = cell_type)
+# ) +
+#   geom_vline(xintercept = 995,
+#              linetype = 2,
+#              size = 0.2) +
+#   ggridges::geom_ridgeline(
+#     aes(x = wavenumber,
+#         y = reorder(cell_type, -corrected.intensity),
+#         height = scaled,
+#         fill = reorder(cell_type, -corrected.intensity),
+#         group = interaction(genotype, cell_type, replicate, cell)
+#         ),
+#     min_height = -0.02,
+#     scale = 200,
+#     size = 0.2,
+#     alpha = 0.75
+#   ) +
+#   # geom_line(size = 0.2,
+#   #           alpha = 0.75) +
+#   theme_leo() +
+#   theme(legend.position = "bottom",
+#         legend.title = element_blank()) +
+#   # scale_colour_brewer(palette = "Dark2") +
+#   scale_fill_viridis_d() +
+#   scale_x_continuous(trans = "reverse") +
+#   labs(x = "Wavenumber",
+#        y ="Intensity (corrected and scaled to AUC)") +
+#   facet_wrap(~genotype)
 
-layers <- ggplot(rmn_c4h_scaled %>% filter(cell_type == "IF"),
-       aes(x = wavenumber,
-           y = corrected.intensity,
-           colour = layer)) +
-  geom_vline(xintercept = 995,
-             linetype = 2,
-             size = 0.2) +
-  geom_line(aes(group = interaction(layer, replicate, cell)),
-            size = 0.2,
-            alpha = 0.75) +
-  theme_leo() +
-  theme(legend.position = "bottom") +
-  scale_x_continuous(trans = "reverse") +
-  scale_colour_manual(values = pal_ostwald_disc) +
-  facet_wrap(~genotype)
-
-rmn_box <- function(y) {
-  y <- enquo(y)
-  letters <- letter_groups(
-    rmn_c4h_values %>% filter(cell_type != "PA"),
-    !!y,
-    genotype,
-    "tukey",
-    cell_type,
-    print_position = "above"
-  )
-  
-  ggplot(rmn_c4h_values %>% filter(cell_type != "PA"),
-                     aes(x = genotype,
-                         y = !!y)) +
-  geom_quasirandom(
-    shape = 16,
-    alpha = 0.5,
-    groupOnX = TRUE,
-    width = 0.2) +
-  # stat_summary(
-  #   fun = mean,
-  #   fun.min = mean,
-  #   fun.max = mean,
-  #   geom = "crossbar",
-  #   width = 0.5,
-  #   size = 0.5,
-  #   colour = pal_ostwald_disc[3],
-  #   fatten = 0
-  # ) +
-  geom_boxplot(
-    fill = "white",
-    colour = "black",
-    alpha = 0.85,
-    outlier.alpha = 0,
-    width = 0.2,
-    size = 0.2,
-  ) +
-    geom_text(data = letters,
-              aes(label = Letters),
-              family = "Helvetica",
-              size = ggtext_size) +
-  # geom_violin(
-  #   draw_quantiles = 0.5,
-  #   fill = "white",
-  #   colour = "black",
-  #   alpha = 0.85,
-  #   width = 0.2,
-  #   size = 0.2,
-  #   scale = "width") +
-  theme_leo() +
-  theme(axis.title.x = element_blank()) +
-  facet_wrap(~cell_type, ncol = 5)
-}
-
-raw <- rmn_box(raw_995) + labs(y = "Corrected intensity")
-scaled <- rmn_box(scaled_995) + labs(y = "AUC-scaled intensity")
-
-patch <-raw + scaled
+# layers <- ggplot(rmn_c4h_scaled %>% filter(cell_type == "IF"),
+#        aes(x = wavenumber,
+#            y = corrected.intensity,
+#            colour = layer)) +
+#   geom_vline(xintercept = 995,
+#              linetype = 2,
+#              size = 0.2) +
+#   geom_line(aes(group = interaction(layer, replicate, cell)),
+#             size = 0.2,
+#             alpha = 0.75) +
+#   theme_leo() +
+#   theme(legend.position = "bottom") +
+#   scale_x_continuous(trans = "reverse") +
+#   scale_colour_manual(values = pal_ostwald_disc) +
+#   facet_wrap(~genotype)
+# 
+# rmn_box <- function(y) {
+#   y <- enquo(y)
+#   letters <- letter_groups(
+#     rmn_c4h_values %>% filter(cell_type != "PA"),
+#     !!y,
+#     genotype,
+#     "tukey",
+#     cell_type,
+#     print_position = "above"
+#   )
+#   
+#   ggplot(rmn_c4h_values %>% filter(cell_type != "PA"),
+#                      aes(x = genotype,
+#                          y = !!y)) +
+#   geom_quasirandom(
+#     shape = 16,
+#     alpha = 0.5,
+#     groupOnX = TRUE,
+#     width = 0.2) +
+#   # stat_summary(
+#   #   fun = mean,
+#   #   fun.min = mean,
+#   #   fun.max = mean,
+#   #   geom = "crossbar",
+#   #   width = 0.5,
+#   #   size = 0.5,
+#   #   colour = pal_ostwald_disc[3],
+#   #   fatten = 0
+#   # ) +
+#   geom_boxplot(
+#     fill = "white",
+#     colour = "black",
+#     alpha = 0.85,
+#     outlier.alpha = 0,
+#     width = 0.2,
+#     size = 0.2,
+#   ) +
+#     geom_text(data = letters,
+#               aes(label = Letters),
+#               family = "Helvetica",
+#               size = ggtext_size) +
+#   # geom_violin(
+#   #   draw_quantiles = 0.5,
+#   #   fill = "white",
+#   #   colour = "black",
+#   #   alpha = 0.85,
+#   #   width = 0.2,
+#   #   size = 0.2,
+#   #   scale = "width") +
+#   theme_leo() +
+#   theme(axis.title.x = element_blank()) +
+#   facet_wrap(~cell_type, ncol = 5)
+# }
+# 
+# raw <- rmn_box(raw_995) + labs(y = "Corrected intensity")
+# scaled <- rmn_box(scaled_995) + labs(y = "AUC-scaled intensity")
+# 
+# patch <-raw + scaled
 
 
 pdf("rmn_c4h.pdf", width = twocol, height = onecol)
 c4h_celltypes
 # layers
-patch +
-  plot_annotation(
-    tag_levels = "A"
-  ) &
-  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica")) &
-  plot_layout(ncol = 1)
+# patch +
+#   plot_annotation(
+#     tag_levels = "A"
+#   ) &
+#   theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica")) &
+#   plot_layout(ncol = 1)
 dev.off()
 ```
 
