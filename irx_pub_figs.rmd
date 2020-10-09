@@ -4033,9 +4033,11 @@ read_plus <- function(flnm) {
       TE = str_remove(TE, fixed(".txt")),
       technical = unlist(str_extract_all(TE, "[:alpha:]+")),
       TE = unlist(str_extract_all(TE, "[:digit:]+")),
-      cell_type = case_when(str_detect(technical, "TE") ~ "TE",
-                            str_detect(technical, "FI") ~ "fibre",
-                            TRUE ~ "ray")
+      cell_type = case_when(
+        str_detect(technical, "TE") ~ "TE",
+        str_detect(technical, "FI") ~ "fibre",
+        TRUE ~ "ray"
+      )
     ) %>%
     pivot_wider(
       id_cols = c(genotype, replicate, technical, cell_type, TE),
@@ -4052,7 +4054,8 @@ rmn_pop <- lapply(rmn_files, read_plus) %>%
   ungroup() %>%
   select(-cell_type) %>%
   anti_join(read_csv("/data/PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_exclude.csv",
-                     col_types = "cccc"))
+    col_types = "cccc"
+  ))
 
 #### baseline correction ####
 rmn_als <- function(x) {
@@ -4061,7 +4064,6 @@ rmn_als <- function(x) {
     p = 0.01,
     maxit = 100
   )
-
   as_tibble(corrected_spectra$corrected, rownames = NA)
 }
 
@@ -4076,116 +4078,129 @@ rmn_pop_corrected <- rmn_pop %>%
   drop_na() %>%
   mutate(wavenumber = as.numeric(wavenumber))
 
-#### filtering and scaling ####
+#### aligment, filtering and scaling ####
+
+# alignment
 lig_peak <- rmn_pop_corrected %>%
+  unite("ID",
+    genotype, replicate, technical, TE,
+    remove = F,
+    sep = "_"
+  ) %>%
+  filter(round(wavenumber, digits = 0) %in% c(1560:1640)) %>%
   group_by(genotype, replicate, technical, TE) %>%
-  filter(round(wavenumber, digits = 0) %in% c(1550:1650)) %>%
   mutate(
     peak_pos = wavenumber[which.max(corrected.intensity)]
   ) %>%
   select(-wavenumber, -corrected.intensity) %>%
-  unique()
+  unique() %>%
+  ungroup() %>%
+  mutate(peak_pos_ref = case_when(
+    genotype == "T89" ~
+    peak_pos[ID == "T89_4_alignedTE_1"],
+    genotype == "CCR1" ~
+    peak_pos[ID == "CCR1_1_TE_1"],
+    genotype == "C4H" ~
+    peak_pos[ID == "C4H_4_cTE_1"],
+    TRUE ~ 0
+  ))
 
-rmn_pop_scaled <- rmn_pop_corrected %>%
+rmn_pop_aligned <- rmn_pop_corrected %>%
   left_join(lig_peak) %>%
   group_by(genotype, replicate, technical, TE, wavenumber) %>%
-  mutate(wavenumber = wavenumber + (1600 - peak_pos)) %>%
+  mutate(wavenumber = wavenumber + (peak_pos_ref - peak_pos))
+
+# scaling and filtering
+rmn_pop_scaled <- rmn_pop_aligned %>%
   group_by(genotype, replicate, technical, TE) %>%
   mutate(
-    # wavenumber = case_when(genotype == "C4H" & replicate == 4 ~ wavenumber,
-    #                        genotype == "T89" & technical == "alignedTE" ~ wavenumber,
-    #                        TRUE ~ wavenumber + 33),
     AUC = MESS::auc(wavenumber, corrected.intensity),
     scaled = corrected.intensity / AUC,
     scaled_lig = corrected.intensity / (
-      (corrected.intensity[abs(wavenumber - 1603) == min(abs(wavenumber - 1603))] / 2) + corrected.intensity[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))]
+      (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) + corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1]
     )
   ) %>%
   filter(wavenumber > 200 & wavenumber < 1700)
 
 rmn_pop_avg <- rmn_pop_scaled %>%
-  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
-  group_by(genotype, replicate, wavenumber) %>%
-  summarise(mean = mean(scaled))
+  mutate(wavenumber = round(wavenumber, digits = 1)) %>%
+  group_by(genotype) %>%
+  arrange(genotype, wavenumber) %>%
+  summarise(
+    # roll_mean = RcppRoll::roll_mean(scaled, 50, fill = NA, na.rm = TRUE),
+    roll_mean = slider::slide_index_dbl(scaled, wavenumber, mean, .before = 1, .after = 1),
+    roll_sd = slider::slide_index_dbl(scaled, wavenumber, sd, .before = 2, .after = 2),
+    wavenumber = wavenumber
+    )
 
 rmn_pop_sum <- rmn_pop_scaled %>%
   group_by(genotype, replicate, technical, TE) %>%
   summarise(
-    "unscaled_lignin" = (corrected.intensity[abs(wavenumber - 1603) == min(abs(wavenumber - 1603))][1] / 2) +
-    corrected.intensity[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
-    "total_lignin" = (scaled[abs(wavenumber - 1603) == min(abs(wavenumber - 1603))][1] / 2) +
-      scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
+    "unscaled_lignin" = (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
+      corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "total_lignin" = (scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
+      scaled[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
     "P_rel" = scaled_lig[abs(wavenumber - 1000) == min(abs(wavenumber - 1000))][1],
-    "G_rel" = scaled_lig[abs(wavenumber - 1603) == min(abs(wavenumber - 1603))][1],
-    "G_tot" = scaled[abs(wavenumber - 1603) == min(abs(wavenumber - 1603))][1],
-    "GOH_rel" = scaled_lig[abs(wavenumber - 1664) == min(abs(wavenumber - 1664))][1],
+    "G_rel" = scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "G_tot" = scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "GOH_rel" = scaled_lig[abs(wavenumber - 1660) == min(abs(wavenumber - 1660))][1],
     "GCHO_rel" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
     "GCHO_tot" = scaled[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
-    "S_rel" = scaled_lig[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
-    "S_tot" = scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
-    "cellulose" = 
+    "S_rel" = scaled_lig[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "S_tot" = scaled[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "cellulose" =
       scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1] +
-      scaled[abs(wavenumber - 381) == min(abs(wavenumber - 381))][1] +
-      scaled[abs(wavenumber - 1120) == min(abs(wavenumber - 1120))][1],
+        scaled[abs(wavenumber - 375) == min(abs(wavenumber - 375))][1] +
+        scaled[abs(wavenumber - 1120) == min(abs(wavenumber - 1120))][1],
     "lig.cellu" = total_lignin / cellulose,
     "G.cellu" = G_tot / cellulose,
-    "S.G" = scaled_lig[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1] /
+    "S.G" = scaled_lig[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1] /
       scaled_lig[abs(wavenumber - 1276) == min(abs(wavenumber - 1276))][1],
-    # "GOH.G" = scaled_lig[wavenumber == 1664] / scaled_lig[wavenumber == 1603],
+    # "GOH.G" = scaled_lig[wavenumber == 1660] / scaled_lig[wavenumber == 1600],
     "GCHO.GOH" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1] /
-      scaled_lig[abs(wavenumber - 1664) == min(abs(wavenumber - 1664))][1],
+      scaled_lig[abs(wavenumber - 1660) == min(abs(wavenumber - 1660))][1],
     "AUC" = mean(AUC)
-  ) 
+  )
 
 
-rmn_pop_test <- ggplot(rmn_pop_scaled,
-       aes(x = wavenumber,
-           y = scaled)) +
-  scale_x_continuous(trans = "reverse") +
-  geom_vline(xintercept = c(1603,1334, 1120, 1095, 1000, 380)) +
-  # geom_line(data = filter(rmn_pop_scaled, genotype == "C4H"),
-  #           aes(group = interaction(genotype, replicate, technical, TE),
-  #               colour = replicate),
-  #           alpha = 0.25,
-  #           size = 0.1) +
-  geom_line(aes(group = interaction(genotype, replicate, technical, TE),
-                colour = genotype),
-            alpha = 0.25,
-            size = 0.1) +
-  # geom_line(data = data.frame(
-  #   spline(
-  #     rmn_pop_avg$wavenumber[rmn_pop_avg$genotype == "T89"],
-  #     rmn_pop_avg$mean[rmn_pop_avg$genotype == "T89"],
-  #     n = 1500)
-  #   ),
-  #   aes(x = x,
-  #       y = y),
-  #   colour = pal_ostwald_disc[1],
-  #   alpha = 0.75) +
-  # geom_line(data = data.frame(
-  #   spline(
-  #     rmn_pop_avg$wavenumber[rmn_pop_avg$genotype == "CCR1"],
-  #     rmn_pop_avg$mean[rmn_pop_avg$genotype == "CCR1"],
-  #     n = 1500)
-  #   ),
-  #   aes(x = x,
-  #       y = y),
-  #   colour = pal_ostwald_disc[2],
-  #   alpha = 0.75) +
-  # geom_line(data = data.frame(
-  #   spline(
-  #     rmn_pop_avg$wavenumber[rmn_pop_avg$genotype == "C4H"],
-  #     rmn_pop_avg$mean[rmn_pop_avg$genotype == "C4H"],
-  #     n = 1500)
-  #   ),
-  #   aes(x = x,
-  #       y = y),
-  #   colour = pal_ostwald_disc[3],
-  #   alpha = 0.75) +
-  scale_colour_manual(values = pal_ostwald_disc[c(3,2,1)]) +
+rmn_pop_test <- ggplot(
+  rmn_pop_scaled,
+  aes(
+    x = wavenumber,
+    y = scaled
+  )
+) +
+  scale_x_continuous(trans = "reverse",
+                     # limits = c(1020, 980)
+                     ) +
+  # scale_y_continuous(limits = c(-0.001, 0.003)) +
+  geom_vline(xintercept = c(1660, 1600, 1330, 1120, 1095, 1000, 375),
+             size = 0.2) +
+  # geom_line(aes(
+  #   group = interaction(genotype, replicate, technical, TE),
+  #   colour = genotype
+  # ),
+  # alpha = 0.25,
+  # size = 0.1
+  # ) +
+  geom_ribbon(data = rmn_pop_avg,
+            aes(fill = genotype,
+                y = roll_mean,
+                ymin = roll_mean - roll_sd,
+                ymax = roll_mean + roll_sd),
+            colour = NA,
+            alpha = 0.25) +
+  geom_line(data = rmn_pop_avg,
+            aes(colour = genotype,
+                y = roll_mean),
+            size = 0.2) +
+  scale_colour_manual(values = pal_ostwald_disc[c(3, 2, 1)]) +
+  scale_fill_manual(values = pal_ostwald_disc[c(3, 2, 1)]) +
   theme_leo() +
-  theme(legend.position = "bottom",
-        legend.title = element_blank()) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank()
+  ) +
   guides(colour = guide_legend(override.aes = list(alpha = 1, size = 1)))
 
 # plotly::ggplotly(rmn_pop_test)
@@ -4291,6 +4306,12 @@ rmn_pop_data <- rmn_pop_sum %>%
   nest(point, x, y) %>%
   mutate(genotype = recode(genotype, "T89" = "WT"),
          genotype = ordered(genotype, levels = c("WT", "CCR1", "C4H")))
+
+rmn_pop_n <- rmn_pop_data %>%
+  group_by(genotype, cell_type) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  mutate(overall = sum(n))
 
 ```
 
@@ -4422,15 +4443,10 @@ dev.off()
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
-n_TEs <- rmn_pop_data %>%
-  drop_na(genotype, Solidity, cell_type) %>%
-  group_by(genotype, cell_type, replicate) %>%
-  summarise(n = n())
-
 letters <- letter_groups(rmn_pop_data,
-                         P_rel,
+                         Solidity,
                          genotype,
-                         "tukey",
+                         "kruskal",
                          cell_type,
                          print_position = "below"
                          )
@@ -4442,7 +4458,7 @@ test <- rmn_pop_data %>%
 
 convexity_poplar <- ggplot(drop_na(rmn_pop_data, genotype, Solidity, cell_type),
        aes(x = genotype,
-           y = P_rel)) +
+           y = Solidity)) +
   geom_quasirandom(
       aes(fill = genotype),
       # dodge.width = 0.6,
@@ -4487,7 +4503,7 @@ convexity_poplar <- ggplot(drop_na(rmn_pop_data, genotype, Solidity, cell_type),
     ) +
   facet_wrap(~ cell_type)
 
-pdf("poplar_P.pdf", width = onecol * 0.5, height = onecol * 0.5)
+pdf("poplar_convexity.pdf", width = onecol * 0.5, height = onecol * 0.5)
 convexity_poplar
 dev.off()
 ```
@@ -4503,9 +4519,9 @@ psem_data_pop <- rmn_pop_data %>%
     Solidity,
     # n_v,
     Perim.,
-    cellulose,
+    # cellulose,
     total_lignin,
-    G_rel,
+    # G_rel,
     S_rel,
     P_rel,
     GOH_rel,

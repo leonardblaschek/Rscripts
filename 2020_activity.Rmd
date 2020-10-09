@@ -8,7 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-# library(showtext)
+library(showtext)
 library(colorspace)
 library(ggrepel)
 library(broom)
@@ -58,23 +58,23 @@ pal_flame_disc <- c(
   "#1f265d"
 )
 
-# import Helvetica
-# font_add(
-#   "Helvetica",
-#   regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
-#   italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
-#   bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
-#   bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
-# )
-# showtext_auto()
+#import Helvetica
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+showtext_auto()
 
 # generating plot theme
-theme_leo <- function(base_size = 6
-                      # base_family = "Helvetica"
+theme_leo <- function(base_size = 6,
+                      base_family = "Helvetica"
                       ) {
   theme_minimal(
     base_size = base_size,
-    # base_family = base_family
+    base_family = base_family
   ) %+replace%
     theme(
       strip.text = element_text(hjust = 0, face = "italic"),
@@ -629,14 +629,28 @@ nested_data <- data %>%
 data <- data %>%
   left_join(select(nested_data, c(genotype:point, adj.r.squared)))
 
-data <- data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+slope_dist <- ggplot(nested_data) +
+  geom_density(aes(x = adj.r.squared,
+                     fill = genotype),
+                 # binwidth = 0.01,
+                 # position = "identity",
+                 alpha = 0.25,
+               size = 0.1) +
+  geom_vline(xintercept = 0.85,
+             colour = "black",
+             linetype = 2) +
+  theme_leo() +
+  facet_wrap(~ cell_type, ncol = 1)
+
+
+data <- data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX", "LP") &
   pH == 5 &
   treatment == "none" &
-  adj.r.squared > 0.75)
-nested_data <- nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+  adj.r.squared > 0.85)
+nested_data <- nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX", "LP") &
   pH == 5 &
   treatment == "none" &
-  adj.r.squared > 0.75)
+  adj.r.squared > 0.85)
 
 avg_slopes <- nested_data %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
@@ -776,7 +790,7 @@ slopes <- ggplot(
     family = "Helvetica"
   ) +
   labs(y = "DAF oxidation rate") +
-  scale_shape_manual(values = c(21, 22, 23, 24)) +
+  scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
   theme(
     # legend.position = "bottom",
@@ -790,8 +804,8 @@ raw_absorbance /
   slopes
 dev.off()
 
-pdf("DAF_pH5_grid.pdf", width = twocol, height = twocol)
-activity_grid
+pdf("DAF_pH5_diagnostics.pdf", width = onecol, height = onecol)
+slope_dist
 dev.off()
 ```
 
