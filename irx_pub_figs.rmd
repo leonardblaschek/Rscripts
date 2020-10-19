@@ -738,6 +738,7 @@ rmn_sum <- rmn_data_corrected %>%
     "GOH_rel" = scaled_lig[wavenumber == 1664],
     "GCHO_rel" = scaled_lig[wavenumber == 1625],
     "S_rel" = scaled_lig[wavenumber == 1334],
+    "P_rel" = scaled_lig[wavenumber == 1001],
     "X1174" = scaled_lig[wavenumber == 1174],
     "X1141" = scaled_lig[wavenumber == 1141],
     "cellulose" = scaled[wavenumber == 1099] + scaled[wavenumber == 381],
@@ -784,7 +785,7 @@ write_excel_csv(spectra_export_scaled, "Raman_spectra_scaled.csv")
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, warning = FALSE, eval = TRUE, echo = FALSE}
 #### import and tidy Wiesner test data ####
 wiesner.data <-
-  read.csv("/data/Phloroglucinol/measurements_revisited.csv",
+  read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
     skip = 2
   )
 
@@ -805,7 +806,7 @@ wiesner.data[251:300 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 5
   "PH"
 
 # import SMX measurements
-wiesner.data.SMX <- read.csv("file:///data/Phloroglucinol/measurements_SMX.csv",
+wiesner.data.SMX <- read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_SMX.csv",
   skip = 2
 )
 wiesner.data.SMX$replicate <- as.factor(wiesner.data.SMX$replicate)
@@ -934,7 +935,7 @@ rmn_irx <- left_join(rmn_irx, raman_convex)
 # write_csv(rmn_irx, "raman_irx_shape.csv")
 
 #### import and tidy plant height data ####
-raman.heights <- read.csv("file:///data/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
+raman.heights <- read.csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
   select(genotype, replicate, height) %>%
   mutate(genotype = recode(genotype, "col-0" = "Col-0")) %>%
   rename("Plant.height" = "height") %>%
@@ -1423,9 +1424,10 @@ dev.off()
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 step_data <- rmn_irx %>%
-  filter(cell.type == "SMX") %>%
+  filter(cell.type == "PX") %>%
   select(convexity,
          total_lignin,
+         P_rel,
          # G_rel,
          # GOH.G,
          S_rel,
@@ -1531,6 +1533,7 @@ psem_px <- psem(
   # n_f +
   mean.OD1 +
     Perim. +
+    P_rel +
     # cellulose +
     # S.G +
     # G_tot +
@@ -1578,6 +1581,7 @@ psem_pmx <- psem(
   n_v +
     # n_f +
     mean.OD1 +
+    P_rel +
     # Perim. +
     # S.G +
     # G_tot +
@@ -1632,6 +1636,7 @@ psem_smx <- psem(
   # G_tot +
   # GOH_rel +
   GOH.G +
+    P_rel +
     # G_rel +
     # GOH_tot +
     # S_rel +
@@ -4136,8 +4141,14 @@ rmn_pop_avg <- rmn_pop_scaled %>%
 rmn_pop_sum <- rmn_pop_scaled %>%
   group_by(genotype, replicate, technical, TE) %>%
   summarise(
-    "unscaled_lignin" = (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
+    "unscaled_lignin" = 
+      (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
       corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "broad_lignin" = 
+      corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] +
+      corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1] +
+      corrected.intensity[abs(wavenumber - 1660) == min(abs(wavenumber - 1660))][1] +
+      corrected.intensity[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
     "total_lignin" = (scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
       scaled[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
     "P_rel" = scaled_lig[abs(wavenumber - 1000) == min(abs(wavenumber - 1000))][1],
@@ -4174,8 +4185,15 @@ rmn_pop_test <- ggplot(
                      # limits = c(1020, 980)
                      ) +
   # scale_y_continuous(limits = c(-0.001, 0.003)) +
-  geom_vline(xintercept = c(1660, 1600, 1330, 1120, 1095, 1000, 375),
+  geom_vline(xintercept = c(1660, 1600, 1330, 1120, 1095, 1001, 375),
              size = 0.2) +
+  annotate("text",
+           label = c("1660", "1600", "1330", "1120", "1095", "1001", "375"),
+           y = 0.007,
+           x = c(1661, 1601, 1331, 1170, 1096, 1002, 376),
+           hjust = 0,
+           family = "Helvetica",
+           size = ggtext_size) +
   # geom_line(aes(
   #   group = interaction(genotype, replicate, technical, TE),
   #   colour = genotype
@@ -4328,18 +4346,21 @@ ggplot(rmn_pop_data,
   geom_smooth(method = "lm")
 
 rmn_lignin_dist <- rmn_pop_data %>%
-  # filter(genotype == "T89" &
-  #          replicate == "6" &
-  #          technical == "pTE"
-  #       ) %>%
+  unite("ID", genotype, replicate,
+        sep = "_",
+        remove = FALSE) %>%
+  filter(Distance < 2500) %>%
+  # filter(ID != "WT_1") %>%
   select(genotype, replicate, cell_type, technical, Distance, TE,
          # "Cellulose (381 + 1099)" = cellulose,
-         # "Total Lignin (1603 + 2*1334)" = total_lignin,
+         # "AUC scaled lignin" = total_lignin,
          # "Total G-units (1603)" = G_tot,
          # "Total S-units (1334)" = S_tot,
          # "Phenyl" = P_rel,
          "Lignin/Cellulose" = lig.cellu,
-         # "Raw lignin" = unscaled_lignin,
+         # "Unscaled lignin" = unscaled_lignin,
+         # "AUC" = AUC,
+         # "Complete lignin" = broad_lignin,
          # "Total G/Cellulose" = G.cellu,
          # "Relative G-units" = G_rel, 
          # "Relative S-units" = S_rel, 
@@ -4353,6 +4374,7 @@ rmn_lignin_dist <- rmn_pop_data %>%
                names_to = "variable", 
                values_to = "value")
 
+# bulk model
 regressions <- rmn_lignin_dist %>%
   ungroup() %>%
   filter(cell_type == "SV") %>%
@@ -4382,9 +4404,45 @@ regressions <- rmn_lignin_dist %>%
     )
   )
 
+# mixed model
+regressions <- rmn_lignin_dist %>%
+  ungroup() %>%
+  filter(cell_type == "SV") %>%
+  select(-technical) %>%
+  nest(data = c(TE, replicate, Distance, value)) %>%
+  group_by(variable) %>%
+  mutate(max = max(map_dbl(data, ~ max(.x$value))),
+         min = max(map_dbl(data, ~ min(.x$value)))) %>%
+  group_by(genotype, variable) %>%
+  mutate(
+    fit = map(data, ~ lme4::lmer(value ~ Distance + 
+                                   # (1 + Distance | replicate),
+                                   (1 | replicate),
+                                 data = .x)),
+    pred = map(fit, predict),
+    tidied = map(fit, broom.mixed::glance),
+    r2 = map(fit, MuMIn::r.squaredGLMM),
+    r2 = map(r2, 2),
+    r2 = as.numeric(r2),
+    Distance = map_dbl(data, ~ max(.x$Distance))
+  ) %>%
+  group_by(variable) %>%
+  mutate(
+    Distance = max(Distance),
+    spacer = case_when(variable == "Lignin/Cellulose" ~ (max - min) * 1.3,
+                       TRUE ~ max - min),
+    value = case_when(
+      genotype == "WT" ~ max + (0.2 * spacer),
+      genotype == "CCR1" ~ max + (0.1 * spacer),
+      genotype == "C4H" ~ max
+    )
+  )
+
+rmn_lignin_dist_pred <- regressions %>%
+  unnest(data, pred)
 
 dist_lig <- ggplot(
-  rmn_lignin_dist %>% filter(cell_type == "SV"),
+  rmn_lignin_dist_pred %>% filter(cell_type == "SV"),
   aes(
     x = Distance,
     y = value,
@@ -4393,8 +4451,7 @@ dist_lig <- ggplot(
   )
 ) +
   geom_point(
-    # aes(shape = replicate),
-    shape = 16,
+    aes(shape = replicate),
     alpha = 0.5
     ) +
   geom_smooth(
@@ -4414,14 +4471,127 @@ dist_lig <- ggplot(
     aes(label =
           paste0(genotype,
                  ": R<sup>2</sup> = ",
-                 round(adj.r.squared, 2),
-                 ", <i>P</i> = ",
-                 format(p.value, scientific = TRUE, digits = 2)
+                 round(r2, 2)
+                 # ", <i>P</i> = ",
+                 # format(p.value, scientific = TRUE, digits = 2)
                  ),
         colour = genotype,
-        fontface = face
+        # fontface = face
         )
   ) +
+  # ggrepel::geom_text_repel(aes(label = TE)) +
+  theme_leo() +
+  theme(axis.title.y = element_blank()) +
+  labs(x = "Distance [px]") +
+  # coord_cartesian(clip = "off") +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
+  scale_colour_manual(values = pal_ostwald_disc) +
+  facet_wrap(vars(variable),
+             scales = "free_y",
+             nrow = 1)
+
+pdf("post_mortem_lignification.pdf", width = twocol, height = onecol * 0.5)
+dist_lig
+dev.off()
+
+
+dist_lig1 <- ggplot(
+  rmn_lignin_dist_pred %>% filter(cell_type == "SV"),
+  aes(
+    x = Distance,
+    y = value,
+    colour = genotype,
+    # fill = replicate
+  )
+) +
+  geom_point(
+    aes(shape = replicate),
+    size = 1,
+    alpha = 0.25
+    ) +
+  geom_smooth(
+    aes(group = interaction(genotype, replicate),
+        y = pred),
+    size = 0.5,
+    method = "lm",
+    se = F
+  ) +
+  ggtext::geom_richtext(
+    data = regressions,
+    size = ggtext_size,
+    vjust = 0,
+    hjust = 1,
+    # colour = "black",
+    label.colour = NA,
+    family = "Helvetica",
+    fill = NA,
+    aes(label =
+          paste0(genotype,
+                 ": R<sup>2</sup> = ",
+                 round(r2, 2)
+                 # ", <i>P</i> = ",
+                 # format(p.value, scientific = TRUE, digits = 2)
+                 ),
+        colour = genotype,
+        # fontface = face
+        )
+  ) +
+  # ggrepel::geom_text_repel(aes(label = TE)) +
+  theme_leo() +
+  theme(axis.title.y = element_blank()) +
+  labs(x = "Distance [px]") +
+  # coord_cartesian(clip = "off") +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
+  scale_colour_manual(values = pal_ostwald_disc) +
+  facet_wrap(vars(variable),
+             scales = "free_y",
+             nrow = 1)
+
+pdf("individual_intercept.pdf", width = twocol, height = onecol * 0.5)
+dist_lig1
+dev.off()
+
+dist_lig2 <- ggplot(
+  rmn_lignin_dist_pred %>% filter(cell_type == "SV"),
+  aes(
+    x = Distance,
+    y = value,
+    colour = genotype,
+    # fill = replicate
+  )
+) +
+  geom_point(
+    aes(shape = replicate),
+    alpha = 0.5
+    ) +
+  geom_smooth(
+    aes(group = interaction(genotype, replicate),
+        y = value),
+    size = 0.5,
+    method = "loess",
+    span = 5,
+    se = F
+  ) +
+  # ggtext::geom_richtext(
+  #   data = regressions,
+  #   size = ggtext_size,
+  #   vjust = 0,
+  #   hjust = 1,
+  #   # colour = "black",
+  #   label.colour = NA,
+  #   family = "Helvetica",
+  #   fill = NA,
+  #   aes(label =
+  #         paste0(genotype,
+  #                ": R<sup>2</sup> = ",
+  #                round(r2, 2)
+  #                # ", <i>P</i> = ",
+  #                # format(p.value, scientific = TRUE, digits = 2)
+  #                ),
+  #       colour = genotype,
+  #       # fontface = face
+  #       )
+  # ) +
   # ggrepel::geom_text_repel(aes(label = TE)) +
   theme_leo() +
   theme(axis.title.y = element_blank()) +
@@ -4431,10 +4601,10 @@ dist_lig <- ggplot(
   scale_colour_manual(values = pal_ostwald_disc) +
   facet_wrap(vars(variable),
              scales = "free_y",
-             ncol = 3)
+             nrow = 1)
 
-pdf("post_mortem_lignification.pdf", width = twocol, height = onecol * 0.5)
-dist_lig
+pdf("individual_slope+intercept.pdf", width = twocol, height = onecol * 0.5)
+dist_lig2
 dev.off()
 
 ```
@@ -4446,7 +4616,7 @@ dev.off()
 letters <- letter_groups(rmn_pop_data,
                          Solidity,
                          genotype,
-                         "kruskal",
+                         "tukey",
                          cell_type,
                          print_position = "below"
                          )
@@ -4518,15 +4688,15 @@ psem_data_pop <- rmn_pop_data %>%
   select(
     Solidity,
     # n_v,
-    Perim.,
-    # cellulose,
+    # Perim.,
+    cellulose,
     total_lignin,
-    # G_rel,
+    G_rel,
     S_rel,
     P_rel,
     GOH_rel,
     GCHO_rel,
-    # lig.cellu,
+    lig.cellu,
     Distance,
   ) %>%
   drop_na()
@@ -4559,7 +4729,7 @@ psem_pop <- psem(
   lm(Solidity ~
   # n_v +
     Distance +
-    cellulose +
+    # cellulose +
     P_rel +
     # n_f +
     # mean.OD1 +

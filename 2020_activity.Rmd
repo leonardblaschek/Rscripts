@@ -356,86 +356,260 @@ dev.off()
 ## Mutants on DAB at pH 5
 
 ```{r}
-data <- read_csv("/data/PhD/Laccase_activity/2020-06_activity/2020-06_DAB_activity.csv",
-  skip = 1,
+lm_start <- 150
+lm_stop <- 400
+
+
+data <- read_csv(
+  "/data/PhD/Laccase_activity/2020-09_activity/2020-09_lac_activity.csv",
+  comment = '"#',
+  col_types = "ccDcccdcddd"
 ) %>%
-  mutate(time = slice * interval) %>%
+  mutate(
+    time = slice * interval,
+    genotype = ordered(genotype, levels = c(
+      "WT",
+      "Q-4",
+      "Q-5",
+      "Q-10",
+      "Q-12",
+      "Q-17",
+      "Q"
+    ))
+  ) %>%
   select(-c(slice, interval)) %>%
   group_by(time, genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
-  mutate(point = row_number())
+  mutate(
+    point = row_number(),
+    replicate = as.character(replicate)
+  )
 
 #### subtract water column and background ####
 data <- data %>%
+  filter(substrate == "DAB" & date != "2020-07-07") %>%
+  # anti_join(read_csv(
+  #   "/data/PhD/Laccase_activity/2020-09_activity/excluded_sections.csv",
+  #   col_type = "ccDccc"
+  # )) %>%
   group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
   mutate(
-    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
-    ) %>%
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "BG"])
+  ) %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
   mutate(
-    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == 100]
-    )
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == lm_start]
+  ) 
 
 nested_data <- data %>%
-  filter(time >= 100 & time <= 300) %>%
+  filter(time >= lm_start & time <= lm_stop) %>%
   select(-mean_absorbance, -corrected_absorbance) %>%
-  nest(time, zeroed_absorbance, median_hue) %>%
+  nest(data = c(time, zeroed_absorbance, median_hue)) %>%
   mutate(
     fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
-    tidied = map(fit, tidy)
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
   ) %>%
+  select(-model) %>%
   unnest(tidied) %>%
-  filter(term == "time")
+  filter(term == "time") %>%
+  group_by(genotype, replicate, date, treatment) %>%
+  mutate(PH_slope = mean(estimate[cell_type == "PH"])) %>%
+  filter(PH_slope < 0.00025 & date != "2020-07-07")
+# %>%
+#   group_by(genotype, date, substrate, treatment, pH, cell_type) %>%
+#   mutate(mean_estimate = mean(estimate)) %>%
+#   group_by(date, substrate, treatment, pH, cell_type) %>%
+#   mutate(rel_estimate = estimate / mean_estimate[genotype == "WT"])
+
+
+data <- data %>%
+  left_join(select(nested_data, c(genotype:point, adj.r.squared)))
+
+slope_dist <- ggplot(nested_data) +
+  geom_density(aes(x = adj.r.squared,
+                     fill = genotype),
+                 # binwidth = 0.01,
+                 # position = "identity",
+                 alpha = 0.25,
+               size = 0.1) +
+  geom_vline(xintercept = 0.85,
+             colour = "black",
+             linetype = 2) +
+  theme_leo() +
+  facet_wrap(~ cell_type, ncol = 1)
+
+unfiltered_data <- data %>% 
+  filter(cell_type %in% c("IF", "XF", "MX", "PX", "LP", "PH") &
+  pH == 5 &
+  treatment == "none")
+  
+data <- data %>% 
+  filter(cell_type %in% c("IF", "XF", "MX", "PX", "LP", "PH") &
+  pH == 5 &
+  treatment == "none" &
+  adj.r.squared > 0.85)
+
+nested_data <- nested_data %>% 
+  filter(cell_type %in% c("IF", "XF", "MX", "PX", "LP", "PH") &
+  pH == 5 &
+  treatment == "none" &
+  adj.r.squared > 0.85)
+
+avg_slopes <- nested_data %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  summarise(mean_slope = mean(estimate))
+
 
 activity_grid <- ggplot(
-  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+  data,
   aes(
     x = time,
     y = zeroed_absorbance,
-    colour = genotype
+    colour = genotype,
+    linetype = treatment
   )
-  ) +
+) +
   annotate("rect",
-           ymin = -Inf,
-           ymax = Inf,
-           xmin = 100,
-           xmax = 240,
-           fill = "grey95") +
-  geom_line(aes(group = interaction(genotype, point)),
-            alpha = 0.1,
-            size = 0.2) +
-  geom_smooth(size = 0.2,
-              se = F) +
-  labs(x = "Time [min]") +
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = lm_start,
+    xmax = lm_stop,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(genotype, replicate, point, date, treatment)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  geom_smooth(
+    data = filter(data, time >= lm_start & time <= lm_stop),
+    size = 0.2,
+    se = F,
+    method = "lm",
+    fullrange = T
+  ) +
+  labs(x = "Time [min]",
+       y = "Corrected & zeroed abs.") +
   theme_leo() +
   # theme(legend.position = "bottom") +
-  # coord_cartesian(ylim = c(0, 0.2)) +
-  facet_grid(treatment~cell_type) 
+  coord_cartesian(xlim = c(0, 600)) +
+  facet_wrap(~ cell_type, nrow = 1)
 
-slopes <- ggplot(nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") & treatment == "none"),
-                 aes(x = genotype,
-                     y = estimate,
-                     colour = genotype)) +
-  geom_quasirandom(dodge.width = 0.5,
-                   alpha = 0.5) +
+raw_absorbance <- ggplot(
+  unfiltered_data,
+  aes(
+    x = time,
+    y = mean_absorbance,
+    colour = genotype
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = lm_start,
+    xmax = lm_stop,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(genotype, replicate, point, date)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  # geom_smooth(size = 0.2,
+  #             se = F) +
+  labs(x = "Time [min]",
+       y = "Raw absorbance") +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  coord_cartesian(xlim = c(0, 600)) +
+  facet_wrap(~cell_type, nrow = 1)
+
+
+letters_tech <- letter_groups(nested_data,
+  estimate,
+  genotype,
+  "tukey",
+  cell_type,
+  print_position = "above",
+  print_adjust = 1
+)
+
+letters <- letter_groups(avg_slopes,
+  mean_slope,
+  genotype,
+  "tukey",
+  cell_type,
+  print_position = "above",
+  print_adjust = 1
+) %>%
+  select(-mean_slope) %>%
+  left_join(select(letters_tech, -Letters))
+
+
+slopes <- ggplot(
+  nested_data,
+  aes(
+    x = genotype,
+    y = estimate,
+    fill = genotype
+  )
+) +
+  geom_quasirandom(aes(
+    shape = replicate,
+    group = genotype,
+    fill = genotype
+  ),
+  colour = "black",
+  # fill = "grey90",
+  dodge.width = 0.5,
+  alpha = 0.5,
+  stroke = 0.1,
+  size = 0.5
+  ) +
   geom_violin(
     aes(group = interaction(treatment, genotype)),
     draw_quantiles = 0.5,
     fill = "white",
     colour = "black",
     alpha = 0.85,
-    width = 0.2,
+    width = 0.4,
     position = position_dodge(width = 0.5),
     size = 0.2,
-    scale = "width") +
-  # scale_colour_manual(values = c("#275d95")) +
-  # scale_x_continuous(breaks = c(4, 5, 6, 7)) +
+    scale = "width"
+  ) +
+  geom_point(
+    data = avg_slopes,
+    aes(
+      y = mean_slope,
+      shape = replicate
+    ),
+    colour = "black",
+    alpha = 0.75,
+    stroke = 0.1,
+    size = 1
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "DAB oxidation rate") +
+  scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
-  # theme(legend.position = "bottom") +
-  facet_wrap(~cell_type, ncol = 4)
+  theme(
+    legend.position = "bottom",
+    axis.title.x = element_blank()
+    ) +
+  facet_wrap(~cell_type, nrow = 1)
 
-pdf("DAB_pH5.pdf", width = twocol, height = onecol * 0.5)
-activity_grid
-slopes
+pdf("DAB_pH5.pdf", width = twocol * 1.5, height = onecol * 1.5)
+raw_absorbance / 
+  activity_grid /
+  slopes
+dev.off()
+
+pdf("DAB_pH5_diagnostics.pdf", width = onecol, height = onecol)
+slope_dist
 dev.off()
 ```
 
@@ -593,17 +767,18 @@ data <- read_csv(
 
 #### subtract water column and background ####
 data <- data %>%
+  filter(substrate == "DAF") %>%
   anti_join(read_csv(
     "/data/PhD/Laccase_activity/2020-09_activity/excluded_sections.csv",
     col_type = "ccDccc"
   )) %>%
   group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
   mutate(
-    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "BG"])
   ) %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
   mutate(
-    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == 100]
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == lm_start]
   )
 
 nested_data <- data %>%
@@ -685,7 +860,7 @@ activity_grid <- ggplot(
     fullrange = T
   ) +
   labs(x = "Time [min]",
-       y = "Zeroed absorbance") +
+       y = "Corrected & zeroed abs.") +
   theme_leo() +
   # theme(legend.position = "bottom") +
   coord_cartesian(xlim = c(0, 400)) +
@@ -713,7 +888,7 @@ raw_absorbance <- ggplot(
   # geom_smooth(size = 0.2,
   #             se = F) +
   labs(x = "Time [min]",
-       y = "Corrected absorbance") +
+       y = "Raw absorbance") +
   theme_leo() +
   # theme(legend.position = "bottom") +
   coord_cartesian(xlim = c(0, 400)) +
