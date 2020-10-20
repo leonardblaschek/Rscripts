@@ -4012,7 +4012,7 @@ dev.off()
 #### import and tidy poplar Raman data ####
 rmn_files <-
   list.files(
-    path = "/data/PhD/IRX/Poplar/2020-08_soil_poplar",
+    path = "/run/media/leonard/LEONARD 1TB/Grsync/office//PhD/IRX/Poplar/2020-08_soil_poplar",
     pattern = "(TE|FI|RP)(.*).txt",
     recursive = TRUE,
     full.names = TRUE
@@ -4028,7 +4028,7 @@ read_plus <- function(flnm) {
     mutate(
       filename = str_remove(
         flnm,
-        fixed("/data/PhD/IRX/Poplar/2020-08_soil_poplar/")
+        fixed("/run/media/leonard/LEONARD 1TB/Grsync/office//PhD/IRX/Poplar/2020-08_soil_poplar/")
       )
     ) %>%
     separate(filename, into = c("genotype", "replicate", "TE"), sep = "([/-])") %>%
@@ -4058,7 +4058,7 @@ rmn_pop <- lapply(rmn_files, read_plus) %>%
   filter(cell_type == "TE") %>%
   ungroup() %>%
   select(-cell_type) %>%
-  anti_join(read_csv("/data/PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_exclude.csv",
+  anti_join(read_csv("/run/media/leonard/LEONARD 1TB/Grsync/office//PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_exclude.csv",
     col_types = "cccc"
   ))
 
@@ -4194,13 +4194,13 @@ rmn_pop_test <- ggplot(
            hjust = 0,
            family = "Helvetica",
            size = ggtext_size) +
-  # geom_line(aes(
-  #   group = interaction(genotype, replicate, technical, TE),
-  #   colour = genotype
-  # ),
-  # alpha = 0.25,
-  # size = 0.1
-  # ) +
+  geom_line(aes(
+    group = interaction(genotype, replicate, technical, TE),
+    colour = genotype
+  ),
+  alpha = 0.25,
+  size = 0.1
+  ) +
   geom_ribbon(data = rmn_pop_avg,
             aes(fill = genotype,
                 y = roll_mean,
@@ -4255,7 +4255,7 @@ write_excel_csv(export_scaled, "soil_poplar_scaled.csv")
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
 pop_irx <- read_csv(
-  "/data/PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_coords.csv"
+  "/run/media/leonard/LEONARD 1TB/Grsync/office/PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_coords.csv"
   )
 
 #### create reference at the height of the cambium for distance calculation ####
@@ -4315,7 +4315,7 @@ pop_irx$Distance <-
   )
 
 celltypes <- read_csv(
-  "/data/PhD/IRX/Poplar/2020-08_soil_poplar/poplar_cell_types.csv",
+  "/run/media/leonard/LEONARD 1TB/Grsync/office/PhD/IRX/Poplar/2020-08_soil_poplar/poplar_cell_types.csv",
   col_types = "cccccc")
 
 rmn_pop_data <- rmn_pop_sum %>%
@@ -4326,7 +4326,9 @@ rmn_pop_data <- rmn_pop_sum %>%
          genotype = ordered(genotype, levels = c("WT", "CCR1", "C4H")))
 
 rmn_pop_n <- rmn_pop_data %>%
-  group_by(genotype, cell_type) %>%
+  mutate(bin = case_when(Distance < 250 ~ 1,
+                         TRUE ~2)) %>%
+  group_by(genotype, cell_type, bin) %>%
   summarise(n = n()) %>%
   ungroup() %>%
   mutate(overall = sum(n))
@@ -4336,14 +4338,6 @@ rmn_pop_n <- rmn_pop_data %>%
 #### Scatter plots
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-
-
-ggplot(rmn_pop_data,
-       aes(x = total_lignin,
-           y = Solidity)
-       )+
-  geom_point(aes(colour = genotype)) +
-  geom_smooth(method = "lm")
 
 rmn_lignin_dist <- rmn_pop_data %>%
   unite("ID", genotype, replicate,
@@ -4684,20 +4678,20 @@ dev.off()
 
 psem_data_pop <- rmn_pop_data %>%
   ungroup() %>%
-  filter(cell_type == "SV") %>%
+  filter(cell_type == "SV" & Distance < 250) %>%
   select(
     Solidity,
     # n_v,
     # Perim.,
     cellulose,
     total_lignin,
-    G_rel,
+    # G_rel,
     S_rel,
     P_rel,
     GOH_rel,
     GCHO_rel,
     lig.cellu,
-    Distance,
+    # Distance,
   ) %>%
   drop_na()
 
@@ -4716,7 +4710,7 @@ summary(step_model)
 ```{r}
 
 psem_data_pop <- rmn_pop_data %>%
-  filter(cell_type == "SV") %>%
+  filter(cell_type == "SV" & Distance < 250) %>%
   select(-data, -Length, -n_v) %>%
   drop_na()
 
@@ -4728,7 +4722,7 @@ psem_pop <- psem(
   ),
   lm(Solidity ~
   # n_v +
-    Distance +
+    # Distance +
     # cellulose +
     P_rel +
     # n_f +
@@ -4740,11 +4734,11 @@ psem_pop <- psem(
     # GOH.G +
     # G_rel +
     # GOH_tot +
-    # S_rel +
+    S_rel +
     # S_tot +
-    GCHO_rel +
+    GCHO_rel,
     # total_lignin:mean.OD1 +
-    total_lignin,
+    # total_lignin,
   data = data.frame(psem_data_pop)
   ),
   data = data.frame(psem_data_pop)
