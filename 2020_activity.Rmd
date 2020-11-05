@@ -386,11 +386,11 @@ data <- read_csv(
 
 #### subtract water column and background ####
 data <- data %>%
-  filter(substrate == "DAB" & date != "2020-07-07") %>%
-  # anti_join(read_csv(
-  #   "/data/PhD/Laccase_activity/2020-09_activity/excluded_sections.csv",
-  #   col_type = "ccDccc"
-  # )) %>%
+  filter(substrate == "DAB") %>%
+  anti_join(read_csv(
+    "/data/PhD/Laccase_activity/2020-09_activity/excluded_sections.csv",
+    col_type = "ccDccc"
+  )) %>%
   group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
   mutate(
     corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "BG"])
@@ -414,8 +414,7 @@ nested_data <- data %>%
   unnest(tidied) %>%
   filter(term == "time") %>%
   group_by(genotype, replicate, date, treatment) %>%
-  mutate(PH_slope = mean(estimate[cell_type == "PH"])) %>%
-  filter(PH_slope < 0.00025 & date != "2020-07-07")
+  mutate(PH_slope = mean(estimate[cell_type == "PH"])) 
 # %>%
 #   group_by(genotype, date, substrate, treatment, pH, cell_type) %>%
 #   mutate(mean_estimate = mean(estimate)) %>%

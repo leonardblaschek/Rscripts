@@ -547,3 +547,16 @@ pdf("rosette_growth.pdf", width = cm_size(10), height = cm_size(10))
 rosette_growth
 dev.off()
 ```
+
+#### Root growth
+
+```{r}
+root_data <- read_csv("/data/PhD/Phenotyping/2020-10_lac_root_growth/2020-10_root_growth.csv")
+
+ggplot(root_data, aes(y = length.cm,
+                      x = genotype)) +
+  geom_violin(draw_quantiles = 0.5) +
+  geom_quasirandom() +
+  theme_leo()
+
+```

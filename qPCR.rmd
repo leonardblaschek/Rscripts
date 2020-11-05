@@ -1,0 +1,1055 @@
+---
+title: "RT-qPCR of laccases"
+author: "Leonard Blaschek"
+date: "23/10/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(tidyqpcr)
+library(showtext)
+library(broom)
+library(ggrepel)
+
+pal_ostwald_cont <- c(
+  "#155DA7",
+  "#0A75B9",
+  # "#0C89C9",
+  "#FED32F",
+  # "#F8A63A",
+  "#EF663A",
+  "#ED4137"
+)
+
+pal_ostwald_disc <- c(
+  "#275d95",
+  "#e8c245",
+  "#d25952"
+)
+
+pal_ostwald_disc_long <- c(
+  "#8fab1d",
+  "#2d7d73",
+  "#1d566f",
+  "#275d95",
+  "#e8c245",
+  "#d25952"
+)
+
+pal_flame <- c(
+  "#1F265D",
+  "#203F8F",
+  "#404678",
+  "#897B88",
+  "#E7BBA2",
+  "#FFEDC3",
+  "#FEFEFE"
+)
+
+pal_flame_disc <- c(
+  "#ffedc3",
+  "#897b88",
+  "#1f265d"
+)
+
+# import Helvetica
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+showtext_auto()
+
+# generating plot theme
+theme_leo <- function(base_size = 8,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.125,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        size = 8,
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        size = 8,
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.title = element_text(
+        colour = "black",
+        size = 8
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = 8),
+      legend.key.height = unit(4, "mm"),
+      plot.title = element_text(
+        size = 8,
+        hjust = 0
+      ),
+      complete = TRUE
+    )
+}
+
+ggtext_size <- 8 / (14 / 5)
+twocol <- 18 / 2.54
+onehalfcol <- 14 / 2.54
+onecol <- 9 / 2.54
+```
+
+## 2020-10-26
+
+\small
+
+```{r}
+plate <- tibble(
+  row = rep(LETTERS[1:8], length.out = 96, each = 12),
+  column = rep(1:12, length.out = 96, each = 1),
+  sample = c(
+    rep(c("WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1"),
+      length.out = 36, each = 1
+    ),
+    rep(c("NTC", "CC", "CC", "CC", "CC", "CC"),
+      length.out = 36, each = 1
+    ),
+    rep(NA, length.out = 24)
+  ),
+  concentration = c(
+    rep(0.1, length.out = 36),
+    rep(c(1, 0.1, 0.01, 0.001, 0.0001, 0),
+      length.out = 36, each = 1
+    ),
+    rep(NA, length.out = 24)
+  ),
+  gene = ordered(c(
+    rep(c("LAC4", "UBI", "LAC4", "18S", "LAC4", "EF1a"), length.out = 72, each = 6),
+    rep(NA, length.out = 24)
+  ),
+  levels = c("LAC4", "UBI", "18S", "EF1a")
+  )
+) %>%
+  unite("Pos", row, column, sep = "") %>%
+  mutate(replicate = "A1")
+
+write_tsv(plate, "/data/PhD/qPCR/2020-10-26_plate.tsv")
+
+results <- read_tsv("/data/PhD/qPCR/2020-10-26_cp.tsv",
+  skip = 1
+) %>%
+  left_join(plate) %>%
+  drop_na(sample)
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 35),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  scale_x_log10() +
+  theme_leo()
+
+CCs <- filter(results, sample == "CC") %>%
+  select(gene, concentration, Cp) %>%
+  filter(Cp < 35) %>%
+  nest(data = c(concentration, Cp)) %>%
+  mutate(
+    fit = map(data, ~ lm(Cp ~ log10(concentration), data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    r.squared = unlist(map(model, ~ .x[["r.squared"]]))
+  ) %>%
+  unnest(tidied) %>%
+  select(gene, r.squared, term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(efficiency = (10^(-1 / `log10(concentration)`) - 1) * 100)
+
+
+results <- left_join(results, CCs) %>%
+  group_by(gene, concentration, sample) %>%
+  mutate(technical = row_number())
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 35),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  geom_label(
+    data = filter(results, concentration == 1 & technical == 1),
+    aes(label = paste0(
+      gene,
+      ": R² = ",
+      round(r.squared, digits = 3),
+      "; efficiency = ",
+      round(efficiency, digits = 0),
+      "%"
+    )),
+    hjust = 1,
+    vjust = 1,
+    colour = "black",
+    label.size = 0,
+    fill = rgb(1, 1, 1, 0.85),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_colour_brewer(palette = "Pastel1") +
+  scale_x_log10() +
+  theme_leo()
+```
+
+## 2020-10-27
+
+```{r}
+plate <- tibble(
+  row = rep(LETTERS[1:8], length.out = 96, each = 12),
+  column = rep(1:12, length.out = 96, each = 1),
+  sample = c(rep(c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "CC", "CC", "CC", "CC", "NTC",
+    "CC", "CC", "CC", "CC", "CC", "NTC"
+  ),
+  length.out = 96, each = 1
+  )),
+  gene = ordered(c(rep(c("LAC4", "UBI", "18S", "EF1a"), length.out = 96, each = 24)),
+    levels = c("LAC4", "UBI", "18S", "EF1a")
+  ),
+  replicate = rep(c("A1", "A2"), each = 6, length.out = 96),
+  concentration = rep(c(
+    rep(c(0.1, 0.16666), length.out = 12, each = 6),
+    rep(c(1, 0.1, 0.02, 0.01, 0.005, 0), length.out = 12, each = 1)
+  ), length.out = 96, each = 1)
+) %>%
+  unite("Pos", row, column, sep = "")
+
+write_tsv(plate, "/data/PhD/qPCR/2020-10-27_plate.tsv")
+
+results <- read_tsv("/data/PhD/qPCR/2020-10-27_cp.tsv",
+  skip = 1
+) %>%
+  left_join(plate)
+
+CCs <- filter(results, sample == "CC") %>%
+  select(gene, replicate, concentration, Cp) %>%
+  nest(data = c(concentration, Cp)) %>%
+  mutate(
+    fit = map(data, ~ lm(Cp ~ log10(concentration), data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    r.squared = unlist(map(model, ~ .x[["r.squared"]]))
+  ) %>%
+  unnest(tidied) %>%
+  select(gene, replicate, r.squared, term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(efficiency = (10^(-1 / `log10(concentration)`) - 1) * 100)
+
+
+results <- left_join(results, CCs)
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 35),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  geom_label(
+    data = filter(results, concentration == 0.005),
+    aes(label = paste0(
+      gene,
+      ": R² = ",
+      round(r.squared, digits = 3),
+      "; efficiency = ",
+      round(efficiency, digits = 0),
+      "%"
+    )),
+    hjust = 0,
+    vjust = 0,
+    colour = "black",
+    label.size = 0,
+    fill = rgb(1, 1, 1, 0.85),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_colour_brewer(palette = "Pastel1") +
+  scale_x_log10() +
+  theme_leo() +
+  facet_wrap(~replicate)
+
+normalised <- results %>%
+  filter(sample != "CC" & sample != "NTC") %>%
+  group_by(replicate, sample) %>%
+  mutate(dCt = Cp[gene == "EF1a"] - Cp) %>%
+  group_by(replicate, gene) %>%
+  mutate(
+    ddCt = dCt - dCt[sample == "WT"],
+    fold = 2^ddCt
+  ) %>%
+  pivot_longer(c(dCt, ddCt, fold), names_to = "metric", values_to = "value")
+
+ggplot(normalised) +
+  geom_point(aes(
+    x = sample,
+    y = value,
+    fill = replicate
+  ),
+  shape = 21,
+  alpha = 0.75,
+  stroke = 0.2,
+  size = 3
+  ) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  theme_leo() +
+  theme(axis.title = element_blank()) +
+  facet_grid(metric ~ gene, scales = "free")
+```
+
+## 2020-10-28
+
+```{r}
+plate <- tibble(
+  row = rep(LETTERS[1:8], length.out = 96, each = 12),
+  column = rep(1:12, length.out = 96, each = 1),
+  sample = ordered(rep(c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "CC", "CC", "CC", "CC", "NTC",
+    "CC", "CC", "CC", "CC", "CC", "NTC"
+  ),
+  length.out = 96, each = 1
+  ), levels = c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "NTC"
+  )),
+  gene = ordered(c(rep(c("LAC10", "LAC12", "LAC17", "EF1a"), length.out = 96, each = 24)),
+    levels = c("LAC10", "LAC12", "LAC17", "EF1a")
+  ),
+  replicate = rep(c("A1", "A2"), each = 6, length.out = 96),
+  concentration = rep(c(
+    rep(c(0.1, 0.16666), length.out = 12, each = 6),
+    rep(c(1, 0.1, 0.02, 0.01, 0.005, 0), length.out = 12, each = 1)
+  ), length.out = 96, each = 1)
+) %>%
+  unite("Pos", row, column, sep = "")
+
+write_tsv(plate, "/data/PhD/qPCR/2020-10-28_plate.tsv")
+
+results <- read_tsv("/data/PhD/qPCR/2020-10-28_cp.tsv",
+  skip = 1
+) %>%
+  left_join(plate)
+
+CCs <- filter(results, sample == "CC") %>%
+  select(gene, replicate, concentration, Cp) %>%
+  nest(data = c(concentration, Cp)) %>%
+  mutate(
+    fit = map(data, ~ lm(Cp ~ log10(concentration), data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    r.squared = unlist(map(model, ~ .x[["r.squared"]]))
+  ) %>%
+  unnest(tidied) %>%
+  select(gene, replicate, r.squared, term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(efficiency = (10^(-1 / `log10(concentration)`) - 1) * 100)
+
+
+results <- left_join(results, CCs)
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 35),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  geom_label_repel(
+    data = filter(results, concentration == 0.005),
+    aes(label = paste0(
+      gene,
+      ": R² = ",
+      round(r.squared, digits = 3),
+      "; efficiency = ",
+      round(efficiency, digits = 0),
+      "%"
+    )),
+    hjust = 0,
+    vjust = 0,
+    colour = "black",
+    label.size = 0,
+    fill = rgb(1, 1, 1, 0.85),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_colour_brewer(palette = "Pastel1") +
+  scale_x_log10() +
+  theme_leo() +
+  facet_wrap(~replicate)
+
+normalised <- results %>%
+  filter(sample != "CC" & sample != "NTC") %>%
+  group_by(replicate, sample) %>%
+  mutate(dCt = Cp[gene == "EF1a"] - Cp) %>%
+  group_by(replicate, gene) %>%
+  mutate(
+    ddCt = dCt - dCt[sample == "WT"],
+    fold = 2^ddCt
+  ) %>%
+  pivot_longer(c(dCt, ddCt, fold), names_to = "metric", values_to = "value")
+
+normalised_avg <- normalised %>%
+  group_by(sample, gene, metric) %>%
+  summarise(mean = mean(value))
+
+ggplot(normalised) +
+  geom_point(aes(
+    x = sample,
+    y = value,
+    fill = replicate
+  ),
+  shape = 21,
+  alpha = 0.75,
+  stroke = 0.2,
+  size = 3
+  ) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  theme_leo() +
+  theme(axis.title = element_blank()) +
+  facet_grid(metric ~ gene, scales = "free")
+
+ggplot() +
+  geom_tile(
+    data = normalised_avg %>%
+      filter(metric == "ddCt"),
+    aes(
+      x = sample,
+      y = gene,
+      fill = mean
+    )
+  ) +
+  geom_text(
+    data = normalised_avg %>%
+      filter(metric == "fold"),
+    aes(
+      x = sample,
+      y = gene,
+      label = round(mean, digits = 2)
+    ),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  # scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  scale_fill_gradientn(
+    colours = rev(pal_ostwald_cont),
+    # limits = c(0,10),
+    # na.value = "#ED4137"
+  ) +
+  theme_leo() +
+  guides(fill = guide_colorbar(title = "ddCt")) +
+  labs(title = "Fold-change of laccase gene expression in single mutants") +
+  theme(
+    axis.title = element_blank(),
+    legend.position = "bottom"
+  )
+```
+
+## 2020-10-31
+
+```{r}
+plate <- tibble(
+  row = rep(LETTERS[1:8], length.out = 96, each = 12),
+  column = rep(1:12, length.out = 96, each = 1),
+  sample = ordered(rep(c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "CC", "CC", "CC", "CC", "NTC",
+    "CC", "CC", "CC", "CC", "CC", "NTC"
+  ),
+  length.out = 96, each = 1
+  ), levels = c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "NTC"
+  )),
+  gene = ordered(c(rep(c("LAC4", "LAC10", "LAC12", "EF1a"), length.out = 96, each = 24)),
+    levels = c("LAC4", "LAC10", "LAC12", "EF1a")
+  ),
+  replicate = rep(c("B1", "B2"), each = 6, length.out = 96),
+  concentration = rep(c(
+    rep(0.16666, length.out = 12),
+    rep(c(1, 0.1, 0.02, 0.01, 0.005, 0), length.out = 12, each = 1)
+  ), length.out = 96, each = 1)
+) %>%
+  unite("Pos", row, column, sep = "")
+
+write_tsv(plate, "/data/PhD/qPCR/2020-10-31_plate.tsv")
+
+results <- read_tsv("/data/PhD/qPCR/2020-10-31_cp.tsv",
+  skip = 1
+) %>%
+  left_join(plate)
+
+CCs <- filter(results, sample == "CC") %>%
+  select(gene, replicate, concentration, Cp) %>%
+  nest(data = c(concentration, Cp)) %>%
+  mutate(
+    fit = map(data, ~ lm(Cp ~ log10(concentration), data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    r.squared = unlist(map(model, ~ .x[["r.squared"]]))
+  ) %>%
+  unnest(tidied) %>%
+  select(gene, replicate, r.squared, term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(efficiency = (10^(-1 / `log10(concentration)`) - 1) * 100)
+
+
+results <- left_join(results, CCs)
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 35),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  geom_label_repel(
+    data = filter(results, concentration == 0.005),
+    aes(label = paste0(
+      gene,
+      ": R² = ",
+      round(r.squared, digits = 3),
+      "; efficiency = ",
+      round(efficiency, digits = 0),
+      "%"
+    )),
+    hjust = 0,
+    vjust = 0,
+    colour = "black",
+    label.size = 0,
+    fill = rgb(1, 1, 1, 0.85),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_colour_brewer(palette = "Pastel1") +
+  scale_x_log10() +
+  theme_leo() +
+  facet_wrap(~replicate)
+
+normalised <- results %>%
+  filter(sample != "CC" & sample != "NTC") %>%
+  group_by(replicate, sample) %>%
+  mutate(dCt = Cp[gene == "EF1a"] - Cp) %>%
+  group_by(replicate, gene) %>%
+  mutate(
+    ddCt = dCt - dCt[sample == "WT"],
+    fold = 2^ddCt
+  ) %>%
+  pivot_longer(c(dCt, ddCt, fold), names_to = "metric", values_to = "value")
+
+normalised_avg <- normalised %>%
+  group_by(sample, gene, metric) %>%
+  summarise(mean = mean(value))
+
+ggplot(normalised) +
+  geom_point(aes(
+    x = sample,
+    y = value,
+    fill = replicate
+  ),
+  shape = 21,
+  alpha = 0.75,
+  stroke = 0.2,
+  size = 3
+  ) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  theme_leo() +
+  theme(axis.title = element_blank()) +
+  facet_grid(metric ~ gene, scales = "free")
+
+ggplot() +
+  geom_tile(
+    data = normalised_avg %>%
+      filter(metric == "ddCt"),
+    aes(
+      x = sample,
+      y = gene,
+      fill = mean
+    )
+  ) +
+  geom_text(
+    data = normalised_avg %>%
+      filter(metric == "fold"),
+    aes(
+      x = sample,
+      y = gene,
+      label = round(mean, digits = 2)
+    ),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  # scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  scale_fill_gradientn(
+    colours = rev(pal_ostwald_cont),
+    # limits = c(0,10),
+    # na.value = "#ED4137"
+  ) +
+  theme_leo() +
+  guides(fill = guide_colorbar(title = "ddCt")) +
+  labs(title = "Fold-change of laccase gene expression in single mutants") +
+  theme(
+    axis.title = element_blank(),
+    legend.position = "bottom"
+  )
+```
+
+## 2020-11-02
+
+```{r}
+plate <- tibble(
+  row = rep(LETTERS[1:8], length.out = 96, each = 12),
+  column = rep(1:12, length.out = 96, each = 1),
+  sample = ordered(rep(c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "CC", "CC", "CC", "CC", "NTC",
+    "CC", "CC", "CC", "CC", "CC", "NTC"
+  ),
+  length.out = 96, each = 1
+  ), levels = c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "NTC"
+  )),
+  gene = ordered(c(rep(c("LAC11", "LAC17", "UBI", "EF1a"), length.out = 96, each = 24)),
+    levels = c("LAC11", "LAC17", "UBI", "EF1a")
+  ),
+  replicate = rep(c("B1", "B2", "B2", "B1"), each = 6, length.out = 96),
+  concentration = rep(c(
+    rep(0.16666, length.out = 12),
+    rep(c(1, 0.1, 0.02, 0.01, 0.005, 0), length.out = 12, each = 1)
+  ), length.out = 96, each = 1)
+) %>%
+  unite("Pos", row, column, sep = "")
+
+write_tsv(plate, "/data/PhD/qPCR/2020-11-02_plate.tsv")
+
+results <- read_tsv("/data/PhD/qPCR/2020-11-02_cp.tsv",
+  skip = 1
+) %>%
+  left_join(plate)
+
+CCs <- filter(results, sample == "CC") %>%
+  select(gene, replicate, concentration, Cp) %>%
+  nest(data = c(concentration, Cp)) %>%
+  mutate(
+    fit = map(data, ~ lm(Cp ~ log10(concentration), data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    r.squared = unlist(map(model, ~ .x[["r.squared"]]))
+  ) %>%
+  unnest(tidied) %>%
+  select(gene, replicate, r.squared, term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(efficiency = (10^(-1 / `log10(concentration)`) - 1) * 100)
+
+
+results <- left_join(results, CCs)
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 35),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  geom_label_repel(
+    data = filter(results, concentration == 0.005),
+    aes(label = paste0(
+      gene,
+      ": R² = ",
+      round(r.squared, digits = 3),
+      "; efficiency = ",
+      round(efficiency, digits = 0),
+      "%"
+    )),
+    hjust = 0,
+    vjust = 0,
+    colour = "black",
+    label.size = 0,
+    fill = rgb(1, 1, 1, 0.85),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_colour_brewer(palette = "Pastel1") +
+  scale_x_log10() +
+  theme_leo() +
+  facet_wrap(~replicate)
+
+normalised <- results %>%
+  filter(sample != "CC" & sample != "NTC") %>%
+  group_by(replicate, sample) %>%
+  mutate(dCt = Cp[gene == "EF1a"] - Cp) %>%
+  group_by(replicate, gene) %>%
+  mutate(
+    ddCt = dCt - dCt[sample == "WT"],
+    fold = 2^ddCt
+  ) %>%
+  pivot_longer(c(dCt, ddCt, fold), names_to = "metric", values_to = "value")
+
+normalised_avg <- normalised %>%
+  group_by(sample, gene, metric) %>%
+  summarise(mean = mean(value))
+
+ggplot(normalised) +
+  geom_point(aes(
+    x = sample,
+    y = value,
+    fill = replicate
+  ),
+  shape = 21,
+  alpha = 0.75,
+  stroke = 0.2,
+  size = 3
+  ) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  theme_leo() +
+  theme(axis.title = element_blank()) +
+  facet_grid(metric ~ gene, scales = "free")
+
+ggplot() +
+  geom_tile(
+    data = normalised_avg %>%
+      filter(metric == "ddCt"),
+    aes(
+      x = sample,
+      y = gene,
+      fill = mean
+    )
+  ) +
+  geom_text(
+    data = normalised_avg %>%
+      filter(metric == "fold"),
+    aes(
+      x = sample,
+      y = gene,
+      label = round(mean, digits = 2)
+    ),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  # scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  scale_fill_gradientn(
+    colours = rev(pal_ostwald_cont),
+    # limits = c(0,10),
+    # na.value = "#ED4137"
+  ) +
+  theme_leo() +
+  guides(fill = guide_colorbar(title = "ddCt")) +
+  labs(title = "Fold-change of laccase gene expression in single mutants") +
+  theme(
+    axis.title = element_blank(),
+    legend.position = "bottom"
+  )
+```
+
+## Combined results
+
+```{r}
+
+result_files <-
+  list.files(
+    path = "/data/PhD/qPCR/",
+    pattern = "cp.tsv",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+plate_files <-
+  list.files(
+    path = "/data/PhD/qPCR/",
+    pattern = "plate.tsv",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_results <- function(flnm) {
+  read_tsv(flnm, skip = 1) %>%
+    mutate(
+      filename = str_remove(basename(flnm), fixed(".tsv"))
+    ) %>%
+    separate(filename, into = c("date", "file"), sep = "_") %>%
+    select(-file)
+}
+
+read_plates <- function(flnm) {
+  read_tsv(flnm) %>%
+    mutate(
+      filename = str_remove(basename(flnm), fixed(".tsv"))
+    ) %>%
+    separate(filename, into = c("date", "file"), sep = "_") %>%
+    select(-file)
+}
+
+results <- map(result_files, read_results) %>%
+  bind_rows()
+
+plates <- map(plate_files, read_plates) %>%
+  bind_rows()
+
+ref_genes <- tribble(
+  ~date, ~gene, ~ref,
+  "2020-10-26", "18S", "ref",
+  "2020-10-27", "EF1a", "ref",
+  "2020-10-28", "EF1a", "ref",
+  "2020-10-31", "EF1a", "ref",
+  "2020-11-02", "EF1a", "ref",
+)
+
+excluded_experiments <- c("2020-10-26")
+
+results <- results %>%
+  left_join(plates, by = c("date", "Pos")) %>%
+  left_join(ref_genes, by = c("date", "gene")) %>%
+  filter(!(date %in% excluded_experiments)) %>%
+  mutate(ref = case_when(
+    is.na(ref) ~ "goi",
+    TRUE ~ ref
+  )) %>%
+  drop_na(sample) %>%
+  mutate(
+    gene = ordered(gene, levels = c("LAC4", "LAC10", "LAC11","LAC12", "LAC17", "UBI", "18S", "EF1a")),
+    sample = ordered(sample, levels = c("CC", "NTC", "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1"))
+  ) %>%
+  group_by(date, replicate, gene, sample, concentration, ref) %>%
+  summarise(Cp = mean(Cp))
+
+CCs <- filter(results, sample == "CC" & Cp < 40) %>%
+  nest(data = c(concentration, Cp)) %>%
+  mutate(
+    fit = map(data, ~ lm(Cp ~ log10(concentration), data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    r.squared = unlist(map(model, ~ .x[["r.squared"]]))
+  ) %>%
+  unnest(tidied) %>%
+  select(date, gene, replicate, r.squared, term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(efficiency = (10^(-1 / `log10(concentration)`) - 1) * 100)
+
+CCs <- results %>%
+  filter(concentration == 1) %>%
+  select(gene, date, replicate, concentration, Cp) %>%
+  left_join(CCs)
+
+avg_CCs <- CCs %>%
+  group_by(gene) %>%
+  summarise(max = max(efficiency) + 5,
+            efficiency = mean(efficiency))
+
+ggplot(CCs,
+       aes(x = gene,
+           y = efficiency)) +
+  stat_summary(fun = mean, color = NA,
+               fill = "#e8c245",
+               alpha = 0.5,
+               geom ="bar", 
+               aes(group = 1), size = 5,
+                   show.legend = FALSE) +
+  geom_jitter(width = 0.1) +
+  geom_text(data = avg_CCs,
+            aes(label = paste0(round(efficiency, digits = 0), " %"),
+            y = max),
+            family = "Helvetica",
+            size = ggtext_size) +
+  theme_leo() 
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 40),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  # geom_label_repel(
+  #   data = CCs,
+  #   aes(label = paste0(
+  #     gene,
+  #     ": R² = ",
+  #     round(r.squared, digits = 3),
+  #     "; efficiency = ",
+  #     round(efficiency, digits = 0),
+  #     "%"
+  #   )),
+  #   hjust = 0,
+  #   vjust = 0,
+  #   colour = "black",
+  #   label.size = 0,
+  #   fill = rgb(1, 1, 1, 0.5),
+  #   family = "Helvetica",
+  #   size = ggtext_size
+  # ) +
+  scale_colour_brewer(palette = "Pastel1") +
+  scale_x_log10() +
+  theme_leo() +
+  facet_wrap(date ~ replicate)
+
+normalised <- results %>%
+  filter(sample != "CC" & sample != "NTC") %>%
+  filter(gene != "18S") %>%
+  group_by(date, replicate, sample) %>%
+  mutate(dCt = Cp[ref == "ref"] - Cp) %>%
+  group_by(date, replicate, gene) %>%
+  mutate(
+    ddCt = dCt - dCt[sample == "WT"],
+    fold = 2^ddCt
+  ) %>%
+  pivot_longer(c(dCt, ddCt, fold), names_to = "metric", values_to = "value")
+
+normalised_avg <- normalised %>%
+  group_by(sample, gene, metric) %>%
+  summarise(mean = mean(value, na.rm = TRUE),
+            sd = sd(value, na.rm = TRUE))
+
+ggplot(
+  filter(normalised, gene %in% c("LAC4", "LAC11", "LAC12", "LAC17")),
+  aes(
+    x = sample,
+    y = value
+  )
+) +
+  # geom_bar(stat = "identity") +
+  ggbeeswarm::geom_quasirandom(aes(fill = replicate),
+    shape = 21,
+    alpha = 0.75,
+    stroke = 0.2,
+    size = 1.5
+  ) +
+  geom_boxplot(
+    outlier.alpha = 0,
+    alpha = 0.75,
+    size = 0.2
+  ) +
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  scale_fill_manual(values = pal_ostwald_disc_long) +
+  theme_leo() +
+  theme(axis.title = element_blank()) +
+  coord_flip() +
+  facet_grid(gene ~ metric, scales = "free")
+
+ggplot() +
+  geom_tile(
+    data = normalised_avg %>%
+      filter(metric == "ddCt"),
+    aes(
+      x = sample,
+      y = gene,
+      fill = mean
+    ),
+    # alpha = 0.75
+  ) +
+  geom_text(
+    data = normalised_avg %>%
+      filter(metric == "fold"),
+    aes(
+      x = sample,
+      y = gene,
+      label = paste0(round(mean, digits = 2), " ± ", round(sd, digits = 2))
+    ),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  # scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  scale_fill_gradientn(
+    colours = pal_ostwald_cont,
+    # colours = wesanderson::wes_palette("Zissou1", 3, type = "continuous"),
+    limits = c(-5, 5),
+    # midpoint = 0,
+    oob = scales::squish
+  ) +
+  theme_leo() +
+  guides(fill = guide_colorbar(title = "ddCt")) +
+  labs(title = "Fold-change of laccase gene expression in single mutants") +
+  theme(
+    axis.title = element_blank(),
+    legend.position = "bottom"
+  )
+```
