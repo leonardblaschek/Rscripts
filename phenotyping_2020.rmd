@@ -179,9 +179,19 @@ apply(plants, 1, qrc)
 
 To avoid saturation in the colour reference card, the following settings have proven optimal:
 
+Tray from the top:
+
 * 50 mm objective
 * 1/125 s exposure time
 * f5.6 aperture
+* 800 ISO sensitivity
+* Incandescent white balance
+
+Pot from the side:
+
+* 50 mm objective
+* 1/30 s exposure time
+* f13 aperture
 * 2000 ISO sensitivity
 * Incandescent white balance
 
@@ -189,79 +199,69 @@ To avoid saturation in the colour reference card, the following settings have pr
 
 ```{r message=FALSE}
 siliques <- read_csv(
-  "/home/leonard/Dropbox/2020-01_LAC_phenotyping/2020-04-16_siliques.csv"
+  "/data/PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_siliques.csv"
 ) %>%
-  mutate(rep = as.character(rep))
-
-pheno_data <- read_csv(
-  "/home/leonard/Dropbox/2020-01_LAC_phenotyping/2020-04-16_harvesting.csv"
-) %>%
+  bind_rows(read_csv("/data/PhD/Phenotyping/2020-09_lac_mutants/2020-11-05_siliques.csv") %>%
+              select(-plant)) %>%
   mutate(rep = as.character(rep)) %>%
-  left_join(siliques %>%
-    pivot_longer(-c(genotype, rep), names_to = "sil", values_to = "length") %>%
-    group_by(genotype, rep) %>%
-    summarise(mean.sil.length = mean(length))) %>%
-  group_by(genotype, rep) %>%
-  mutate(
-    total.sil = mat.sil + green.sil,
-    senescence = green.sil / total.sil
-  )
-
-pheno_pca <- pheno_data %>%
-  ungroup() %>%
-  mutate(genotype = recode(genotype,
+  pivot_longer(-c(genotype, rep), names_to = "sil", values_to = "length") %>%
+  mutate(genotype = ordered(recode(genotype,
       "lac4/5/10/12/17" = "Q",
       "lac5/10/12/17" = "Q-4",
       "lac4/10/12/17" = "Q-5",
       "lac4/5/12/17" = "Q-10",
       "lac4/5/10/17" = "Q-12",
       "lac4/5/10/12" = "Q-17"
-    )) %>%
-  unite("ID", genotype, rep)
+    ),
+    levels = c("Col-0", "Q-4", "Q-5", "Q-10", "Q-12", "Q-17", "Q")))
 
-pca_result <- prcomp(pheno_pca[, -1], center = TRUE, scale. = TRUE)
-rownames(pca_result$x) <- pheno_pca$ID
+pheno_data <- read_csv(
+  "/data/PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_harvesting.csv"
+) %>%
+  rename("stem.weight" = stem.w) %>%
+  bind_rows(read_csv("/data/PhD/Phenotyping/2020-09_lac_mutants/2020-11-05_harvesting.csv") %>%
+              select(-plant)) %>%
+  mutate(rep = as.character(rep)) %>%
+  left_join(siliques %>%
+    group_by(genotype, rep) %>%
+    summarise(mean.sil.length = mean(length))) %>%
+  mutate(genotype = ordered(recode(genotype,
+      "lac4/5/10/12/17" = "Q",
+      "lac5/10/12/17" = "Q-4",
+      "lac4/10/12/17" = "Q-5",
+      "lac4/5/12/17" = "Q-10",
+      "lac4/5/10/17" = "Q-12",
+      "lac4/5/10/12" = "Q-17"
+    ),
+    levels = c("Col-0", "Q-4", "Q-5", "Q-10", "Q-12", "Q-17", "Q"))) %>%
+  select(-mat.sil, -green.sil, -fl.stands)
+  # mutate(
+  #   total.sil = mat.sil + green.sil,
+  #   senescence = green.sil / total.sil
+  # )
 
-gg_pca <- as_tibble(pca_result$x, rownames = NA) %>%
-  rownames_to_column(var = "ID") %>%
-  separate(ID, sep = "_", into = c("genotype", "replicate"))
+ggplot(pheno_data,
+       aes(y = genotype,
+           x = stretched.height)) +
+  # geom_violin() +
+  # ggbeeswarm::geom_quasirandom() +
+  ggridges::geom_density_ridges_gradient(aes(fill = stat(x)),
+                                bandwidth = 2.5,
+                                quantile_lines = TRUE, quantiles = 2) +
+  scale_fill_gradientn(colours = wesanderson::wes_palette("Zissou1", n = 5)) +
+  theme_leo()
 
-pca_plot <- ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
-  geom_hline(yintercept = 0, linetype = 1, size = 0.2) +
-  geom_vline(xintercept = 0, linetype = 1, size = 0.2) +
-  stat_ellipse(geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
-  stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2, size = 0.2) +
-  geom_point(
-    size = 3,
-    stroke = 0.4,
-    alpha = 0.75,
-    shape = 21
-  ) +
-  geom_text_repel(
-    data = filter(gg_pca, replicate == "4"),
-    aes(label = genotype),
-    min.segment.length = 0,
-    family = "Helvetica",
-    size = ggtext_size
-  ) +
-  labs(
-    x = "PC 1 (Size and weight)",
-    y = "PC 2 (Degree of senescence)"
-  ) +
-  scale_fill_viridis_d() +
-  theme_leo() +
-  theme(
-    plot.margin = unit(c(2, 2, 3, 2), "mm")
-  )
-
-plot_grid(
-  factoextra::fviz_contrib(pca_result, choice = "var", axes = 1, top = 5),
-  factoextra::fviz_contrib(pca_result, choice = "var", axes = 2, top = 5)
-)
-
-pdf("pheno_PCA.pdf", width = cm_size(20), height = cm_size(10))
-pca_plot
-dev.off()
+ggplot(siliques) +
+  # geom_violin() +
+  # ggbeeswarm::geom_quasirandom(aes(x = genotype,
+  #                                  y = length)) +
+  ggridges::geom_density_ridges_gradient(aes(x = length, 
+                                             y = genotype,
+                                             fill = stat(x)),
+                                bandwidth = 0.05,
+                                quantile_lines = TRUE, quantiles = 2) +
+  scale_fill_gradientn(colours = wesanderson::wes_palette("Zissou1", n = 5)) +
+  theme_leo()
 ```
 
 ### Image based phenotyping
@@ -269,7 +269,7 @@ dev.off()
 #### Hue
 
 ```{r message=FALSE}
-pcv_data <- fromJSON("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/front/output/2020-05-11_lab_segmentation/results.json")
+pcv_data <- fromJSON("/data/PhD/Phenotyping/2020-01_LAC_phenotyping/images/front/output/2020-05-11_lab_segmentation/results.json")
 hues <- pcv_data$entities$observations$hue_frequencies %>%
   mutate(
     date = pcv_data$entities$metadata$timestamp$value,

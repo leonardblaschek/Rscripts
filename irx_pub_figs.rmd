@@ -4012,7 +4012,7 @@ dev.off()
 #### import and tidy poplar Raman data ####
 rmn_files <-
   list.files(
-    path = "/run/media/leonard/LEONARD 1TB/Grsync/office//PhD/IRX/Poplar/2020-08_soil_poplar",
+    path = "/data/PhD/IRX/Poplar/2020-08_soil_poplar",
     pattern = "(TE|FI|RP)(.*).txt",
     recursive = TRUE,
     full.names = TRUE
@@ -4028,7 +4028,7 @@ read_plus <- function(flnm) {
     mutate(
       filename = str_remove(
         flnm,
-        fixed("/run/media/leonard/LEONARD 1TB/Grsync/office//PhD/IRX/Poplar/2020-08_soil_poplar/")
+        fixed("/data/PhD/IRX/Poplar/2020-08_soil_poplar/")
       )
     ) %>%
     separate(filename, into = c("genotype", "replicate", "TE"), sep = "([/-])") %>%
@@ -4058,9 +4058,10 @@ rmn_pop <- lapply(rmn_files, read_plus) %>%
   filter(cell_type == "TE") %>%
   ungroup() %>%
   select(-cell_type) %>%
-  anti_join(read_csv("/run/media/leonard/LEONARD 1TB/Grsync/office//PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_exclude.csv",
-    col_types = "cccc"
-  ))
+  anti_join(read_csv("/data/PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_exclude.csv",
+    col_types = "ccccc"
+  ) %>%
+    select(-note))
 
 #### baseline correction ####
 rmn_als <- function(x) {
@@ -4167,7 +4168,8 @@ rmn_pop_sum <- rmn_pop_scaled %>%
     "G.cellu" = G_tot / cellulose,
     "S.G" = scaled_lig[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1] /
       scaled_lig[abs(wavenumber - 1276) == min(abs(wavenumber - 1276))][1],
-    # "GOH.G" = scaled_lig[wavenumber == 1660] / scaled_lig[wavenumber == 1600],
+    "GOH.G" = scaled_lig[abs(wavenumber - 1660) == min(abs(wavenumber - 1660))][1] /
+      scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
     "GCHO.GOH" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1] /
       scaled_lig[abs(wavenumber - 1660) == min(abs(wavenumber - 1660))][1],
     "AUC" = mean(AUC)
@@ -4255,8 +4257,10 @@ write_excel_csv(export_scaled, "soil_poplar_scaled.csv")
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
 pop_irx <- read_csv(
-  "/run/media/leonard/LEONARD 1TB/Grsync/office/PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_coords.csv"
-  )
+  "/data/PhD/IRX/Poplar/2020-08_soil_poplar/Wiesner/2020-10-22_poplar/registered/2020-11_pop_wiesner_irx.csv"
+  ) %>%
+  mutate(x = x / 5.84,
+         y = y / 5.84)
 
 #### create reference at the height of the cambium for distance calculation ####
 pop_irx_ref <- pop_irx %>%
@@ -4315,23 +4319,106 @@ pop_irx$Distance <-
   )
 
 celltypes <- read_csv(
-  "/run/media/leonard/LEONARD 1TB/Grsync/office/PhD/IRX/Poplar/2020-08_soil_poplar/poplar_cell_types.csv",
-  col_types = "cccccc")
+  "/data/PhD/IRX/Poplar/2020-08_soil_poplar/poplar_cell_types.csv",
+  col_types = "cccccnc")
+
+wiesner_na <- read_csv("/data/PhD/IRX/Poplar/2020-08_soil_poplar/Wiesner/2020-10-22_poplar/registered/missing_wiesner.csv") %>%
+  unite("ID", everything()) %>%
+  as.list() %>%
+  unlist()
+
+wiesner_bg <- read_csv("/data/PhD/IRX/Poplar/2020-08_soil_poplar/Wiesner/2020-10-22_poplar/registered/wiesner_bg.csv") %>%
+  mutate(stained = log10(255/stained),
+         unstained = log10(255/unstained),
+         wiesner_bg = stained - unstained) %>%
+  group_by(image) %>%
+  summarise(wiesner_bg = mean(wiesner_bg))
 
 rmn_pop_data <- rmn_pop_sum %>%
   left_join(pop_irx) %>%
   left_join(celltypes) %>%
-  nest(point, x, y) %>%
+  unite("ID", genotype, replicate, technical, TE, remove = FALSE) %>%
+  mutate(value_stained = case_when(ID %in% wiesner_na ~ NA_real_,
+                                   is.na(value_stained) ~ NA_real_,
+                                   TRUE ~ value_stained),
+         value_unstained = case_when(ID %in% wiesner_na ~ NA_real_,
+                                     is.na(value_stained) ~ NA_real_,
+                                   TRUE ~ value_unstained)) %>%
+  select(-ID) %>%
+  left_join(wiesner_bg, by = "image") %>%
+  mutate(value_stained = log10(255/value_stained),
+         value_unstained = log10(255/value_unstained),
+         wiesner_raw = value_stained - value_unstained,
+         wiesner = wiesner_raw - wiesner_bg) %>%
+  nest(data = c(point, x, y, value_stained, value_unstained, wiesner_raw, wiesner)) %>%
   mutate(genotype = recode(genotype, "T89" = "WT"),
          genotype = ordered(genotype, levels = c("WT", "CCR1", "C4H")))
 
+
 rmn_pop_n <- rmn_pop_data %>%
-  mutate(bin = case_when(Distance < 250 ~ 1,
-                         TRUE ~2)) %>%
-  group_by(genotype, cell_type, bin) %>%
+  # mutate(bin = case_when(Distance < 250 ~ 1,
+  #                        TRUE ~2)) %>%
+  group_by(genotype, cell_type) %>%
   summarise(n = n()) %>%
   ungroup() %>%
   mutate(overall = sum(n))
+
+```
+
+#### Wiesner overview
+
+```{r}
+wiesner_pop <- rmn_pop_data %>%
+  unnest(data)
+
+wiesner_pop_avg <- wiesner_pop %>%
+  group_by(genotype, replicate, technical, TE, cell_type) %>%
+  summarise(wiesner_avg = mean(wiesner, na.rm = TRUE),
+            wiesner_upper = quantile(wiesner, probs = 0.75, na.rm = TRUE))
+
+letters <- letter_groups(wiesner_pop_avg, 
+                         wiesner_avg,
+                         genotype,
+                         "tukey",
+                         cell_type,
+                         print_position = "below")
+
+ggplot(wiesner_pop_avg) +
+  geom_violin(aes(x = genotype, y = wiesner_avg),
+              draw_quantiles = 0.5) +
+  geom_quasirandom(data = wiesner_pop_avg,
+                   aes(x = genotype, y = wiesner_avg, colour = replicate),
+                   alpha = 0.25) +
+  geom_text(data = letters,
+            aes(label = Letters,
+                x = genotype,
+                y = wiesner_avg)) +
+  scale_colour_viridis_d() +
+  facet_wrap(~cell_type)
+
+```
+
+#### Shape overview
+
+```{r}
+
+letters <- letter_groups(rmn_pop_data, 
+                         Solidity,
+                         genotype,
+                         "kruskal",
+                         cell_type,
+                         print_position = "below")
+
+ggplot(rmn_pop_data) +
+  geom_violin(aes(x = genotype, y = Solidity)) +
+  geom_quasirandom(aes(x = genotype, y = Solidity, colour = replicate),
+                   alpha = 0.5) +
+  geom_text(data = letters,
+            aes(label = Letters,
+                x = genotype,
+                y = Solidity)) +
+  scale_colour_viridis_d() +
+  facet_wrap(~cell_type)
 
 ```
 
@@ -4343,7 +4430,7 @@ rmn_lignin_dist <- rmn_pop_data %>%
   unite("ID", genotype, replicate,
         sep = "_",
         remove = FALSE) %>%
-  filter(Distance < 2500) %>%
+  # filter(Distance < 2500) %>%
   # filter(ID != "WT_1") %>%
   select(genotype, replicate, cell_type, technical, Distance, TE,
          # "Cellulose (381 + 1099)" = cellulose,
@@ -4607,13 +4694,13 @@ dev.off()
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
-letters <- letter_groups(rmn_pop_data,
-                         Solidity,
-                         genotype,
-                         "tukey",
-                         cell_type,
-                         print_position = "below"
-                         )
+# letters <- letter_groups(rmn_pop_data,
+#                          Solidity,
+#                          genotype,
+#                          "tukey",
+#                          cell_type,
+#                          print_position = "below"
+#                          )
 
 test <- rmn_pop_data %>%
   group_by(genotype, cell_type) %>%
@@ -4646,12 +4733,12 @@ convexity_poplar <- ggplot(drop_na(rmn_pop_data, genotype, Solidity, cell_type),
     size = 0.2,
     scale = "width"
     ) +
-    geom_text(
-      data = letters,
-      aes(label = Letters),
-      size = ggtext_size,
-      family = "Helvetica"
-    ) +
+    # geom_text(
+    #   data = letters,
+    #   aes(label = Letters),
+    #   size = ggtext_size,
+    #   family = "Helvetica"
+    # ) +
     # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
     scale_fill_manual(values = pal_ostwald_disc) +
     # scale_fill_grey(start = 0.9, end = 0.3) +
@@ -4677,21 +4764,24 @@ dev.off()
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 
 psem_data_pop <- rmn_pop_data %>%
+  left_join(wiesner_pop_avg) %>%
   ungroup() %>%
-  filter(cell_type == "SV" & Distance < 250) %>%
+  filter(cell_type == "SV") %>%
   select(
     Solidity,
-    # n_v,
+    wiesner_avg,
+    n_v,
     # Perim.,
-    cellulose,
+    # cellulose,
     total_lignin,
     # G_rel,
+    GOH.G,
     S_rel,
     P_rel,
-    GOH_rel,
+    # GOH_rel,
     GCHO_rel,
     lig.cellu,
-    # Distance,
+    Distance,
   ) %>%
   drop_na()
 
@@ -4710,23 +4800,40 @@ summary(step_model)
 ```{r}
 
 psem_data_pop <- rmn_pop_data %>%
-  filter(cell_type == "SV" & Distance < 250) %>%
-  select(-data, -Length, -n_v) %>%
+  left_join(wiesner_pop_avg) %>%
+  ungroup() %>%
+  filter(cell_type == "SV") %>%
+  select(
+    Solidity,
+    Circ.,
+    wiesner_avg,
+    n_v,
+    # Perim.,
+    # cellulose,
+    total_lignin,
+    # G_rel,
+    S_rel,
+    P_rel,
+    GOH_rel,
+    GCHO_rel,
+    lig.cellu,
+    # Distance,
+  ) %>%
   drop_na()
 
 psem_pop <- psem(
   lm(Circ. ~
-  # n_v +
+    n_v +
     Solidity,
   data = psem_data_pop
   ),
   lm(Solidity ~
-  # n_v +
+    n_v +
     # Distance +
     # cellulose +
     P_rel +
     # n_f +
-    # mean.OD1 +
+    # wiesner_avg +
     # Perim. +
     # S.G +
     # G_tot +
