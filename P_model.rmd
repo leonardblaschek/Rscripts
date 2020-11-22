@@ -1,0 +1,226 @@
+---
+title: "C4H field trials"
+author: "Leonard Blaschek"
+date: "11/22/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(showtext)
+# library(qrencoder)
+library(cowplot)
+library(grid)
+library(gridExtra)
+library(tidyverse)
+library(ggrepel)
+library(ggridges)
+library(cowplot)
+library(jsonlite)
+library(slider)
+library(lubridate)
+library(baseline)
+
+#### import Helvetica ####
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 6,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.125,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        size = 6,
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        size = 6,
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.title = element_text(
+        colour = "black",
+        size = 6
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      axis.line = element_line(size = 0.2),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = 6),
+      legend.key.height = unit(4, "mm"),
+      plot.title = element_text(
+        size = 6,
+        hjust = 0
+      ),
+      complete = TRUE
+    )
+}
+
+pal_ostwald_disc <- c(
+  "#275d95",
+  "#e8c245",
+  "#d25952"
+)
+
+ggtext_size <- 10 / (14 / 5)
+cm_size <- function(x) x / 2.54
+twocol <- 18 / 2.54
+onehalfcol <- 14 / 2.54
+onecol <- 9 / 2.54
+```
+
+## Load data
+
+```{r}
+data1 <- read_csv("/home/leonard/Dropbox/P-unit manuscript/P_data_1.csv") %>%
+  pivot_longer(cols = -sample, names_to = "ID", values_to = "value") %>%
+  separate(sample, into = c("genotype", "plant")) %>%
+  separate(ID, into = c("variable", "date"), sep = " ") %>%
+  mutate(instance = "1")
+
+data2 <- read_csv("/home/leonard/Dropbox/P-unit manuscript/P_data_2.csv") %>%
+  pivot_longer(cols = -sample, names_to = "ID", values_to = "value") %>%
+  separate(sample, into = c("genotype", "plant")) %>%
+  separate(ID, into = c("variable", "date"), sep = " ") %>%
+  mutate(instance = "2")
+
+data <- data1 %>%
+  bind_rows(data2) %>%
+  mutate(date = as_date(parse_date_time(date, "ym")))
+```
+
+## View growth kinetics
+
+```{r}
+growth <- ggplot(data %>% filter(variable == "height")) +
+  geom_line(aes(x = date, y = value, colour = genotype, group = interaction(genotype, plant)),
+    alpha = 0.1
+  ) +
+  geom_smooth(aes(x = date, y = value, colour = genotype),
+    method = "loess",
+    span = 0.5
+  ) +
+  theme_leo() +
+  facet_wrap(~instance, nrow = 2)
+
+# pdf("growth.pdf", height = onecol, width = onecol)
+growth
+# dev.off()
+```
+
+## Split plant data into growth periods
+
+```{r}
+year_data <- data %>%
+  mutate(
+    year = isoyear(date),
+    month = month(date)
+  ) %>%
+  group_by(instance, year, variable, genotype, plant) %>%
+  mutate("season" = case_when(
+    date == max(date) ~ "endofyear",
+    TRUE ~ "midyear"
+  )) %>%
+  filter(season == "endofyear" & variable == "height" & month > 9) %>%
+  group_by(instance, genotype, plant) %>%
+  arrange(date, .by_group = TRUE) %>%
+  mutate(year_growth = value - lag(value, default = first(value))) %>%
+  filter(year != min(year))
+```
+
+## View yearly growth by genotype
+
+```{r}
+year_growth <- ggplot(
+  year_data,
+  aes(x = genotype, y = year_growth)
+) +
+  ggbeeswarm::geom_quasirandom(aes(colour = instance),
+    shape = 16,
+    size = 1,
+    alpha = 0.25
+  ) +
+  geom_violin(
+    draw_quantiles = 0.5,
+    alpha = 0.5,
+    size = 0.2
+  ) +
+  theme_leo()
+
+# pdf("year_growth.pdf", height = onecol * 0.5, width = onecol * 0.5)
+year_growth
+# dev.off()
+```
+
+## Load environment data
+
+```{r}
+envir <- read_csv("/home/leonard/Dropbox/P-unit manuscript/env_data.csv") %>%
+  mutate(
+    date = as_date(parse_date_time(date, "ym")),
+    year = isoyear(date),
+    month = month(date)
+  )
+
+year_envir <- envir %>%
+  group_by(year) %>%
+  summarise(
+    lowest_temp = min(low_temp),
+    highest_temp = max(high_temp),
+    average_high_temp = mean(high_temp),
+    average_low_temp = mean(low_temp),
+    average_temp = mean(mean_temp),
+    lowest_humidity = min(low_humidity),
+    heighest_humidity = max(high_humidity),
+    average_high_humidity = mean(high_humidity),
+    average_low_humidity = mean(low_humidity),
+    average_humidity = mean(mean_humidity),
+    average_precipitation = mean(mean_precip),
+    lowest_precipitation = min(total_precip),
+    highest_wind = max(wind),
+    average_wind = mean(wind),
+    highest_light = max(irradiation),
+    average_light = mean(irradiation)
+  )
+```
+
+## Model optimisation
+
+```{r}
+psem_data <- year_data %>%
+  left_join(year_envir, by = "year") %>%
+  ungroup() %>%
+  # filter(genotype == "WT") %>%
+  filter(genotype %in% c("1B", "3B")) %>%
+  select(-c(genotype:season), -highest_light, -average_light) %>%
+  drop_na()
+
+# Fit the full model 
+full_model <- lm(year_growth ~., data = psem_data)
+# Stepwise regression model
+step_model <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+summary(step_model)
+```
