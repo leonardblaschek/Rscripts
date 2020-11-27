@@ -20,6 +20,7 @@ library(jsonlite)
 library(slider)
 library(lubridate)
 library(baseline)
+library(tukeygrps)
 
 #### import Helvetica ####
 font_add(
@@ -85,7 +86,7 @@ pal_ostwald_disc <- c(
   "#d25952"
 )
 
-ggtext_size <- 10 / (14 / 5)
+ggtext_size <- 6 / (14 / 5)
 cm_size <- function(x) x / 2.54
 twocol <- 18 / 2.54
 onehalfcol <- 14 / 2.54
@@ -97,7 +98,7 @@ onecol <- 9 / 2.54
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 rmn_files <-
   list.files(
-    path = "/home/leonard/Documents/Uni/PhD/Raman/2020-11_lac_mutants/",
+    path = "/data/PhD/Raman/2020-11_lac_mutants/",
     pattern = "*.txt",
     recursive = TRUE,
     full.names = TRUE
@@ -165,7 +166,9 @@ rmn_lac_scaled <- rmn_lac_corrected %>%
     scaled = corrected.intensity / AUC,
     scaled_lig = corrected.intensity / (
       (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) + corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1]
-    )
+    ),
+    scaled_cellu = corrected.intensity / 
+      corrected.intensity[abs(wavenumber - 375) == min(abs(wavenumber - 375))][1]
   )
 
 rmn_lac_avg <- rmn_lac_scaled %>%
@@ -175,6 +178,7 @@ rmn_lac_avg <- rmn_lac_scaled %>%
   summarise(
     roll_mean = slider::slide_index_dbl(scaled, wavenumber, mean, .before = 1, .after = 1),
     roll_sd = slider::slide_index_dbl(scaled, wavenumber, sd, .before = 2, .after = 2),
+    roll_scaled_cellu = slider::slide_index_dbl(scaled_cellu, wavenumber, mean, .before = 1, .after = 1),
     wavenumber = wavenumber
     )
 
@@ -203,8 +207,11 @@ rmn_lac_sum <- rmn_lac_scaled %>%
       scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1] +
         scaled[abs(wavenumber - 375) == min(abs(wavenumber - 375))][1] +
         scaled[abs(wavenumber - 1120) == min(abs(wavenumber - 1120))][1],
+    "cellu_cryst" = scaled[abs(wavenumber - 375) == min(abs(wavenumber - 375))][1] /
+      scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1],
     "lig.cellu" = total_lignin / cellulose,
-    "G.cellu" = G_tot / cellulose,
+    "G.cellu" = scaled_cellu[abs(wavenumber - 990) == min(abs(wavenumber - 990))][1],
+    "P.cellu" = scaled_cellu[abs(wavenumber - 990) == min(abs(wavenumber - 990))][1],
     "S.G" = scaled_lig[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1] /
       scaled_lig[abs(wavenumber - 1276) == min(abs(wavenumber - 1276))][1],
     "GOH.G" = scaled_lig[abs(wavenumber - 1656) == min(abs(wavenumber - 1656))][1] /
@@ -223,14 +230,14 @@ rmn_lac_test <- ggplot(
   rmn_lac_scaled,
   aes(
     x = wavenumber,
-    y = scaled
+    y = scaled_cellu
   )
 ) +
   scale_x_continuous(trans = "reverse",
                      # limits = c(1020, 980)
                      ) +
   # scale_y_continuous(limits = c(-0.001, 0.003)) +
-  geom_vline(xintercept = c(1656, 1600, 1330, 1120, 1095, 990, 375),
+  geom_vline(xintercept = c(1656, 1600, 1330, 1120, 1095, 990, 855, 375),
              size = 0.2) +
   # annotate("text",
   #          label = c("1660", "1600", "1330", "1120", "1095", "1001", "375"),
@@ -240,8 +247,8 @@ rmn_lac_test <- ggplot(
   #          family = "Helvetica",
   #          size = ggtext_size) +
   geom_line(aes(
-    group = interaction(cell_type, replicate, TE),
-    colour = cell_type
+    group = interaction(genotype, replicate, TE),
+    colour = genotype
   ),
   alpha = 0.25,
   size = 0.1
@@ -254,8 +261,8 @@ rmn_lac_test <- ggplot(
   #           colour = NA,
   #           alpha = 0.25) +
   geom_line(data = rmn_lac_avg,
-            aes(colour = cell_type,
-                y = roll_mean),
+            aes(colour = genotype,
+                y = roll_scaled_cellu),
             size = 0.2) +
   scale_color_brewer(palette = "Set1", aesthetics = c("colour", "fill")) +
   theme_leo() +
@@ -264,7 +271,7 @@ rmn_lac_test <- ggplot(
     legend.title = element_blank()
   ) +
   guides(colour = guide_legend(override.aes = list(alpha = 1, size = 1))) +
-  facet_wrap(~genotype, ncol = 1)
+  facet_wrap(~cell_type, ncol = 1)
 
 # plotly::ggplotly(rmn_lac_test)
 pdf("rmn_lac.pdf", height = twocol, width = onecol)
@@ -278,16 +285,55 @@ dev.off()
 
 violin_data <- rmn_lac_sum %>%
   select(
-    total_lignin,
-    S.G,
-    P_rel,
-    GOH_rel
+    "Total lignin" = total_lignin,
+    "S/G" = S.G,
+    "P-units" = P_rel,
+    "Cellulose cryst." = cellu_cryst,
+    # "P/cellulose" = P.cellu,
+    # "G-units" = G_rel,
+    # "Lignin/cellulose" = lig.cellu,
+    "G-CHO/G-OH" = GCHO.GOH
   ) %>%
+  # filter(cell_type != "LP") %>%
   pivot_longer(
-    cols = c(total_lignin, S.G, P_rel, GOH_rel),
+    cols = -c(genotype:replicate),
     names_to = "variable",
     values_to = "value"
-  )
+  ) %>%
+  mutate(cell_type = ordered(cell_type,
+                             levels = c(
+                               "IF",
+                               "LP",
+                               "XF",
+                               "PX",
+                               "MX"
+                             )),
+         genotype = ordered(genotype, levels = c(
+           "WT",
+           "Q-4",
+           "Q-5",
+           "Q-10",
+           "Q-12",
+           "Q-17",
+           "Q"
+         )))
+
+rmn_n <- rmn_lac_sum %>%
+  group_by(genotype, replicate, cell_type) %>%
+  summarise(n = n())
+
+letters <- letter_groups(violin_data,
+                         value,
+                         genotype,
+                         "tukey",
+                         variable,
+                         cell_type,
+                         print_position = "above") %>%
+  mutate(value = case_when(variable == "S/G" & cell_type %in% c("PX", "MX") ~
+                             value + 1,
+                           variable == "Total lignin" & cell_type == "MX" ~
+                             value + 0.0005,
+                           TRUE ~ value))
 
 lig_violin <- ggplot(
   violin_data,
@@ -302,18 +348,40 @@ lig_violin <- ggplot(
     # dodge.width = 0.5,
     alpha = 0.5
   ) +
-  geom_violin(
-    draw_quantiles = 0.5,
+  # geom_violin(
+  #   draw_quantiles = 0.5,
+  #   fill = "white",
+  #   colour = "black",
+  #   alpha = 0.85,
+  #   width = 0.2,
+  #   # position = position_dodge(width = 0.5),
+  #   size = 0.2,
+  #   scale = "width"
+  # ) +
+  geom_boxplot(
+    # draw_quantiles = 0.5,
+    outlier.alpha = 0,
     fill = "white",
     colour = "black",
     alpha = 0.85,
     width = 0.2,
     # position = position_dodge(width = 0.5),
     size = 0.2,
-    scale = "width"
+    fatten = 1
   ) +
+  geom_text(data = letters,
+            aes(label = Letters),
+            size = ggtext_size,
+            family = "Helvetica") +
+  # scale_colour_brewer(palette = "Set1") +
+  scale_colour_viridis_d(drop = FALSE) +
+  scale_x_discrete(drop = FALSE) +
   theme_leo() +
-  facet_grid(variable ~ cell_type, scales = "free_y")
+  theme(axis.title = element_blank(),
+        strip.placement = "outside",
+        strip.text = element_text(hjust = 0.5, face = "plain"),
+        ) +
+  facet_grid(variable ~ cell_type, scales = "free_y", switch = "y")
 
 pdf("lig_violin.pdf", width = twocol, height = onecol)
 lig_violin

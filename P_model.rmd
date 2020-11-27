@@ -123,11 +123,12 @@ growth <- ggplot(data %>% filter(variable == "height")) +
     span = 0.5
   ) +
   theme_leo() +
+  theme(legend.position = "bottom") +
   facet_wrap(~instance, nrow = 2)
 
-# pdf("growth.pdf", height = onecol, width = onecol)
+pdf("growth.pdf", height = onecol, width = onecol)
 growth
-# dev.off()
+dev.off()
 ```
 
 ## Split plant data into growth periods
@@ -169,9 +170,9 @@ year_growth <- ggplot(
   ) +
   theme_leo()
 
-# pdf("year_growth.pdf", height = onecol * 0.5, width = onecol * 0.5)
+pdf("year_growth.pdf", height = onecol * 0.5, width = onecol * 0.5)
 year_growth
-# dev.off()
+dev.off()
 ```
 
 ## Load environment data
@@ -212,8 +213,8 @@ year_envir <- envir %>%
 psem_data <- year_data %>%
   left_join(year_envir, by = "year") %>%
   ungroup() %>%
-  # filter(genotype == "WT") %>%
-  filter(genotype %in% c("1B", "3B")) %>%
+  filter(genotype == "WT") %>%
+  # filter(genotype %in% c("1B", "3B")) %>%
   select(-c(genotype:season), -highest_light, -average_light) %>%
   drop_na()
 

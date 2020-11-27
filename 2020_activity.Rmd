@@ -102,7 +102,7 @@ theme_leo <- function(base_size = 6,
       ),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      # panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
       axis.line = element_line(size = 0.2),
       panel.spacing = unit(1.5, "mm"),
       legend.position = "none",
@@ -375,6 +375,15 @@ data <- read_csv(
       "Q-12",
       "Q-17",
       "Q"
+    )),
+    cell_type = ordered(cell_type, levels = c(
+      "IF",
+      "LP",
+      "XF",
+      "PX",
+      "MX",
+      "PH",
+      "BG"
     ))
   ) %>%
   select(-c(slice, interval)) %>%
@@ -393,7 +402,7 @@ data <- data %>%
   )) %>%
   group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
   mutate(
-    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "BG"])
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
   ) %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
   mutate(
@@ -439,18 +448,18 @@ slope_dist <- ggplot(nested_data) +
   facet_wrap(~ cell_type, ncol = 1)
 
 unfiltered_data <- data %>% 
-  filter(cell_type %in% c("IF", "XF", "MX", "PX", "LP", "PH") &
+  filter(cell_type %in% c("IF", "XF", "MX", "PX") &
   pH == 5 &
   treatment == "none")
   
 data <- data %>% 
-  filter(cell_type %in% c("IF", "XF", "MX", "PX", "LP", "PH") &
+  filter(cell_type %in% c("IF", "XF", "MX", "PX") &
   pH == 5 &
   treatment == "none" &
   adj.r.squared > 0.85)
 
 nested_data <- nested_data %>% 
-  filter(cell_type %in% c("IF", "XF", "MX", "PX", "LP", "PH") &
+  filter(cell_type %in% c("IF", "XF", "MX", "PX") &
   pH == 5 &
   treatment == "none" &
   adj.r.squared > 0.85)
@@ -596,14 +605,14 @@ slopes <- ggplot(
   scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
   theme(
-    legend.position = "bottom",
+    # legend.position = "bottom",
     axis.title.x = element_blank()
     ) +
   facet_wrap(~cell_type, nrow = 1)
 
-pdf("DAB_pH5.pdf", width = twocol * 1.5, height = onecol * 1.5)
-raw_absorbance / 
-  activity_grid /
+pdf("DAB_pH5.pdf", width = twocol, height = onecol * 0.35)
+# raw_absorbance / 
+#   activity_grid /
   slopes
 dev.off()
 
@@ -755,6 +764,15 @@ data <- read_csv(
       "Q-12",
       "Q-17",
       "Q"
+    )),
+    cell_type = ordered(cell_type, levels = c(
+      "IF",
+      "LP",
+      "XF",
+      "PX",
+      "MX",
+      "PH",
+      "BG"
     ))
   ) %>%
   select(-c(slice, interval)) %>%
@@ -817,11 +835,11 @@ slope_dist <- ggplot(nested_data) +
   facet_wrap(~ cell_type, ncol = 1)
 
 
-data <- data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX", "LP") &
+data <- data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
   pH == 5 &
   treatment == "none" &
   adj.r.squared > 0.85)
-nested_data <- nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX", "LP") &
+nested_data <- nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
   pH == 5 &
   treatment == "none" &
   adj.r.squared > 0.85)
@@ -972,9 +990,9 @@ slopes <- ggplot(
     ) +
   facet_wrap(~cell_type, ncol = 5)
 
-pdf("DAF_pH5.pdf", width = twocol, height = onecol * 1.5)
-raw_absorbance / 
-  activity_grid /
+pdf("DAF_pH5.pdf", width = twocol, height = onecol * 0.35)
+# raw_absorbance / 
+#   activity_grid /
   slopes
 dev.off()
 

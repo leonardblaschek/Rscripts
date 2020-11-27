@@ -26,7 +26,7 @@ library(interactions)
 library(effects)
 library(grid)
 library(png)
-library(magick)
+# library(magick)
 library(agricolae)
 library(ggthemes)
 library(showtext)
@@ -4177,7 +4177,11 @@ rmn_pop_sum <- rmn_pop_scaled %>%
 
 
 rmn_pop_test <- ggplot(
-  rmn_pop_scaled,
+  rmn_pop_scaled %>% 
+    filter(genotype != "CCR1") %>%
+    mutate(genotype = recode(genotype, 
+                             "C4H" = "C4H-RNAi",
+                             "T89" = "WT")),
   aes(
     x = wavenumber,
     y = scaled
@@ -4187,35 +4191,47 @@ rmn_pop_test <- ggplot(
                      # limits = c(1020, 980)
                      ) +
   # scale_y_continuous(limits = c(-0.001, 0.003)) +
-  geom_vline(xintercept = c(1660, 1600, 1330, 1120, 1095, 1001, 375),
-             size = 0.2) +
-  annotate("text",
-           label = c("1660", "1600", "1330", "1120", "1095", "1001", "375"),
-           y = 0.007,
-           x = c(1661, 1601, 1331, 1170, 1096, 1002, 376),
-           hjust = 0,
-           family = "Helvetica",
-           size = ggtext_size) +
-  geom_line(aes(
-    group = interaction(genotype, replicate, technical, TE),
-    colour = genotype
-  ),
-  alpha = 0.25,
-  size = 0.1
-  ) +
-  geom_ribbon(data = rmn_pop_avg,
+  geom_vline(xintercept = 1001,
+             size = 0.2,
+             linetype = 2,
+             colour = "grey70") +
+  # annotate("text",
+  #          label = "1001",
+  #          y = 0.007,
+  #          x = 1002,
+  #          hjust = 0,
+  #          family = "Helvetica",
+  #          size = ggtext_size) +
+  # geom_line(aes(
+  #   group = interaction(genotype, replicate, technical, TE),
+  #   colour = genotype
+  # ),
+  # alpha = 0.25,
+  # size = 0.1
+  # ) +
+  geom_ribbon(data = rmn_pop_avg %>% 
+    filter(genotype != "CCR1") %>%
+    mutate(genotype = recode(genotype, 
+                             "C4H" = "C4H-RNAi",
+                             "T89" = "WT")),
             aes(fill = genotype,
                 y = roll_mean,
                 ymin = roll_mean - roll_sd,
                 ymax = roll_mean + roll_sd),
             colour = NA,
             alpha = 0.25) +
-  geom_line(data = rmn_pop_avg,
+  geom_line(data = rmn_pop_avg %>% 
+    filter(genotype != "CCR1") %>%
+    mutate(genotype = recode(genotype, 
+                             "C4H" = "C4H-RNAi",
+                             "T89" = "WT")),
             aes(colour = genotype,
                 y = roll_mean),
             size = 0.2) +
-  scale_colour_manual(values = pal_ostwald_disc[c(3, 2, 1)]) +
-  scale_fill_manual(values = pal_ostwald_disc[c(3, 2, 1)]) +
+  scale_colour_manual(values = pal_ostwald_disc[c(3, 1)]) +
+  scale_fill_manual(values = pal_ostwald_disc[c(3, 1)]) +
+  labs(x = expression(paste("Wavenumber [cm"^-1,"]")),
+       y = "Scaled intensity") +
   theme_leo() +
   theme(
     legend.position = "bottom",
