@@ -14,7 +14,7 @@ library(ggrepel)
 library(broom)
 library(ggbeeswarm)
 library(tukeygrps)
-library(gganimate)
+# library(gganimate)
 library(patchwork)
 
 pal_ostwald_cont <- c(
@@ -361,7 +361,7 @@ lm_stop <- 400
 
 
 data <- read_csv(
-  "/data/PhD/Laccase_activity/2020-09_activity/2020-09_lac_activity.csv",
+  "/home/leonard/Documents/Uni/PhD/Laccase_activity/2020-09_activity/2020-09_lac_activity.csv",
   comment = '"#',
   col_types = "ccDcccdcddd"
 ) %>%
@@ -397,7 +397,7 @@ data <- read_csv(
 data <- data %>%
   filter(substrate == "DAB") %>%
   anti_join(read_csv(
-    "/data/PhD/Laccase_activity/2020-09_activity/excluded_sections.csv",
+    "/home/leonard/Documents/Uni/PhD/Laccase_activity/2020-09_activity/excluded_sections.csv",
     col_type = "ccDccc"
   )) %>%
   group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
@@ -466,7 +466,27 @@ nested_data <- nested_data %>%
 
 avg_slopes <- nested_data %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
-  summarise(mean_slope = mean(estimate))
+  summarise(mean_slope = mean(estimate)) 
+
+bulk_activity <- avg_slopes %>%
+  group_by(genotype, substrate, treatment, pH, cell_type) %>%
+  # summarise(mean = mean(mean_slope)) %>%
+  pivot_wider(names_from = cell_type, values_from = mean_slope) %>%
+  summarise(mean = 0.5 * IF + 0.25 * XF + 0.23 * MX + 0.02 * PX)
+
+bulk_bars <- ggplot(bulk_activity, aes(x = genotype, y = mean)) + 
+  stat_summary(fun = mean, color = NA,
+               fill = pal_ostwald_disc[2],
+               alpha = 0.5,
+               geom ="bar", 
+               aes(group = 1), size = 5,
+                   show.legend = FALSE) +
+  geom_jitter(width = 0.1) +
+  labs(y = "Stem activity towards DAB") +
+  theme_leo() +
+  theme(axis.title.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
 
 
 activity_grid <- ggplot(
@@ -619,6 +639,10 @@ dev.off()
 pdf("DAB_pH5_diagnostics.pdf", width = onecol, height = onecol)
 slope_dist
 dev.off()
+
+pdf("bulk_DAF.pdf", width = 0.5 * onecol, height = 0.5 * onecol)
+bulk_bars
+dev.off()
 ```
 
 
@@ -750,7 +774,7 @@ lm_stop <- 300
 
 
 data <- read_csv(
-  "/data/PhD/Laccase_activity/2020-09_activity/2020-09_lac_activity.csv",
+  "/home/leonard/Documents/Uni/PhD/Laccase_activity/2020-09_activity/2020-09_lac_activity.csv",
   comment = '"#',
   col_types = "ccDcccdcddd"
 ) %>%
@@ -786,7 +810,7 @@ data <- read_csv(
 data <- data %>%
   filter(substrate == "DAF") %>%
   anti_join(read_csv(
-    "/data/PhD/Laccase_activity/2020-09_activity/excluded_sections.csv",
+    "/home/leonard/Documents/Uni/PhD/Laccase_activity/2020-09_activity/excluded_sections.csv",
     col_type = "ccDccc"
   )) %>%
   group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
@@ -847,6 +871,26 @@ nested_data <- nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
 avg_slopes <- nested_data %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
   summarise(mean_slope = mean(estimate))
+
+bulk_activity <- avg_slopes %>%
+  group_by(genotype, substrate, treatment, pH, cell_type) %>%
+  # summarise(mean = mean(mean_slope)) %>%
+  pivot_wider(names_from = cell_type, values_from = mean_slope) %>%
+  summarise(mean = 0.5 * IF + 0.25 * XF + 0.23 * MX + 0.02 * PX)
+
+bulk_bars <- ggplot(bulk_activity, aes(x = genotype, y = mean)) + 
+  stat_summary(fun = mean, color = NA,
+               fill = pal_ostwald_disc[1],
+               alpha = 0.5,
+               geom ="bar", 
+               aes(group = 1), size = 5,
+                   show.legend = FALSE) +
+  geom_jitter(width = 0.1) +
+  labs(y = "Stem activity towards DAF") +
+  theme_leo() +
+  theme(axis.title.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
 
 
 activity_grid <- ggplot(
@@ -998,6 +1042,10 @@ dev.off()
 
 pdf("DAF_pH5_diagnostics.pdf", width = onecol, height = onecol)
 slope_dist
+dev.off()
+
+pdf("bulk_DAF.pdf", width = 0.5 * onecol, height = 0.5 * onecol)
+bulk_bars
 dev.off()
 ```
 

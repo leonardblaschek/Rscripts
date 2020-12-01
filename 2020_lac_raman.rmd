@@ -98,7 +98,7 @@ onecol <- 9 / 2.54
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 rmn_files <-
   list.files(
-    path = "/data/PhD/Raman/2020-11_lac_mutants/",
+    path = "/home/leonard/Documents/Uni/PhD/Raman/2020-11_lac_mutants/",
     pattern = "*.txt",
     recursive = TRUE,
     full.names = TRUE
@@ -294,7 +294,7 @@ violin_data <- rmn_lac_sum %>%
     # "Lignin/cellulose" = lig.cellu,
     "G-CHO/G-OH" = GCHO.GOH
   ) %>%
-  # filter(cell_type != "LP") %>%
+  filter(cell_type != "LP") %>%
   pivot_longer(
     cols = -c(genotype:replicate),
     names_to = "variable",
@@ -333,6 +333,8 @@ letters <- letter_groups(violin_data,
                              value + 1,
                            variable == "Total lignin" & cell_type == "MX" ~
                              value + 0.0005,
+                           variable == "P-units" & cell_type == "MX" ~
+                             value + 0.025,
                            TRUE ~ value))
 
 lig_violin <- ggplot(

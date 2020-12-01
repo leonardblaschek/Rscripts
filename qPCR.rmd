@@ -9,10 +9,11 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
-library(tidyqpcr)
 library(showtext)
 library(broom)
 library(ggrepel)
+library(glue)
+library(ggtext)
 
 pal_ostwald_cont <- c(
   "#155DA7",
@@ -66,11 +67,12 @@ font_add(
 showtext_auto()
 
 # generating plot theme
-theme_leo <- function(base_size = 8,
-                      base_family = "Helvetica") {
+theme_leo <- function(base_size = 8
+                      # base_family = "Helvetica"
+                      ) {
   theme_minimal(
-    base_size = base_size,
-    base_family = base_family
+    base_size = base_size
+    # base_family = base_family
   ) %+replace%
     theme(
       strip.text = element_text(hjust = 0, face = "italic"),
@@ -151,9 +153,9 @@ plate <- tibble(
   unite("Pos", row, column, sep = "") %>%
   mutate(replicate = "A1")
 
-write_tsv(plate, "/data/PhD/qPCR/2020-10-26_plate.tsv")
+write_tsv(plate, "/home/leonard/Documents/Uni/PhD/qPCR/2020-10-26_plate.tsv")
 
-results <- read_tsv("/data/PhD/qPCR/2020-10-26_cp.tsv",
+results <- read_tsv("/home/leonard/Documents/Uni/PhD/qPCR/2020-10-26_cp.tsv",
   skip = 1
 ) %>%
   left_join(plate) %>%
@@ -256,9 +258,9 @@ plate <- tibble(
 ) %>%
   unite("Pos", row, column, sep = "")
 
-write_tsv(plate, "/data/PhD/qPCR/2020-10-27_plate.tsv")
+write_tsv(plate, "/home/leonard/Documents/Uni/PhD/qPCR/2020-10-27_plate.tsv")
 
-results <- read_tsv("/data/PhD/qPCR/2020-10-27_cp.tsv",
+results <- read_tsv("/home/leonard/Documents/Uni/PhD/qPCR/2020-10-27_cp.tsv",
   skip = 1
 ) %>%
   left_join(plate)
@@ -373,9 +375,9 @@ plate <- tibble(
 ) %>%
   unite("Pos", row, column, sep = "")
 
-write_tsv(plate, "/data/PhD/qPCR/2020-10-28_plate.tsv")
+write_tsv(plate, "/home/leonard/Documents/Uni/PhD/qPCR/2020-10-28_plate.tsv")
 
-results <- read_tsv("/data/PhD/qPCR/2020-10-28_cp.tsv",
+results <- read_tsv("/home/leonard/Documents/Uni/PhD/qPCR/2020-10-28_cp.tsv",
   skip = 1
 ) %>%
   left_join(plate)
@@ -532,9 +534,9 @@ plate <- tibble(
 ) %>%
   unite("Pos", row, column, sep = "")
 
-write_tsv(plate, "/data/PhD/qPCR/2020-10-31_plate.tsv")
+write_tsv(plate, "/home/leonard/Documents/Uni/PhD/qPCR/2020-10-31_plate.tsv")
 
-results <- read_tsv("/data/PhD/qPCR/2020-10-31_cp.tsv",
+results <- read_tsv("/home/leonard/Documents/Uni/PhD/qPCR/2020-10-31_cp.tsv",
   skip = 1
 ) %>%
   left_join(plate)
@@ -691,9 +693,9 @@ plate <- tibble(
 ) %>%
   unite("Pos", row, column, sep = "")
 
-write_tsv(plate, "/data/PhD/qPCR/2020-11-02_plate.tsv")
+write_tsv(plate, "/home/leonard/Documents/Uni/PhD/qPCR/2020-11-02_plate.tsv")
 
-results <- read_tsv("/data/PhD/qPCR/2020-11-02_cp.tsv",
+results <- read_tsv("/home/leonard/Documents/Uni/PhD/qPCR/2020-11-02_cp.tsv",
   skip = 1
 ) %>%
   left_join(plate)
@@ -828,7 +830,7 @@ ggplot() +
 
 result_files <-
   list.files(
-    path = "/data/PhD/qPCR/",
+    path = "/home/leonard/Documents/Uni/PhD/qPCR/",
     pattern = "cp.tsv",
     recursive = FALSE,
     full.names = TRUE
@@ -836,7 +838,7 @@ result_files <-
 
 plate_files <-
   list.files(
-    path = "/data/PhD/qPCR/",
+    path = "/home/leonard/Documents/Uni/PhD/qPCR/",
     pattern = "plate.tsv",
     recursive = FALSE,
     full.names = TRUE
@@ -1052,4 +1054,47 @@ ggplot() +
     axis.title = element_blank(),
     legend.position = "bottom"
   )
+
+WT_ex <- normalised %>%
+  filter(gene %in% c("LAC4", "LAC11", "LAC12", "LAC17") &
+           sample == "WT" &
+           metric == "dCt") %>%
+  mutate(gene = ordered(glue("<i>{gene}</i>"), levels = c("<i>LAC4</i>", "<i>LAC11</i>", "<i>LAC12</i>", "<i>LAC17</i>")))
+  
+  
+WT_dCt <- ggplot(WT_ex,
+  aes(
+    x = gene,
+    y = value
+  )
+) +
+  # geom_bar(stat = "identity") +
+  ggbeeswarm::geom_quasirandom(
+    shape = 16,
+    alpha = 0.75,
+    # stroke = 0.2,
+    size = 1
+  ) +
+  geom_boxplot(
+    outlier.alpha = 0,
+    alpha = 0.75,
+    size = 0.2,
+    fatten = 1,
+    colour = "black",
+    width = 0.25
+  ) +
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  scale_fill_manual(values = pal_ostwald_disc_long) +
+  labs(y = "Relative expression (&Delta;Ct)") +
+  theme_leo() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_markdown(),
+        axis.title.x = element_textbox_simple()
+        ) +
+  coord_flip()
+
+pdf("WT_expression.pdf", height = onecol * 0.5, width = onecol * 0.5)
+WT_dCt
+dev.off()
 ```
