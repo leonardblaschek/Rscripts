@@ -1424,7 +1424,7 @@ dev.off()
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 step_data <- rmn_irx %>%
-  filter(cell.type == "PX") %>%
+  filter(cell.type == "SMX") %>%
   select(convexity,
          total_lignin,
          P_rel,
@@ -1451,73 +1451,6 @@ summary(step_model)
 
 ```
 
-#### Multigroup model (discarded)
-
-```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-TM.multigroup <- function(x) {
-  psem(
-    lm(Circ. ~
-    n_v +
-      convexity,
-    data = filter(drop_na(rmn_irx), cell.type == x)
-    ),
-    lm(convexity ~
-    # n_v +
-    # n_f +
-    # mean.OD1 +
-    Perim. +
-      # S.G +
-      # G_tot +
-      # GOH_rel +
-      GOH.G +
-      # G_rel +
-      # GOH_tot +
-      S_rel +
-      # S_tot +
-      # GCHO_rel +
-      total_lignin,
-    data = filter(drop_na(rmn_irx), cell.type == x)
-    ),
-    # lme(Perim. ~
-    #       # n_v,
-    #       # n_f +
-    #       mean.OD1 +
-    #       # cellu.peak +
-    #       # lig.peak.pos +
-    #       lig.peak,
-    #     random = ~1|replicate,
-    #     data = filter(drop_na(rmn_irx), cell.type == x)
-    # ),
-    # lme(HeightByWidth ~
-    #       # mean.OD1 +
-    #       # lig.peak +
-    #       # n_v +
-    #       Circ.,
-    #     random = ~1|replicate,
-    #     data = filter(drop_na(rmn_irx), cell.type == x)
-    # ),
-    # lme(X1147.1603 ~
-    #       Perim.,
-    #     random = ~1|replicate,
-    #     data = filter(drop_na(rmn_irx), cell.type == x)
-    # ),
-    # lme(X1603.1099 ~
-    #       Perim.,
-    #     random = ~1|replicate,
-    #     data = filter(drop_na(rmn_irx), cell.type == x)
-    # ),
-    # lme(mean.OD1 ~
-    #       X1664.1603 +
-    #       X1603.1099 +
-    #       X1621.1603,
-    #     random = ~1|replicate,
-    #     data = filter(drop_na(rmn_irx), cell.type == x)
-    # ),
-    data = filter(drop_na(rmn_irx), cell.type == x)
-  )
-}
-```
-
 ### SEM for PX
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
@@ -1533,12 +1466,12 @@ psem_px <- psem(
   # n_f +
   mean.OD1 +
     Perim. +
-    P_rel +
+    # P_rel +
     # cellulose +
     # S.G +
     # G_tot +
-    # GOH_rel +
-    GOH.G +
+    GOH_rel +
+    # GOH.G +
     # G_rel +
     # GOH_tot +
     S_rel +
@@ -1563,7 +1496,7 @@ coefs <- summary(psem_px)[["coefficients"]][, c(1:8)] %>%
     model = "PX",
     species = "Arabidopsis",
   )
-
+summary(psem_px)
 plot(psem_px)
 ```
 
@@ -1581,7 +1514,7 @@ psem_pmx <- psem(
   n_v +
     # n_f +
     mean.OD1 +
-    P_rel +
+    # P_rel +
     # Perim. +
     # S.G +
     # G_tot +
@@ -1630,13 +1563,13 @@ psem_smx <- psem(
   lm(convexity ~
   # n_v +
   # n_f +
-  # mean.OD1 +
+  mean.OD1 +
   # Perim. +
   # S.G +
   # G_tot +
-  # GOH_rel +
-  GOH.G +
-    P_rel +
+  GOH_rel +
+  # GOH.G +
+    P_rel,
     # G_rel +
     # GOH_tot +
     # S_rel +
@@ -1644,7 +1577,7 @@ psem_smx <- psem(
     # GCHO_rel +
     # X1174 +
     # total_lignin:mean.OD1 +
-    total_lignin,
+    # total_lignin,
   data = filter(drop_na(rmn_irx), cell.type == "SMX")
   ),
   data = filter(drop_na(rmn_irx), cell.type == "SMX")
@@ -4710,13 +4643,12 @@ dev.off()
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
-# letters <- letter_groups(rmn_pop_data,
-#                          Solidity,
-#                          genotype,
-#                          "tukey",
-#                          cell_type,
-#                          print_position = "below"
-#                          )
+letters <- letter_groups(rmn_pop_data, 
+                         Solidity,
+                         genotype,
+                         "kruskal",
+                         cell_type,
+                         print_position = "below")
 
 test <- rmn_pop_data %>%
   group_by(genotype, cell_type) %>%
@@ -4749,12 +4681,12 @@ convexity_poplar <- ggplot(drop_na(rmn_pop_data, genotype, Solidity, cell_type),
     size = 0.2,
     scale = "width"
     ) +
-    # geom_text(
-    #   data = letters,
-    #   aes(label = Letters),
-    #   size = ggtext_size,
-    #   family = "Helvetica"
-    # ) +
+    geom_text(
+      data = letters,
+      aes(label = Letters),
+      size = ggtext_size,
+      family = "Helvetica"
+    ) +
     # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
     scale_fill_manual(values = pal_ostwald_disc) +
     # scale_fill_grey(start = 0.9, end = 0.3) +
@@ -4779,30 +4711,78 @@ dev.off()
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 
-psem_data_pop <- rmn_pop_data %>%
+model_data_pop <- rmn_pop_data %>%
   left_join(wiesner_pop_avg) %>%
-  ungroup() %>%
+  separate(repeat_of, into = c("repeat_technical", "repeat_TE")) %>%
+  mutate(technical = case_when(!is.na(repeat_technical) ~ repeat_technical,
+                               TRUE ~ technical),
+         TE = case_when(!is.na(repeat_TE) ~ repeat_TE,
+                               TRUE ~ TE)) %>%
+  group_by(genotype, replicate) %>%
+  mutate(max_dist = max(Distance, na.rm = TRUE),
+         bin = case_when(Distance > (max_dist / 2) ~ "early",
+                         TRUE ~ "recent")) %>%
+  group_by(genotype, replicate, technical, cell_type, TE, bin) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+  
+  
+  
+model_sv_pop <- model_data_pop %>%
   filter(cell_type == "SV") %>%
+  ungroup() %>%
   select(
     Solidity,
     wiesner_avg,
     n_v,
-    # Perim.,
+    Perim.,
     # cellulose,
     total_lignin,
     # G_rel,
-    GOH.G,
+    # GOH.G,
     S_rel,
     P_rel,
-    # GOH_rel,
+    GOH_rel,
     GCHO_rel,
-    lig.cellu,
-    Distance,
+    # lig.cellu,
+    bin
+  ) %>%
+  drop_na()
+
+model_pv_pop <- model_data_pop %>%
+  filter(cell_type == "PV") %>%
+  ungroup() %>%
+  select(
+    Solidity,
+    # wiesner_avg,
+    n_v,
+    Perim.,
+    # cellulose,
+    total_lignin,
+    # G_rel,
+    # GOH.G,
+    S_rel,
+    P_rel,
+    GOH_rel,
+    GCHO_rel,
+    # lig.cellu,
   ) %>%
   drop_na()
 
 # Fit the full model 
-full_model <- lm(Solidity ~., data = psem_data_pop)
+full_model <- lm(Solidity ~ ., data = model_pv_pop)
+# Stepwise regression model
+step_model <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+summary(step_model)
+
+# Fit the full model 
+full_model <- lm(Solidity ~ ., data = model_sv_pop %>% filter(bin == "early") %>% select(-bin))
+# Stepwise regression model
+step_model <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+summary(step_model)
+
+full_model <- lm(Solidity ~., data = model_sv_pop %>% filter(bin == "recent") %>% select(-bin))
 # Stepwise regression model
 step_model <- MASS::stepAIC(full_model, direction = "both", 
                       trace = FALSE)
@@ -4811,29 +4791,28 @@ summary(step_model)
 
 ```
 
-#### SEM 
+#### SEM PV
 
 ```{r}
 
-psem_data_pop <- rmn_pop_data %>%
-  left_join(wiesner_pop_avg) %>%
+psem_data_pv <- model_data_pop %>%
+  filter(cell_type == "PV") %>%
   ungroup() %>%
-  filter(cell_type == "SV") %>%
   select(
     Solidity,
     Circ.,
-    wiesner_avg,
+    # wiesner_avg,
     n_v,
-    # Perim.,
+    Perim.,
     # cellulose,
     total_lignin,
     # G_rel,
+    # GOH.G,
     S_rel,
     P_rel,
     GOH_rel,
     GCHO_rel,
-    lig.cellu,
-    # Distance,
+    # lig.cellu,
   ) %>%
   drop_na()
 
@@ -4841,7 +4820,171 @@ psem_pop <- psem(
   lm(Circ. ~
     n_v +
     Solidity,
-  data = psem_data_pop
+  data = psem_data_pv
+  ),
+  lm(Solidity ~
+    n_v,
+    # Distance +
+    # cellulose +
+    # P_rel +
+    # n_f +
+    # wiesner_avg +
+    # Perim. +
+    # S.G +
+    # G_tot +
+    # GOH_rel +
+    # GOH.G +
+    # G_rel +
+    # GOH_tot +
+    # S_rel +
+    # S_tot +
+    # GCHO_rel +
+    # total_lignin:mean.OD1 +
+    # total_lignin,
+  data = data.frame(psem_data_pv)
+  ),
+  data = data.frame(psem_data_pv)
+)
+
+# ind_claims <- ind_claims %>%
+#   bind_rows(summary(psem_pop)[["dTable"]][, c(1, 4, 5)] %>%
+#     mutate(
+#       model = "Old",
+#       species = "Poplar",
+#       fishC = summary(psem_pop)[["Cstat"]][["Fisher.C"]],
+#       fishP = summary(psem_pop)[["Cstat"]][["P.Value"]]
+#     ))
+
+coefs <- coefs %>%
+  bind_rows(summary(psem_pop)[["coefficients"]][, c(1:8)] %>%
+    mutate(
+      model = "Old",
+      species = "Poplar"
+    ))
+
+plot(psem_pop)
+summary(psem_pop)
+
+```
+
+#### SEM early
+
+```{r}
+
+psem_data_early <- model_data_pop %>%
+  filter(cell_type == "SV") %>%
+  group_by(genotype, replicate) %>%
+  mutate(max_dist = max(Distance, na.rm = TRUE),
+         bin = case_when(Distance > (max_dist / 2) ~ "early",
+                         TRUE ~ "recent")) %>%
+  ungroup() %>%
+  select(
+    Solidity,
+    Circ.,
+    wiesner_avg,
+    n_v,
+    Perim.,
+    # cellulose,
+    total_lignin,
+    # G_rel,
+    # GOH.G,
+    S_rel,
+    P_rel,
+    GOH_rel,
+    GCHO_rel,
+    # lig.cellu,
+    bin
+  ) %>%
+  filter(bin == "early") %>%
+  drop_na()
+
+psem_pop <- psem(
+  lm(Circ. ~
+    n_v +
+    Solidity,
+  data = psem_data_early
+  ),
+  lm(Solidity ~
+    n_v +
+    # Distance +
+    # cellulose +
+    P_rel +
+    # n_f +
+    wiesner_avg +
+    # Perim. +
+    # S.G +
+    # G_tot +
+    GOH_rel +
+    # GOH.G +
+    # G_rel +
+    # GOH_tot +
+    S_rel +
+    # S_tot +
+    GCHO_rel +
+    # total_lignin:mean.OD1 +
+    total_lignin,
+  data = data.frame(psem_data_early)
+  ),
+  data = data.frame(psem_data_early)
+)
+
+ind_claims <- ind_claims %>%
+  bind_rows(summary(psem_pop)[["dTable"]][, c(1, 4, 5)] %>%
+    mutate(
+      model = "Old",
+      species = "Poplar",
+      fishC = summary(psem_pmx)[["Cstat"]][["Fisher.C"]],
+      fishP = summary(psem_pmx)[["Cstat"]][["P.Value"]]
+    ))
+
+coefs <- coefs %>%
+  bind_rows(summary(psem_pmx)[["coefficients"]][, c(1:8)] %>%
+    mutate(
+      model = "Old",
+      species = "Poplar"
+    ))
+
+plot(psem_pop)
+summary(psem_pop)
+
+```
+
+#### SEM recent
+
+```{r}
+
+psem_data_recent <- model_data_pop %>%
+  filter(cell_type == "SV") %>%
+  group_by(genotype, replicate) %>%
+  mutate(max_dist = max(Distance, na.rm = TRUE),
+         bin = case_when(Distance > (max_dist / 2) ~ "recent",
+                         TRUE ~ "recent")) %>%
+  ungroup() %>%
+  select(
+    Solidity,
+    Circ.,
+    wiesner_avg,
+    n_v,
+    Perim.,
+    # cellulose,
+    total_lignin,
+    # G_rel,
+    # GOH.G,
+    S_rel,
+    P_rel,
+    GOH_rel,
+    GCHO_rel,
+    # lig.cellu,
+    bin
+  ) %>%
+  filter(bin == "recent") %>%
+  drop_na()
+
+psem_pop <- psem(
+  lm(Circ. ~
+    n_v +
+    Solidity,
+  data = psem_data_recent
   ),
   lm(Solidity ~
     n_v +
@@ -4859,28 +5002,30 @@ psem_pop <- psem(
     # GOH_tot +
     S_rel +
     # S_tot +
+    # total_lignin +
     GCHO_rel,
     # total_lignin:mean.OD1 +
-    # total_lignin,
-  data = data.frame(psem_data_pop)
+  data = data.frame(psem_data_recent)
   ),
-  data = data.frame(psem_data_pop)
+  data = data.frame(psem_data_recent)
 )
-# ind_claims <- ind_claims %>%
-#   bind_rows(summary(psem_pmx)[["dTable"]][, c(1, 4, 5)] %>%
-#     mutate(
-#       model = "PMX",
-#       species = "Arabidopsis",
-#       fishC = summary(psem_pmx)[["Cstat"]][["Fisher.C"]],
-#       fishP = summary(psem_pmx)[["Cstat"]][["P.Value"]]
-#     ))
-# 
-# coefs <- coefs %>%
-#   bind_rows(summary(psem_pmx)[["coefficients"]][, c(1:8)] %>%
-#     mutate(
-#       model = "PMX",
-#       species = "Arabidopsis"
-#     ))
+
+ind_claims <- ind_claims %>%
+  bind_rows(summary(psem_pop)[["dTable"]][, c(1, 4, 5)] %>%
+    mutate(
+      model = "Young",
+      species = "Poplar",
+      fishC = summary(psem_pmx)[["Cstat"]][["Fisher.C"]],
+      fishP = summary(psem_pmx)[["Cstat"]][["P.Value"]]
+    ))
+
+coefs <- coefs %>%
+  bind_rows(summary(psem_pmx)[["coefficients"]][, c(1:8)] %>%
+    mutate(
+      model = "Young",
+      species = "Poplar"
+    ))
+
 plot(psem_pop)
 summary(psem_pop)
 

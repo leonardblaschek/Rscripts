@@ -134,7 +134,7 @@ dev.off()
 ## Split plant data into growth periods
 
 ```{r}
-year_data <- data %>%
+year_height <- data %>%
   mutate(
     year = isoyear(date),
     month = month(date)
@@ -147,16 +147,67 @@ year_data <- data %>%
   filter(season == "endofyear" & variable == "height" & month > 9) %>%
   group_by(instance, genotype, plant) %>%
   arrange(date, .by_group = TRUE) %>%
-  mutate(year_growth = value - lag(value, default = first(value))) %>%
-  filter(year != min(year))
+  mutate(height_growth = value - lag(value, default = first(value))) %>%
+  filter(year != min(year)) %>%
+  ungroup() %>%
+  select(genotype, plant, instance, year, height_growth)
+
+year_width <- data %>%
+  mutate(
+    year = isoyear(date),
+    month = month(date)
+  ) %>%
+  group_by(instance, year, variable, genotype, plant) %>%
+  mutate("season" = case_when(
+    date == max(date) ~ "endofyear",
+    TRUE ~ "midyear"
+  )) %>%
+  filter(season == "endofyear" & variable == "width" & month > 9) %>%
+  group_by(instance, genotype, plant) %>%
+  arrange(date, .by_group = TRUE) %>%
+  mutate(width_growth = value - lag(value, default = first(value))) %>%
+  filter(year != min(year)) %>%
+  ungroup() %>%
+  select(genotype, plant, instance, year, width_growth)
+
+year_injuries <- data %>%
+  mutate(
+    year = isoyear(date),
+    month = month(date)
+  ) %>%
+  group_by(instance, year, variable, genotype, plant) %>%
+  filter(variable == "injuries") %>%
+  group_by(instance, genotype, plant, year) %>%
+  summarise(injuries = max(value)) %>%
+  filter(year != min(year)) %>%
+  ungroup() %>%
+  select(genotype, plant, instance, year, injuries)
+
+year_survival <- data %>%
+  mutate(
+    year = isoyear(date),
+    month = month(date)
+  ) %>%
+  group_by(instance, year, variable, genotype, plant) %>%
+  filter(variable == "survival") %>%
+  group_by(instance, genotype, plant, year) %>%
+  summarise(survival = min(value)) %>%
+  filter(survival == 0) %>%
+  ungroup() %>%
+  select(genotype, plant, instance, year, survival)
+
+year_data <- year_height %>%
+  full_join(year_width, by = c("genotype", "plant", "instance", "year")) %>%
+  full_join(year_injuries, by = c("genotype", "plant", "instance", "year")) %>%
+  anti_join(year_survival, by = c("genotype", "plant", "instance", "year"))
 ```
 
 ## View yearly growth by genotype
 
 ```{r}
 year_growth <- ggplot(
-  year_data,
-  aes(x = genotype, y = year_growth)
+  year_height,
+  aes(x = genotype, y = height_growth)
 ) +
   ggbeeswarm::geom_quasirandom(aes(colour = instance),
     shape = 16,
@@ -164,6 +215,7 @@ year_growth <- ggplot(
     alpha = 0.25
   ) +
   geom_violin(
+    aes(group = interaction(instance,genotype)),
     draw_quantiles = 0.5,
     alpha = 0.5,
     size = 0.2
@@ -210,18 +262,42 @@ year_envir <- envir %>%
 ## Model optimisation
 
 ```{r}
-psem_data <- year_data %>%
+optim_data <- year_data %>%
   left_join(year_envir, by = "year") %>%
   ungroup() %>%
-  filter(genotype == "WT") %>%
-  # filter(genotype %in% c("1B", "3B")) %>%
-  select(-c(genotype:season), -highest_light, -average_light) %>%
+  # filter(genotype == "WT") %>%
+  filter(genotype %in% c("1B", "3B")) %>%
+  # filter(instance == 1) %>%
+  filter(instance == 2) %>%
+  select(-c(genotype:year), -highest_light, -average_light) %>%
   drop_na()
 
 # Fit the full model 
-full_model <- lm(year_growth ~., data = psem_data)
+full_model <- lm(height_growth ~., data = optim_data %>% select(-width_growth))
 # Stepwise regression model
 step_model <- MASS::stepAIC(full_model, direction = "both", 
                       trace = FALSE)
 summary(step_model)
+
+# model_data <- year_data %>%
+#   left_join(year_envir, by = "year") %>%
+#   ungroup() %>%
+#   filter(genotype == "WT")
+#   # filter(genotype %in% c("1B", "3B"))
+#   
+# mixed_model <- lme4::lmer(height_growth ~ 
+#                             injuries +
+#                             lowest_temp +
+#                             highest_temp +
+#                             average_high_temp + 
+#                             average_low_temp +
+#                             average_temp +
+#                             # instance +
+#                             # (1 | year) +
+#                             (1 | instance),
+#                           data = model_data)
+# 
+# summary(mixed_model)
+# 
+# MuMIn::r.squaredGLMM(mixed_model)
 ```

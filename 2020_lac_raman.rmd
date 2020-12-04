@@ -98,7 +98,7 @@ onecol <- 9 / 2.54
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 rmn_files <-
   list.files(
-    path = "/home/leonard/Documents/Uni/PhD/Raman/2020-11_lac_mutants/",
+    path = "/data/PhD/Raman/2020-11_lac_mutants/",
     pattern = "*.txt",
     recursive = TRUE,
     full.names = TRUE
@@ -345,7 +345,7 @@ lig_violin <- ggplot(
   )
 ) +
   ggbeeswarm::geom_quasirandom(
-    aes(colour = genotype),
+    aes(colour = replicate),
     size = 1,
     # dodge.width = 0.5,
     alpha = 0.5
