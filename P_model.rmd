@@ -94,13 +94,13 @@ onecol <- 9 / 2.54
 ## Load data
 
 ```{r}
-data1 <- read_csv("/home/leonard/Dropbox/P-unit manuscript/P_data_1.csv") %>%
+data1 <- read_csv("/home/leonard/Dropbox/2020_P_manuscript/P_data_1.csv") %>%
   pivot_longer(cols = -sample, names_to = "ID", values_to = "value") %>%
   separate(sample, into = c("genotype", "plant")) %>%
   separate(ID, into = c("variable", "date"), sep = " ") %>%
   mutate(instance = "1")
 
-data2 <- read_csv("/home/leonard/Dropbox/P-unit manuscript/P_data_2.csv") %>%
+data2 <- read_csv("/home/leonard/Dropbox/2020_P_manuscript/P_data_2.csv") %>%
   pivot_longer(cols = -sample, names_to = "ID", values_to = "value") %>%
   separate(sample, into = c("genotype", "plant")) %>%
   separate(ID, into = c("variable", "date"), sep = " ") %>%
@@ -230,7 +230,7 @@ dev.off()
 ## Load environment data
 
 ```{r}
-envir <- read_csv("/home/leonard/Dropbox/P-unit manuscript/env_data.csv") %>%
+envir <- read_csv("/home/leonard/Dropbox/2020_P_manuscript/env_data.csv") %>%
   mutate(
     date = as_date(parse_date_time(date, "ym")),
     year = isoyear(date),
@@ -257,6 +257,20 @@ year_envir <- envir %>%
     highest_light = max(irradiation),
     average_light = mean(irradiation)
   )
+
+cumul_temp <- read_csv("/home/leonard/Dropbox/2020_P_manuscript/cumul_temp.csv") %>%
+  mutate(
+    date = as_date(parse_date_time(date, "ym")),
+    year = isoyear(date),
+    month = month(date)
+  )
+
+year_cumul_temp <- cumul_temp %>%
+  group_by(year) %>%
+  summarise(
+    may_0deg = `cummul h above 0`[month == 5],
+    may_5deg = `cummul h above 5`[month == 5],
+    may_10deg = `cummul h above 10`[month == 5])
 ```
 
 ## Model optimisation
@@ -264,11 +278,12 @@ year_envir <- envir %>%
 ```{r}
 optim_data <- year_data %>%
   left_join(year_envir, by = "year") %>%
+  left_join(year_cumul_temp, by = "year") %>%
   ungroup() %>%
-  # filter(genotype == "WT") %>%
-  filter(genotype %in% c("1B", "3B")) %>%
+  filter(genotype == "WT") %>%
+  # filter(genotype %in% c("1B", "3B")) %>%
   # filter(instance == 1) %>%
-  filter(instance == 2) %>%
+  # filter(instance == 2) %>%
   select(-c(genotype:year), -highest_light, -average_light) %>%
   drop_na()
 
@@ -279,25 +294,73 @@ step_model <- MASS::stepAIC(full_model, direction = "both",
                       trace = FALSE)
 summary(step_model)
 
-# model_data <- year_data %>%
-#   left_join(year_envir, by = "year") %>%
-#   ungroup() %>%
-#   filter(genotype == "WT")
-#   # filter(genotype %in% c("1B", "3B"))
-#   
-# mixed_model <- lme4::lmer(height_growth ~ 
-#                             injuries +
-#                             lowest_temp +
-#                             highest_temp +
-#                             average_high_temp + 
-#                             average_low_temp +
-#                             average_temp +
-#                             # instance +
-#                             # (1 | year) +
-#                             (1 | instance),
-#                           data = model_data)
-# 
-# summary(mixed_model)
-# 
-# MuMIn::r.squaredGLMM(mixed_model)
+```
+
+## Models
+
+```{r}
+
+model_data <- year_data %>%
+  left_join(year_envir, by = "year") %>%
+  left_join(year_cumul_temp, by = "year") %>%
+  ungroup() %>%
+  # filter(genotype == "WT")
+  filter(genotype %in% c("1B", "3B"))
+
+mixed_model <- lme4::lmer(height_growth ~
+                            injuries +
+                            lowest_temp +
+                            highest_temp +
+                            average_high_temp +
+                            average_low_temp +
+                            average_temp +
+                            # instance +
+                            # (1 | year) +
+                            (1 | instance),
+                          data = model_data)
+
+summary(mixed_model)
+
+MuMIn::r.squaredGLMM(mixed_model)
+```
+
+## SEM
+
+```{r}
+
+psem_data <- model_data %>%
+  drop_na() %>%
+  as.data.frame()
+
+psem_WT <- psem(
+  # lme4::lmer(height_growth ~
+  lm(height_growth ~
+  injuries +
+    lowest_temp +
+    highest_temp +
+    average_high_temp +
+    average_low_temp +
+    average_temp,
+    # instance +
+    # (1 | genotype) +
+    # (1 | instance),
+  data = psem_data
+  ),
+  # lme4::lmer(width_growth ~
+  lm(width_growth ~
+  injuries +
+    lowest_temp +
+    highest_temp +
+    average_high_temp +
+    average_low_temp +
+    average_temp,
+    # instance +
+    # (1 | genotype) +
+    # (1 | instance),
+  data = psem_data
+  ),
+  data = psem_data
+)
+
+plot(psem_WT)
 ```

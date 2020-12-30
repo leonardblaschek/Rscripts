@@ -747,18 +747,21 @@ rmn_sum <- rmn_data_corrected %>%
     "GCHO_rel" = scaled_lig[wavenumber == 1625],
     "S_rel" = scaled_lig[wavenumber == 1334],
     "P_rel" = scaled_lig[wavenumber == 1001],
-    "X1174" = scaled_lig[wavenumber == 1174],
-    "X1141" = scaled_lig[wavenumber == 1141],
     "cellulose" = scaled[wavenumber == 1099] + scaled[wavenumber == 381],
     "S.G" = scaled_lig[wavenumber == 1334] / scaled_lig[wavenumber == 1276],
     "GOH.G" = scaled_lig[wavenumber == 1664] / scaled_lig[wavenumber == 1603],
+    "O4_van_rel" = scaled_lig[abs(wavenumber - 1303) == min(abs(wavenumber - 1303))][1],
+    "other_van_rel" = scaled_lig[abs(wavenumber - 785) == min(abs(wavenumber - 785))][1],
+    "O4_syr_rel" = scaled_lig[abs(wavenumber - 1297) == min(abs(wavenumber - 1297))][1],
+    "other_syr_rel" = scaled_lig[abs(wavenumber - 450) == min(abs(wavenumber - 450))][1],
+    "Benz_rel" = O4_van_rel + other_van_rel + O4_syr_rel + other_syr_rel,
     # "GCHO.GOH" = scaled_lig[wavenumber == 1625] /scaled_lig[wavenumber == 1664],
     "AUC" = mean(AUC)
   )
 ```
 
 
-### Export scaled spectra
+#### Export scaled spectra
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
@@ -974,7 +977,7 @@ rmn_irx <- left_join(rmn_irx, wiesner.data.pre) %>%
 # write.csv(rmn_irx, file = "SEM_data.csv"))
 ```
 
-### WT vessel characteristics
+### Violin plots
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%', fig.width=5, fig.height=4}
 
@@ -1144,40 +1147,40 @@ rmn_lig <- rmn_violin("total_lignin") +
     y = expression(paste("Relative lignin"))
   )
 
-rmn_s <- rmn_violin("S_rel") +
-  labs(
-    x = "",
-    y = expression(paste("Relative " * bold(S)))
-  )
-
-rmn_g <- rmn_violin("G_rel") +
-  labs(
-    x = "",
-    y = expression(paste("Relative " * bold(G)))
-  )
-
-rmn_goh <- rmn_violin("GOH.G") +
-  labs(
-    x = "",
-    y = expression(paste("Relative " * bold(G)[CHOH]))
-  )
-
 rmn_cellu <- rmn_violin("cellulose") +
   labs(
     x = "",
     y = expression(paste("Relative cellulose"))
   )
 
-rmn_gcho.goh <- rmn_violin("GCHO.GOH") +
-  labs(
-    x = "",
-    y = expression(paste(bold(G)[CHO] ~ "/" ~ bold(G)[CHOH]))
-  )
-
 rmn_s.g <- rmn_violin("S.G") +
   labs(
     x = "",
     y = expression(paste(Relative ~ bold(S) ~ "/" ~ bold(G)))
+  )
+
+rmn_gcho <- rmn_violin("GCHO_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ terminal ~ bold(G)[CHO]))
+  )
+
+rmn_goh <- rmn_violin("GOH_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ bold(G)[CHOH]))
+  )
+
+rmn_p <- rmn_violin("P_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ bold(P)))
+  )
+
+rmn_benz <- rmn_violin("Benz_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ Benzald.))
   )
 
 rmn_gcho_term.gcho_tot <- rmn_violin("GCHO_term.GCHO_tot") +
@@ -1194,7 +1197,7 @@ celltypes_WT <-
 
 ```
 
-### Assemble figure
+#### Assemble figure
 
 ```{r figure 2, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%', fig.width=5, fig.height=4}
 
@@ -1210,11 +1213,14 @@ top <- plot_grid(celltypes_WT,
 )
 bottom <- plot_grid(
   rmn_area,
-  rmn_cellu,
+  # rmn_cellu,
   rmn_lig,
   rmn_s.g,
-  rmn_gcho.goh,
-  rmn_gcho_term.gcho_tot,
+  rmn_goh,
+  rmn_gcho,
+  rmn_benz,
+  # rmn_gcho.goh,
+  # rmn_gcho_term.gcho_tot,
   labels = c("C", "D", "E", "F", "G", "H"),
   vjust = 1,
   nrow = 2,
@@ -1434,8 +1440,8 @@ dev.off()
 step_data <- rmn_irx %>%
   filter(cell.type == "SMX") %>%
   select(convexity,
-         total_lignin,
-         P_rel,
+         # total_lignin,
+         # P_rel,
          # G_rel,
          # GOH.G,
          S_rel,
@@ -1444,6 +1450,11 @@ step_data <- rmn_irx %>%
          n_v,
          GCHO_rel,
          GOH_rel,
+         # O4_van_rel,
+         # other_van_rel,
+         # O4_syr_rel,
+         # other_syr_rel,
+         Benz_rel
          # X1141,
          # X1174
          ) %>%
@@ -1571,13 +1582,14 @@ psem_smx <- psem(
   lm(convexity ~
   # n_v +
   # n_f +
-  mean.OD1 +
+  # mean.OD1 +
   # Perim. +
   # S.G +
   # G_tot +
   GOH_rel +
   # GOH.G +
-    P_rel,
+    # P_rel,
+    Benz_rel,
     # G_rel +
     # GOH_tot +
     # S_rel +
@@ -1766,6 +1778,11 @@ rmn_pop_sum <- rmn_pop_scaled %>%
     "GCHO_tot" = scaled[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
     "S_rel" = scaled_lig[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
     "S_tot" = scaled[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "O4_van_rel" = scaled_lig[abs(wavenumber - 1303) == min(abs(wavenumber - 1303))][1],
+    "other_van_rel" = scaled_lig[abs(wavenumber - 785) == min(abs(wavenumber - 785))][1],
+    "O4_syr_rel" = scaled_lig[abs(wavenumber - 1297) == min(abs(wavenumber - 1297))][1],
+    "other_syr_rel" = scaled_lig[abs(wavenumber - 450) == min(abs(wavenumber - 450))][1],
+    "Benz_rel" = O4_van_rel + other_van_rel + O4_syr_rel + other_syr_rel,
     "cellulose" =
       scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1] +
         scaled[abs(wavenumber - 375) == min(abs(wavenumber - 375))][1] +
@@ -1899,7 +1916,7 @@ pop_irx_ref <- pop_irx %>%
   # select(c(
   #   "genotype",
   #   "replicate",
-  #   "technical",
+  #   "technical", 
   #   "ref_line",
   #   "X",
   #   "Y",
@@ -1956,9 +1973,22 @@ wiesner_bg <- read_csv(paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/Wies
   group_by(image) %>%
   summarise(wiesner_bg = mean(wiesner_bg))
 
+pop_bin <- pop_irx %>%
+  left_join(celltypes) %>%
+  filter(cell_type == "SV") %>%
+  group_by(genotype, replicate, technical, cell_type, TE) %>%
+  summarise(Distance = mean(Distance)) %>%
+  group_by(genotype) %>%
+  mutate(median_dist = median(Distance, na.rm = TRUE),
+            cell_type = case_when(Distance > median_dist  ~ "Early SV",
+                               TRUE ~ "Recent SV"))
+
 rmn_pop_data <- rmn_pop_sum %>%
   left_join(pop_irx) %>%
-  left_join(celltypes) %>%
+  left_join(pop_bin) %>%
+  mutate(cell_type = case_when(is.na(cell_type) ~ "PV",
+                               TRUE ~ cell_type)) %>%
+  left_join(celltypes %>% select(-cell_type)) %>%
   unite("ID", genotype, replicate, technical, TE, remove = FALSE) %>%
   mutate(value_stained = case_when(ID %in% wiesner_na ~ NA_real_,
                                    is.na(value_stained) ~ NA_real_,
@@ -1976,15 +2006,6 @@ rmn_pop_data <- rmn_pop_sum %>%
   mutate(genotype = recode(genotype, "T89" = "WT"),
          genotype = ordered(genotype, levels = c("WT", "CCR1", "C4H")))
 
-
-rmn_pop_n <- rmn_pop_data %>%
-  # mutate(bin = case_when(Distance < 250 ~ 1,
-  #                        TRUE ~2)) %>%
-  group_by(genotype, cell_type) %>%
-  summarise(n = n()) %>%
-  ungroup() %>%
-  mutate(overall = sum(n))
-
 wiesner_pop <- rmn_pop_data %>%
   unnest(data)
 
@@ -1993,6 +2014,7 @@ wiesner_pop_avg <- wiesner_pop %>%
   summarise(wiesner_avg = mean(wiesner, na.rm = TRUE),
             wiesner_upper = quantile(wiesner, probs = 0.75, na.rm = TRUE)) %>%
   filter(wiesner_avg > 0)
+
 
 model_data_pop <- rmn_pop_data %>%
   left_join(wiesner_pop_avg) %>%
@@ -2004,13 +2026,12 @@ model_data_pop <- rmn_pop_data %>%
                                TRUE ~ technical),
          TE = case_when(!is.na(repeat_TE) ~ repeat_TE,
                                TRUE ~ TE)) %>%
-  # group_by(genotype, replicate) %>% # separate models by realtive distance distance per section
-  group_by(genotype) %>% # separate models by total distance
-  mutate(median_dist = median(Distance, na.rm = TRUE),
-         bin = case_when(Distance > median_dist ~ "early",
-                         TRUE ~ "recent")) %>%
-  group_by(genotype, replicate, technical, cell_type, TE, bin) %>%
+  group_by(genotype, replicate, technical, cell_type, TE) %>%
   summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+pop_n <-model_data_pop %>%
+  group_by(genotype, cell_type) %>%
+  summarise(n = n())
 
 ```
 
@@ -2321,10 +2342,6 @@ dev.off()
 
 wt_data_pop <- model_data_pop %>%
   filter(genotype == "WT") %>%
-  unite("cell_type", cell_type, bin) %>%
-  mutate(cell_type = case_when(str_detect(cell_type, fixed("PV")) ~ "PV",
-                               cell_type == "SV_early" ~ "Early SV",
-                               cell_type == "SV_recent" ~ "Recent SV")) %>%
   group_by(cell_type, replicate, technical, TE) %>%
   select(-genotype) %>%
   pivot_longer(
@@ -2394,6 +2411,12 @@ rmn_violin <- function(x) {
     )
 }
 
+rmn_nv <- rmn_violin("n_v") +
+  labs(
+    x = "",
+    y = expression(paste("Adj. vessels [%]"))
+  )
+
 rmn_area <- rmn_violin("Area") +
   labs(
     x = "",
@@ -2424,52 +2447,93 @@ rmn_s.g <- rmn_violin("S.G") +
     y = expression(paste(Relative ~ bold(S) ~ "/" ~ bold(G)))
   )
 
+rmn_gcho <- rmn_violin("GCHO_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Rel. ~ terminal ~ bold(G)[CHO]))
+  )
+
+rmn_goh <- rmn_violin("GOH_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ bold(G)[CHOH]))
+  )
+
+rmn_p <- rmn_violin("P_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ bold(P)))
+  )
+
+rmn_benz <- rmn_violin("Benz_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ Benz[CHO]))
+  )
+
 rmn_gcho_term.gcho_tot <- rmn_violin("GCHO_term.GCHO_tot") +
   labs(
     x = "",
     y = expression(paste(Terminal ~ bold(G)[CHO] ~ "/" ~ bold(G)[CHO]))
   )
-
-celltypes_WT <-
-  rasterGrob(image_read_pdf(
-    "/home/leonard/Dropbox/2020_IRX manuscript/Submission/Edits/popWT.pdf",
-    density = 900
-  ))
 ```
 
 #### Assemble figure
 
 ```{r figure 2, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%', fig.width=5, fig.height=4}
+celltypes_WT <-
+  rasterGrob(image_read_pdf(
+    "/home/leonard/Dropbox/2020_IRX manuscript/Submission/Edits/popWT.pdf",
+    density = 900
+  ))
 
+top <- plot_grid(
+  celltypes_WT,
+  rmn_nv,
+  labels = c("A", "B"),
+  vjust = 1,
+  nrow = 1,
+  # hjust = 0,
+  label_size = 10,
+  label_fontfamily = "Helvetica",
+  align = "hv",
+  axis = "lr",
+  rel_widths = c(2.25, 1)
+)
 
 bottom <- plot_grid(
   rmn_area,
-  rmn_cellu,
+  # rmn_cellu,
   rmn_lig,
   rmn_s.g,
-  rmn_gcho.goh,
-  rmn_gcho_term.gcho_tot,
-  labels = c("B" ,"C", "D", "E", "F", "G"),
+  rmn_goh,
+  rmn_gcho,
+  rmn_p,
+  # rmn_gcho.goh,
+  # rmn_gcho_term.gcho_tot,
+  labels = c("C", "D", "E", "F", "G", "H"),
   vjust = 1,
+  # hjust = 0,
   nrow = 2,
+  label_y = 1.05,
   label_size = 10,
   label_fontfamily = "Helvetica",
   align = "hv",
   axis = "lr"
 )
 
-pdf("IRX_figure_pop1.pdf", width = onecol, height = onecol)
+pdf("IRX_figure_pop1.pdf", width = onecol, height = onecol * 0.95)
 plot_grid(
-  celltypes_WT,
+  top,
   bottom,
-  labels = c("A", ""),
+  labels = c(""),
   vjust = 1,
   label_size = 10,
   label_fontfamily = "Helvetica",
   align = "hv",
-  axis = "lr",
+  axis = "tlr",
   nrow = 2,
-  rel_heights = c(1, 1.75)
+  rel_heights = c(1, 2)
 )
 dev.off()
 ```
@@ -2478,25 +2542,55 @@ dev.off()
 #### Visual vessel overview
 
 ```{r figure 3, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-irx_data <-
-  read.csv(paste0(datapath,"PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_coords.csv"), sep = "\t")
-# irx_data <- subset(irx_data, replicate == 1 & technical == 3)
-irx_ref <- subset(irx_data, object == "ref", select = c(1, 2, 3, 6, 7, 27))
-irx_ref$ref.y1 <- irx_ref$Y
-irx_ref$ref.y2 <- irx_ref$Y
-irx_ref$ref.x1 <- irx_ref$X - (irx_ref$Length / 2)
-irx_ref$ref.x2 <- irx_ref$X + (irx_ref$Length / 2)
+pop_irx <- read_csv(
+  paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/Wiesner/2020-10-22_poplar/registered/2020-11_pop_wiesner_irx.csv")
+  ) %>%
+  mutate(x = x / 5.84,
+         y = y / 5.84)
 
+#### create reference at the height of the cambium for distance calculation ####
+pop_irx_ref <- pop_irx %>%
+  filter(TE == 0) %>%
+  group_by(genotype,
+           replicate,
+           technical,
+           ref_line) %>%
+  summarise(ref.y1 = unique(y),
+            ref.y2 = unique(y),
+            ref.x1 = min(x),
+            ref.x2 = max(x))
+  
+  # select(c(
+  #   "genotype",
+  #   "replicate",
+  #   "technical",
+  #   "ref_line",
+  #   "X",
+  #   "Y",
+  #   "Length"
+  # )) %>%
+  # mutate(
+  #   "ref.y1" = Y,
+  #   "ref.y2" = Y,
+  #   "ref.x1" = X - (Length / 2),
+  #   "ref.x2" = X + (Length / 2)
+  # )
 
-irx_data <- irx_data %>%
-  filter(object != "ref") %>%
-  left_join(irx_ref[, c(1, 2, 3, 7, 8, 9, 10)],
-    by = c("genotype", "replicate", "technical")
+#### merge reference into data frame ####
+pop_irx <- pop_irx %>%
+  filter(TE != 0) %>%
+  left_join(pop_irx_ref,
+    by = c("genotype", "replicate", "technical", "ref_line")
+  ) %>%
+  mutate(
+    TE = as.character(TE),
+    replicate = as.character(replicate)
   )
 
-irx_data$Distance <-
+#### calculate difference of the centre of each vessel to the cambium ####
+pop_irx$Distance <-
   apply(
-    irx_data[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
+    pop_irx[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
     1,
     function(x) {
       a <- c(x[1], x[2])
@@ -2510,42 +2604,35 @@ irx_data$Distance <-
     }
   )
 
-irx_data <- irx_data %>%
-  rownames_to_column(var = "number")
+celltypes <- read_csv(
+  paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/poplar_cell_types.csv"),
+  col_types = "cccccnc")
 
-irx_x <- irx_data %>%
-  select(genotype, replicate, technical, object, number, contains("ROIx")) %>%
-  group_by(genotype, replicate, technical, object, number) %>%
-  pivot_longer(contains("ROIx"), names_to = "variable", values_to = "ROIx") %>%
-  separate(variable, into = c("variable", "point"), sep = "x") %>%
-  select(-variable)
+pop_bin <- pop_irx %>%
+  left_join(celltypes) %>%
+  filter(cell_type == "SV") %>%
+  group_by(genotype, replicate, technical, cell_type, TE) %>%
+  summarise(Distance = mean(Distance)) %>%
+  group_by(genotype) %>%
+  mutate(median_dist = median(Distance, na.rm = TRUE),
+            cell_type = case_when(Distance > median_dist  ~ "early SV",
+                               TRUE ~ "recent SV"))
 
-irx_y <- irx_data %>%
-  select(genotype, replicate, technical, object, number, contains("ROIy")) %>%
-  group_by(genotype, replicate, technical, object, number) %>%
-  pivot_longer(contains("ROIy"), names_to = "variable", values_to = "ROIy") %>%
-  separate(variable, into = c("variable", "point"), sep = "y") %>%
-  select(-variable)
-
-irx_roi <- left_join(irx_x, irx_y) %>%
-  drop_na() %>%
-  filter_at(vars("ROIx", "ROIy"), any_vars(. != 0))
-
-irx_str <- irx_roi %>%
-  unite("ID", genotype:number, remove = FALSE, sep = ",") %>%
+pop_str <- pop_irx %>%
+  left_join(pop_bin) %>%
+  mutate(cell_type = case_when(is.na(cell_type) ~ "PV",
+                               TRUE ~ cell_type)) %>%
+  select(genotype, replicate, technical, cell_type, TE, point, x, y) %>%
+  unite("ID", genotype:TE, remove = FALSE, sep = "_") %>%
   group_by(ID) %>%
   mutate(
-    number = as.numeric(number),
-    ROIx = ROIx - mean(ROIx, na.rm = TRUE),
-    ROIy = ROIy - mean(ROIy, na.rm = TRUE)
+    x = x - mean(x, na.rm = TRUE),
+    y = y - mean(y, na.rm = TRUE)
   ) %>%
-  ungroup() %>%
   group_by(ID, point) %>%
-  summarise(xy = list(c(ROIx, ROIy))) %>%
-  ungroup() %>%
+  summarise(xy = list(c(x, y))) %>%
   group_by(ID) %>%
   mutate(
-    point = as.numeric(point),
     max_point = max(point)
   ) %>%
   bind_rows(filter(., point == 0) %>%
@@ -2559,9 +2646,7 @@ irx_str <- irx_roi %>%
       list() %>% # st_polygon() requires a list
       st_polygon()
   )) %>%
-  st_as_sf()
-
-irx_str <- irx_str %>%
+  st_as_sf() %>%
   group_by(ID) %>%
   mutate(
     area = st_area(geometry),
@@ -2570,29 +2655,24 @@ irx_str <- irx_str %>%
     convexity = area / convex_area,
     circularity = 4 * pi * (area / (lwgeom::st_perimeter(geometry)^2))
   ) %>%
-  separate(ID, into = c("genotype", "replicate", "technical", "cell.type", "number"), sep = ",") %>%
-  filter(genotype != "ccr1xfah1") %>%
+  separate(ID, into = c("genotype", "replicate", "technical", "cell_type", "TE"), sep = "_") %>%
   mutate(
-    genotype = recode(genotype, "col-0" = "Col-0"),
+    genotype = recode(genotype, "T89" = "WT"),
     genotype = ordered(genotype, levels = c(
-      "Col-0",
-      "4cl1",
-      "4cl2",
-      "4cl1x4cl2",
-      "ccoaomt1",
-      "fah1",
-      "omt1",
-      "ccr1-3",
-      "cad4",
-      "cad5",
-      "cad4xcad5"
+      "WT",
+      "CCR1",
+      "C4H"
     )),
-    cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX"))
+    cell_type = ordered(cell_type, levels = c("PV", "early SV", "recent SV"))
   )
+
+pop_str_n <- pop_str %>%
+  group_by(genotype, cell_type) %>%
+  summarise(n = n())
 
 sf_ROIs <- ggplot() +
   geom_sf(
-    data = irx_str,
+    data = pop_str,
     aes(colour = circularity),
     # colour = "black",
     fill = NA,
@@ -2614,9 +2694,9 @@ sf_ROIs <- ggplot() +
   ) +
   scale_colour_gradientn(colours = pal_ostwald_cont, trans = "reverse", name = "Circularity") +
   guides(colour = guide_colourbar(barwidth = unit(2, "mm"))) +
-  facet_grid(cell.type ~ genotype, switch = "y")
+  facet_grid(cell_type ~ genotype, switch = "y")
 
-pdf("sf_ROIs.pdf", width = twocol * 0.7, height = onecol)
+pdf("pop_vessels.pdf", width = twocol * 0.7, height = onecol)
 sf_ROIs
 dev.off()
 ```
@@ -2625,27 +2705,6 @@ dev.off()
 #### Model otimisation
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-  
-model_sv_pop <- model_data_pop %>%
-  filter(cell_type == "SV") %>%
-  ungroup() %>%
-  select(
-    Solidity,
-    # wiesner_avg,
-    n_v,
-    Perim.,
-    # cellulose,
-    total_lignin,
-    # G_rel,
-    # GOH.G,
-    S_rel,
-    P_rel,
-    GOH_rel,
-    GCHO_rel,
-    # lig.cellu,
-    bin
-  ) %>%
-  drop_na()
 
 model_pv_pop <- model_data_pop %>%
   filter(cell_type == "PV") %>%
@@ -2655,7 +2714,7 @@ model_pv_pop <- model_data_pop %>%
     # wiesner_avg,
     n_v,
     Perim.,
-    # cellulose,
+    cellulose,
     total_lignin,
     # G_rel,
     # GOH.G,
@@ -2663,7 +2722,62 @@ model_pv_pop <- model_data_pop %>%
     P_rel,
     GOH_rel,
     GCHO_rel,
+    # O4_van_rel,
+    # other_van_rel,
+    # O4_syr_rel,
+    # other_syr_rel,
+    # Benz_rel
     # lig.cellu,
+  ) %>%
+  drop_na()
+
+model_esv_pop <- model_data_pop %>%
+  filter(cell_type == "Early SV") %>%
+  ungroup() %>%
+  select(
+    Solidity,
+    # wiesner_avg,
+    n_v,
+    Perim.,
+    cellulose,
+    total_lignin,
+    # G_rel,
+    # GOH.G,
+    S_rel,
+    P_rel,
+    GOH_rel,
+    GCHO_rel,
+    # O4_van_rel,
+    # other_van_rel,
+    # O4_syr_rel,
+    # other_syr_rel,
+    # Benz_rel
+    # lig.cellu
+  ) %>%
+  drop_na()
+
+model_rsv_pop <- model_data_pop %>%
+  filter(cell_type == "Recent SV") %>%
+  ungroup() %>%
+  select(
+    Solidity,
+    # wiesner_avg,
+    n_v,
+    Perim.,
+    cellulose,
+    total_lignin,
+    # G_rel,
+    # GOH.G,
+    S_rel,
+    P_rel,
+    GOH_rel,
+    GCHO_rel,
+    # O4_van_rel,
+    # other_van_rel,
+    # O4_syr_rel,
+    # other_syr_rel,
+    # Benz_rel
+    # lig.cellu
   ) %>%
   drop_na()
 
@@ -2675,13 +2789,14 @@ step_model <- MASS::stepAIC(full_model, direction = "both",
 summary(step_model)
 
 # Fit the full model 
-full_model <- lm(Solidity ~ ., data = model_sv_pop %>% filter(bin == "early") %>% select(-bin))
+full_model <- lm(Solidity ~ ., data = model_esv_pop)
 # Stepwise regression model
 step_model <- MASS::stepAIC(full_model, direction = "both", 
                       trace = FALSE)
 summary(step_model)
 
-full_model <- lm(Solidity ~., data = model_sv_pop %>% filter(bin == "recent") %>% select(-bin))
+# Fit the full model 
+full_model <- lm(Solidity ~., data = model_rsv_pop)
 # Stepwise regression model
 step_model <- MASS::stepAIC(full_model, direction = "both", 
                       trace = FALSE)
@@ -2700,18 +2815,7 @@ psem_data_pv <- model_data_pop %>%
   select(
     Solidity,
     Circ.,
-    # wiesner_avg,
-    n_v,
-    Perim.,
-    # cellulose,
-    total_lignin,
-    # G_rel,
-    # GOH.G,
-    S_rel,
-    P_rel,
-    GOH_rel,
-    GCHO_rel,
-    # lig.cellu,
+    n_v
   ) %>%
   drop_na()
 
@@ -2723,23 +2827,6 @@ psem_pop <- psem(
   ),
   lm(Solidity ~
     n_v,
-    # Distance +
-    # cellulose +
-    # P_rel +
-    # n_f +
-    # wiesner_avg +
-    # Perim. +
-    # S.G +
-    # G_tot +
-    # GOH_rel +
-    # GOH.G +
-    # G_rel +
-    # GOH_tot +
-    # S_rel +
-    # S_tot +
-    # GCHO_rel +
-    # total_lignin:mean.OD1 +
-    # total_lignin,
   data = data.frame(psem_data_pv)
   ),
   data = data.frame(psem_data_pv)
@@ -2757,7 +2844,7 @@ psem_pop <- psem(
 coefs <- coefs %>%
   bind_rows(summary(psem_pop)[["coefficients"]][, c(1:8)] %>%
     mutate(
-      model = "Old",
+      model = "PV",
       species = "Poplar"
     ))
 
@@ -2771,24 +2858,17 @@ summary(psem_pop)
 ```{r}
 
 psem_data_early <-  model_data_pop %>%
-  filter(cell_type == "SV" & bin == "early") %>%
+  filter(cell_type == "Early SV") %>%
   ungroup() %>%
   select(
     Solidity,
-    Distance,
     Circ.,
-    # wiesner_avg,
     n_v,
-    Perim.,
-    # cellulose,
     total_lignin,
-    # G_rel,
-    # GOH.G,
-    S_rel,
     P_rel,
     GOH_rel,
     GCHO_rel,
-    # lig.cellu,
+    Benz_rel
   ) %>%
   drop_na()
 
@@ -2812,7 +2892,7 @@ psem_pop <- psem(
 ind_claims <- ind_claims %>%
   bind_rows(summary(psem_pop)[["dTable"]][, c(1, 4, 5)] %>%
     mutate(
-      model = "Old",
+      model = "Early SV",
       species = "Poplar",
       fishC = summary(psem_pop)[["Cstat"]][["Fisher.C"]],
       fishP = summary(psem_pop)[["Cstat"]][["P.Value"]]
@@ -2835,24 +2915,17 @@ summary(psem_pop)
 ```{r}
 
 psem_data_recent <-  model_data_pop %>%
-  filter(cell_type == "SV" & bin == "recent") %>%
+  filter(cell_type == "Recent SV") %>%
   ungroup() %>%
   select(
     Solidity,
-    Distance,
     Circ.,
-    # wiesner_avg,
     n_v,
     Perim.,
-    # cellulose,
-    total_lignin,
-    # G_rel,
-    # GOH.G,
     S_rel,
     P_rel,
     GOH_rel,
-    GCHO_rel,
-    # lig.cellu,
+    GCHO_rel
   ) %>%
   drop_na()
 
@@ -2864,23 +2937,11 @@ psem_pop <- psem(
   ),
   lm(Solidity ~
     n_v +
-    # Distance +
-    # cellulose +
+    Perim. +
     P_rel +
-    # n_f +
-    # wiesner_avg +
-    # Perim. +
-    # S.G +
-    # G_tot +
     GOH_rel +
-    # GOH.G +
-    # G_rel +
-    # GOH_tot +
     S_rel +
-    # S_tot +
-    # total_lignin +
     GCHO_rel,
-    # total_lignin:mean.OD1 +
   data = data.frame(psem_data_recent)
   ),
   data = data.frame(psem_data_recent)
@@ -2889,7 +2950,7 @@ psem_pop <- psem(
 ind_claims <- ind_claims %>%
   bind_rows(summary(psem_pop)[["dTable"]][, c(1, 4, 5)] %>%
     mutate(
-      model = "Young",
+      model = "Recent SV",
       species = "Poplar",
       fishC = summary(psem_pop)[["Cstat"]][["Fisher.C"]],
       fishP = summary(psem_pop)[["Cstat"]][["P.Value"]]
@@ -4065,15 +4126,16 @@ find_interactions <- function(x) {
   rmn_irx <- filter(rmn_irx, cell.type == x) %>%
     select(convexity,
          # total_lignin,
-         P_rel,
+         # P_rel,
          # G_rel,
          # GOH.G,
          # S_rel,
-         mean.OD1,
+         # mean.OD1,
          # Perim.,
          # n_v,
          # GCHO_rel,
          GOH_rel,
+         Benz_rel,
          # X1141,
          # X1174
          ) %>%
@@ -4095,10 +4157,10 @@ smx_interactions <- tidy(best_model) %>%
     filter(str_detect(term, fixed(":")) & 
              p.value < 0.05)
 
-GOH_Wiesner <- interact_plot(best_model,
-  pred = GOH_rel, modx = mean.OD1,
+Benz_GOH <- interact_plot(best_model,
+  pred = Benz_rel, modx = GOH_rel,
   colors = c("white", "white", "white"),
-  x.label = expression(paste(bold(G)[CHOH])),
+  x.label = "Benzaldehydes",
   y.label = "Convexity"
 ) +
   theme_leo() +
@@ -4107,44 +4169,59 @@ GOH_Wiesner <- interact_plot(best_model,
     panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
   ) +
   theme(aspect.ratio = 1)
-GOH_Wiesner$layers[[1]]$aes_params$size <- 0.4
+Benz_GOH$layers[[1]]$aes_params$size <- 0.4
 
-P_Wiesner <- interact_plot(best_model,
-  pred = P_rel, modx = mean.OD1,
-  colors = c("white", "white", "white"),
-  x.label = expression(bold(P)),
-  y.label = "Convexity"
-) +
-  theme_leo() +
-  theme(
-    legend.position = c(0.75, 0.8),
-    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
-  ) +
-  theme(aspect.ratio = 1)
-P_Wiesner$layers[[1]]$aes_params$size <- 0.4
+# GOH_Wiesner <- interact_plot(best_model,
+#   pred = GOH_rel, modx = mean.OD1,
+#   colors = c("white", "white", "white"),
+#   x.label = expression(paste(bold(G)[CHOH])),
+#   y.label = "Convexity"
+# ) +
+#   theme_leo() +
+#   theme(
+#     legend.position = c(0.75, 0.8),
+#     panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+#   ) +
+#   theme(aspect.ratio = 1)
+# GOH_Wiesner$layers[[1]]$aes_params$size <- 0.4
 
-P_GOH <- interact_plot(best_model,
-  pred = P_rel, modx = GOH_rel,
-  colors = c("white", "white", "white"),
-  x.label = expression(bold(P)),
-  y.label = "Convexity"
-) +
-  theme_leo() +
-  theme(
-    legend.position = c(0.75, 0.8),
-    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
-  ) +
-  theme(aspect.ratio = 1)
-P_GOH$layers[[1]]$aes_params$size <- 0.4
+# P_Wiesner <- interact_plot(best_model,
+#   pred = P_rel, modx = mean.OD1,
+#   colors = c("white", "white", "white"),
+#   x.label = expression(bold(P)),
+#   y.label = "Convexity"
+# ) +
+#   theme_leo() +
+#   theme(
+#     legend.position = c(0.75, 0.8),
+#     panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+#   ) +
+#   theme(aspect.ratio = 1)
+# P_Wiesner$layers[[1]]$aes_params$size <- 0.4
+
+# P_GOH <- interact_plot(best_model,
+#   pred = P_rel, modx = GOH_rel,
+#   colors = c("white", "white", "white"),
+#   x.label = expression(bold(P)),
+#   y.label = "Convexity"
+# ) +
+#   theme_leo() +
+#   theme(
+#     legend.position = c(0.75, 0.8),
+#     panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+#   ) +
+#   theme(aspect.ratio = 1)
+# P_GOH$layers[[1]]$aes_params$size <- 0.4
 
 pdf("SMX_interactions.pdf", height = twocol * 0.7, width = twocol / 3)
-smx <- plot_grid(
-  P_GOH + theme(legend.position = "none"),
-  P_Wiesner + theme(legend.position = "none"),
-  GOH_Wiesner + theme(legend.position = "none"),
-  ncol = 2
-)
-smx
+# smx <- plot_grid(
+#   P_GOH + theme(legend.position = "none"),
+#   P_Wiesner + theme(legend.position = "none"),
+#   GOH_Wiesner + theme(legend.position = "none"),
+#   ncol = 2
+# )
+# smx
+Benz_GOH
 dev.off()
 
 
@@ -4173,20 +4250,20 @@ PX3 <- GOH_Perim
 PX4 <- GCHO_GOH
 PMX1 <- Wiesner_v
 PMX2 <- lignin_GCHO
-SMX1 <- GOH_Wiesner
-SMX2 <- P_Wiesner
-SMX3 <- P_GOH
+SMX1 <- Benz_GOH
+# SMX1 <- GOH_Wiesner
+# SMX2 <- P_Wiesner
+# SMX3 <- P_GOH
 
 layout <- "
 AB
 CD
 EF
-GH
-I#
+G#
 "
 
-pdf("interactions.pdf", width = onecol, height = twocol)
-PX1 + PX2 + PX3 + PX4 + PMX1 + PMX2 + SMX1 + SMX2 + SMX3 + 
+pdf("interactions.pdf", width = onecol, height = twocol * (4/5))
+PX1 + PX2 + PX3 + PX4 + PMX1 + PMX2 + SMX1 + 
   plot_layout(design = layout)
   
 dev.off()
@@ -4197,26 +4274,17 @@ dev.off()
 ```{r}
 
 #### Early secondary vessels ####
-find_interactions <- function(x) {
+find_interactions <- function() {
   psem_data_early <-  model_data_pop %>%
-  filter(cell_type == "SV" & bin == "early") %>%
+  filter(cell_type == "Early SV") %>%
   ungroup() %>%
   select(
     Solidity,
-    # Distance,
-    # Circ.,
-    # wiesner_avg,
     n_v,
-    # Perim.,
-    # cellulose,
     total_lignin,
-    # G_rel,
-    # GOH.G,
-    # S_rel,
     P_rel,
     GOH_rel,
-    GCHO_rel,
-    # lig.cellu,
+    GCHO_rel
   ) %>%
   drop_na()
 
@@ -4230,35 +4298,100 @@ find_interactions <- function(x) {
   best_model
 }
 
-best_model <- find_interactions("early")
+best_model <- find_interactions()
+summary(best_model)
 
 esv_interactions <- tidy(best_model) %>%
     filter(str_detect(term, fixed(":")) & 
              p.value < 0.05)
 
 # plots
+p_v <- interact_plot(best_model,
+  pred = P_rel, modx = n_v,
+  colors = c("black", "black", "black"),
+  x.label = expression(bold(P)),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+p_v$layers[[1]]$aes_params$size <- 0.4
+
+goh_v <- interact_plot(best_model,
+  pred = GOH_rel, modx = n_v,
+  colors = c("black", "black", "black"),
+  x.label = expression(bold(G)[CHOH]),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+goh_v$layers[[1]]$aes_params$size <- 0.4
+
+goh_p <- interact_plot(best_model,
+  pred = GOH_rel, modx = P_rel,
+  colors = c("black", "black", "black"),
+  x.label = expression(bold(G)[CHOH]),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+goh_p$layers[[1]]$aes_params$size <- 0.4
+
+gcho_p <- interact_plot(best_model,
+  pred = GCHO_rel, modx = P_rel,
+  colors = c("black", "black", "black"),
+  x.label = expression(Terminal ~ bold(G)[CHO]),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+gcho_p$layers[[1]]$aes_params$size <- 0.4
+
+ESV1 <- p_v
+ESV2 <- goh_v
+ESV3 <- goh_p
+ESV4 <- gcho_p
 
 #### Recent secondary vessels ####
-find_interactions <- function(x) {
+find_interactions <- function() {
   psem_data_recent <-  model_data_pop %>%
-  filter(cell_type == "SV" & bin == "recent") %>%
+  filter(cell_type == "Recent SV") %>%
   ungroup() %>%
   select(
     Solidity,
-    # Distance,
-    # Circ.,
-    # wiesner_avg,
     n_v,
     Perim.,
-    # cellulose,
-    # total_lignin,
-    # G_rel,
-    # GOH.G,
     S_rel,
     P_rel,
     GOH_rel,
-    GCHO_rel,
-    # lig.cellu,
+    GCHO_rel
   ) %>%
   drop_na()
 
@@ -4272,13 +4405,121 @@ find_interactions <- function(x) {
   best_model
 }
 
-best_model <- find_interactions("recent")
+best_model <- find_interactions()
+summary(best_model)
 
 rsv_interactions <- tidy(best_model) %>%
     filter(str_detect(term, fixed(":")) & 
              p.value < 0.05)
 
 # plots
+
+s_v <- interact_plot(best_model,
+  pred = S_rel, modx = n_v,
+  colors = c("white", "white", "white"),
+  x.label = expression(bold(S)),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+s_v$layers[[1]]$aes_params$size <- 0.4
+
+p_perim <- interact_plot(best_model,
+  pred = P_rel, modx = Perim.,
+  colors = c("white", "white", "white"),
+  x.label = expression(bold(P)),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+p_perim$layers[[1]]$aes_params$size <- 0.4
+
+gcho_perim <- interact_plot(best_model,
+  pred = GCHO_rel, modx = Perim.,
+  colors = c("white", "white", "white"),
+  x.label = expression(Terminal ~ bold(G)[CHO]),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+gcho_perim$layers[[1]]$aes_params$size <- 0.4
+
+gcho_p <- interact_plot(best_model,
+  pred = GCHO_rel, modx = P_rel,
+  colors = c("white", "white", "white"),
+  x.label = expression(Terminal ~ bold(G)[CHO]),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+gcho_p$layers[[1]]$aes_params$size <- 0.4
+
+s_p <- interact_plot(best_model,
+  pred = S_rel, modx = P_rel,
+  colors = c("white", "white", "white"),
+  x.label = expression(bold(S)),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+s_p$layers[[1]]$aes_params$size <- 0.4
+
+RSV1 <- p_perim
+RSV2 <- gcho_perim
+RSV3 <- s_v
+RSV4 <- s_p
+RSV5 <- gcho_p
+
+#### Assemble figure ####
+
+layout <- "
+AB
+CD
+EF
+GH
+I#
+"
+
+pdf("interactions_poplar.pdf", width = onecol, height = twocol)
+ESV1+ ESV2 + ESV3 + ESV4 + RSV1 + RSV2 + RSV3 + RSV4 + RSV5 +
+  plot_layout(design = layout)
+  
+dev.off()
 ```
 
 #### Coefficient tables
@@ -4342,7 +4583,7 @@ readr::write_file(coef_tab, "sem_coef_tab.txt")
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 rmn_irx_long <- rmn_irx %>%
-  select(genotype:cell.type, n_v, Area, Perim., Circ., convexity, total_lignin, G_rel, GOH.G, S_rel, cellulose, mean.OD1, GCHO_rel, S.G, GCHO.GOH, GCHO_term.GCHO_tot) %>%
+  select(genotype:cell.type, n_v, Area, Perim., Circ., convexity, total_lignin, G_rel, GOH.G, S_rel, cellulose, mean.OD1, GCHO_rel, S.G, P_rel, Benz_rel) %>%
   pivot_longer(cols = -c(genotype:cell.type), names_to = "variable", values_to = "value") %>%
   mutate(
     variable = factor(variable,
@@ -4359,9 +4600,9 @@ rmn_irx_long <- rmn_irx %>%
       "Perim.",
       "total_lignin",
       "S_rel",
-      "S.G",
-      "GCHO.GOH",
-      "GCHO_term.GCHO_tot"
+      "P_rel",
+      "Benz_rel",
+      "S.G"
     ),
     labels = c("Adj. vessels",
                "Area [µm²]",
@@ -4375,9 +4616,9 @@ rmn_irx_long <- rmn_irx %>%
                "Perimeter [µm]",
                "Lignin",
                "bold(S)",
-               "bold(S)~'/'~bold(G)",
-               "bold(G)[CHO]~'/'~bold(G)[CHOH]",
-               "Term~'/'~tot~bold(G)[CHO]"
+               "bold(P)",
+               "Benzaldehydes",
+               "bold(S)~'/'~bold(G)"
                )),
     genotype = ordered(genotype,
       levels = c(
@@ -4405,8 +4646,7 @@ rmn_irx_letters <- letter_groups(
   cell.type,
   variable,
   print_position = "above",
-  print_adjust = 1,
-  alpha = 0.05
+  print_adjust = 1
 ) %>%
   mutate(value = case_when(variable == "Area [µm²]" & cell.type %in% c("PX", "SMX") ~
            value + 20,
