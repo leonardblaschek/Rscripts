@@ -166,12 +166,12 @@ twocol <- 18 / 2.54
 onehalfcol <- 14 / 2.54
 onecol <- 9 / 2.54
 
-#### machine dependent paths
+#### machine dependent paths ####
 ## office
-# datapath <- "/data/"
+datapath <- "/data/"
 
 ## laptop
-datapath <- "/home/leonard/Documents/Uni/"
+# datapath <- "/home/leonard/Documents/Uni/"
 
 ```
 
@@ -183,6 +183,7 @@ eds_data <- read_csv(paste0(datapath, "PhD/IRX/EDS/eds_data.csv"),
   col_types = "ccnnn"
 )
 
+#### create plot function ####
 eds_plot <- function(num, den, lbl) {
   num <- enquo(num)
   den <- enquo(den)
@@ -275,6 +276,7 @@ eds_plot <- function(num, den, lbl) {
     )
 }
 
+#### create plots and assemble subfigure ####
 C.Cr <- eds_plot(C, Cr) + theme(
   axis.text.x = element_blank(),
   axis.title.x = element_blank(),
@@ -307,19 +309,21 @@ dev.off()
 ## EM drying collapse
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+#### load data and calculate proportions of intact/collapsed cells ####
 em_data <- read_csv(paste0(datapath, "PhD/IRX/EM/AD_collapse.csv")) %>%
   pivot_longer(cols = c(PX, MX), names_to = "cell.type", values_to = "count") %>%
   mutate(
     state = ordered(state, levels = c("Fully", "Partially", "Intact")),
     cell.type = ordered(cell.type, levels = c("PX", "MX")),
-    days = as.character(days),
-    # days = paste(days, "days")
+    days = as.character(days)
   ) %>%
   group_by(experiment, treatment, days, cell.type) %>%
   mutate(sum = sum(count)) %>%
   group_by(experiment, treatment, days, cell.type, state) %>%
   mutate(proportion = (count / sum) * 100)
 
+#### calculate error bars for stacked bar plots ####
 em_data_avg <- em_data %>%
   group_by(treatment, days, cell.type, state) %>%
   summarise(
@@ -342,26 +346,11 @@ em_data_avg <- em_data %>%
     )
   )
 
-em_data_points <- em_data %>%
-  select(-sum, -count) %>%
-  group_by(treatment, days, cell.type, state) %>%
-  pivot_wider(id_cols = -c(state, proportion), names_from = state, values_from = proportion) %>%
-  mutate(
-    Partially = Partially + Intact,
-    Fully = Fully + Partially
-  ) %>%
-  pivot_longer(cols = c(Fully, Partially, Intact), names_to = "state", values_to = "proportion") %>%
-  mutate(state2 = case_when(
-    state == "Intact" ~ "Partially",
-    state == "Partially" ~ "Fully",
-    TRUE ~ "none"
-  ))
-
+#### create plot function ####
 em_collapse_plot <- function(cond) {
   em_collapse <- ggplot(em_data_avg %>% filter(treatment == cond), aes(
     x = days,
     y = proportion,
-    # group = experiment,
     fill = state
   )) +
     geom_col(
@@ -384,7 +373,6 @@ em_collapse_plot <- function(cond) {
     ) +
     facet_wrap(~cell.type, nrow = 1) +
     theme(
-      # axis.title.x = element_blank(),
       legend.key.height = unit(2, "mm"),
       legend.key.width = unit(2, "mm"),
       legend.margin = unit(c(0, 0, 0, 0), "mm"),
@@ -393,16 +381,10 @@ em_collapse_plot <- function(cond) {
     coord_cartesian(ylim = c(0, 100))
 }
 
+#### create plots and assemble subfigure ####
 cpd_plot <- em_collapse_plot("CPD") + labs(y = "After CPD [%]")
-# theme(legend.position = "bottom",
-#       axis.text.x = element_blank(),
-#       axis.title.x = element_blank(),
-#       axis.ticks.x = element_blank())
-# cpd_plot$layers[[2]]$aes_params$alpha <- 0
-# cpd_plot$layers[[3]]$aes_params$alpha <- 0
 
 ad_plot <- em_collapse_plot("AD") + labs(y = "After air drying [%]")
-# theme(strip.text = element_blank())
 
 pdf("em_collapse.pdf", width = onecol, height = onecol * 0.3)
 plot_grid(
@@ -432,9 +414,8 @@ afm_data <- read_csv(paste0(datapath, "PhD/IRX/AFM/afm_PX.csv")) %>%
   ungroup() %>%
   mutate(cell.type = ordered(cell.type, levels = c("PX", "MX")))
 
+#### create plot function ####
 rmn_violin <- function(x) {
-  afm_data <- afm_data
-
   afm_test <- afm_data %>% filter(variable == x)
   p_values <- afm_test %>%
     group_by(cell.type) %>%
@@ -452,38 +433,20 @@ rmn_violin <- function(x) {
       TRUE ~ round(p_value, digits = 13)
     ))
 
-
   ggplot(
     data = afm_data %>% filter(variable == x),
     aes(x = days, y = ratio)
   ) +
-    # geom_line(aes(group = interaction(cell.type, variable, cell, measurement)),
-    #           size = 0.2,
-    #           alpha = 0.25) +
     geom_quasirandom(
       aes(fill = cell.type, group = days),
       dodge.width = 0.6,
       shape = 21,
-      # width = 0.1,
-      # colour = NA,
       alpha = 0.75,
       size = 1,
       stroke = 0.2
     ) +
-    # geom_boxplot(
-    #   aes(group = interaction(cell.type, variable), fill = cell.type),
-    #   # fill = "white",
-    #   alpha = 0.5,
-    #   width = 0.6,
-    #   position = position_dodge2(width = 1),
-    #   outlier.alpha = 0,
-    #   lwd = 0.25,
-    #   fatten = 1,
-    #   width = 0.25
-    # ) +
     geom_violin(aes(
-      group = interaction(days, cell.type),
-      # fill = cell.type
+      group = interaction(days, cell.type)
     ),
     draw_quantiles = 0.5,
     fill = "white",
@@ -504,19 +467,18 @@ rmn_violin <- function(x) {
       family = "Helvetica",
       size = ggtext_size
     ) +
-    # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
     scale_fill_manual(values = pal_flame_disc) +
     expand_limits(y = 0) +
     scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
     theme_leo() +
     theme(
       text = element_text(family = "Helvetica"),
-      legend.position = "none",
-      # plot.margin = unit(c(5.5, 5.5, 5.5, 4.5), "pt")
+      legend.position = "none"
     ) +
     facet_wrap(~cell.type, nrow = 2)
 }
 
+#### create plots and assemble subfigure ####
 modulus <- rmn_violin("modulus") +
   labs(
     x = "Days after induction",
@@ -546,7 +508,8 @@ dev.off()
 ### Load Raman data
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-# #### import and tidy Raman data ####
+
+#### import and tidy Raman data (computationally heavy, so done once and written to file) ####
 # rmn_files <-
 #   list.files(
 #     path = paste0(datapath, "PhD/IRX/RAMAN/nuoendagula/",
@@ -690,6 +653,8 @@ dev.off()
 #   )
 #
 # write_csv(rmn_data_corrected, "rmn_data_corrected.csv")
+
+#### load tidied and baseline correced Raman spectra ####
 rmn_data_corrected <- read_csv("rmn_data_corrected.csv", col_types = "ccccnnn") %>%
   mutate(
     genotype = ordered(genotype,
@@ -710,7 +675,6 @@ rmn_data_corrected <- read_csv("rmn_data_corrected.csv", col_types = "ccccnnn") 
   )
 
 rmn_data_corrected <- rmn_data_corrected %>%
-  # left_join(lig_peak) %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   mutate(
     AUC = MESS::auc(wavenumber, corrected.intensity),
@@ -725,19 +689,17 @@ rmn_data_pre <- rmn_data_corrected %>%
   summarise(
     samples.pre = length(corrected.intensity),
     mean.scaled = mean(scaled, na.rm = TRUE),
-    mean.scaled_lig = mean(scaled_lig, na.rm = TRUE),
-    # mean.lig_peak = mean(lig_peak, na.rm = TRUE)
+    mean.scaled_lig = mean(scaled_lig, na.rm = TRUE)
   )
 
 rmn_data_avg <- rmn_data_pre %>%
   group_by(genotype, cell.type, wavenumber) %>%
   summarise(
     mean.scaled = mean(mean.scaled, na.rm = TRUE),
-    mean.scaled_lig = mean(mean.scaled_lig, na.rm = TRUE),
-    # mean.lig_peak = mean(mean.lig_peak, na.rm = TRUE)
+    mean.scaled_lig = mean(mean.scaled_lig, na.rm = TRUE)
   )
 
-#### average Raman data, calculate integrals and detect peaks ####
+#### average Raman data, calculate integrals and band intensities ####
 rmn_sum <- rmn_data_corrected %>%
   group_by(genotype, cell.type, replicate, technical) %>%
   summarise(
@@ -755,7 +717,6 @@ rmn_sum <- rmn_data_corrected %>%
     "O4_syr_rel" = scaled_lig[abs(wavenumber - 1297) == min(abs(wavenumber - 1297))][1],
     "other_syr_rel" = scaled_lig[abs(wavenumber - 450) == min(abs(wavenumber - 450))][1],
     "Benz_rel" = O4_van_rel + other_van_rel + O4_syr_rel + other_syr_rel,
-    # "GCHO.GOH" = scaled_lig[wavenumber == 1625] /scaled_lig[wavenumber == 1664],
     "AUC" = mean(AUC)
   )
 ```
@@ -765,6 +726,7 @@ rmn_sum <- rmn_data_corrected %>%
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
+#### export spectra for excel users ####
 spectra_export.switch <- left_join(read_tsv(paste0(datapath, "PhD/IRX/PMX_which_SMX.tsv"),
   col_types = "cccc"
 ), rmn_data_corrected) %>%
@@ -794,6 +756,7 @@ write_excel_csv(spectra_export_scaled, "Raman_spectra_scaled.csv")
 ### Load Wiesner data
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, warning = FALSE, eval = TRUE, echo = FALSE}
+
 #### import and tidy Wiesner test data ####
 wiesner.data <-
   read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
@@ -849,10 +812,9 @@ wiesner.data$hue <- ((wiesner.data$h.stained + 128) / 255 * 360)
 wiesner.data$replicate <-
   as.factor(as.character(wiesner.data$replicate))
 
-# calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. for the unlignified phloem
+# calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. in the unlignified phloem
 wiesner.data$diff <-
   wiesner.data$OD.stained - wiesner.data$OD.unstained
-# summary(wiesner.data)
 
 wiesner.data.bg <- wiesner.data %>%
   filter(cell.type == "PH") %>%
@@ -890,12 +852,12 @@ wiesner.data.pre <- wiesner.data %>%
   select(genotype, cell.type, replicate, mean.OD1)
 
 #### import and tidy shape data of the vessels from the Raman measurements ####
-rmn_irx <- read.csv(paste0(datapath,"PhD/IRX/raman_IRX_revisited.csv")) %>%
+rmn_irx <- read.csv(paste0(datapath, "PhD/IRX/raman_IRX_revisited.csv")) %>%
   select(genotype:Perim., Circ., Round, Height, Width) %>%
   filter(object == 2) %>%
   select(-object)
 
-raman.nb <- read.csv(paste0(datapath,"PhD/IRX/raman_IRX.csv")) %>%
+raman.nb <- read.csv(paste0(datapath, "PhD/IRX/raman_IRX.csv")) %>%
   select(genotype:n_f)
 rmn_irx <- left_join(rmn_irx, raman.nb)
 rmn_irx$replicate <- as.character(rmn_irx$replicate)
@@ -941,7 +903,12 @@ raman_convex <- raman_convex %>%
   ) %>%
   filter(cell.type != "？？")
 
-rmn_irx <- left_join(rmn_irx, raman_convex)
+rmn_irx <- left_join(rmn_irx, raman_convex) %>%
+  mutate(
+    Area = Area * (1.84375^2), # convert areas to correct scale
+    ConvexArea = ConvexArea * (1.84375^2),
+    Perim. = Perim. * 1.84375
+  )
 
 # write_csv(rmn_irx, "raman_irx_shape.csv"))
 
@@ -1027,8 +994,7 @@ rmn_adj_box <- ggplot(
     stroke = 0.25
   ) +
   geom_violin(aes(
-    group = interaction(cell.type, variable),
-    # fill = cell.type
+    group = interaction(cell.type, variable)
   ),
   draw_quantiles = 0.5,
   fill = "white",
@@ -1098,16 +1064,13 @@ rmn_violin <- function(x) {
     geom_quasirandom(
       aes(fill = cell.type),
       dodge.width = 0.6,
-      shape = 21,
-      # width = 0.1,
-      # colour = NA,
+      shape = 21
       alpha = 0.75,
       size = 1,
       stroke = 0.2
     ) +
     geom_violin(aes(
-      group = cell.type,
-      # fill = cell.type
+      group = cell.type
     ),
     draw_quantiles = 0.5,
     fill = "white",
@@ -1189,17 +1152,17 @@ rmn_gcho_term.gcho_tot <- rmn_violin("GCHO_term.GCHO_tot") +
     y = expression(paste(Terminal ~ bold(G)[CHO] ~ "/" ~ bold(G)[CHO]))
   )
 
-celltypes_WT <-
-  rasterGrob(image_read_pdf(
-    "/home/leonard/Dropbox/2020_IRX manuscript/Submission/Edits/IRX_WT.pdf",
-    density = 900
-  ))
-
 ```
 
 #### Assemble figure
 
 ```{r figure 2, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%', fig.width=5, fig.height=4}
+
+celltypes_WT <-
+  rasterGrob(image_read_pdf(
+    "/home/leonard/Dropbox/2020_IRX manuscript/Submission/Edits/IRX_WT.pdf",
+    density = 900
+  ))
 
 
 top <- plot_grid(celltypes_WT,
@@ -1213,14 +1176,11 @@ top <- plot_grid(celltypes_WT,
 )
 bottom <- plot_grid(
   rmn_area,
-  # rmn_cellu,
   rmn_lig,
   rmn_s.g,
   rmn_goh,
   rmn_gcho,
   rmn_benz,
-  # rmn_gcho.goh,
-  # rmn_gcho_term.gcho_tot,
   labels = c("C", "D", "E", "F", "G", "H"),
   vjust = 1,
   nrow = 2,
@@ -1245,7 +1205,6 @@ dev.off()
 ```{r figure 3, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 irx_data <-
   read.csv(paste0(datapath,"PhD/IRX/irx_measurements.csv"), sep = "\t")
-# irx_data <- subset(irx_data, replicate == 1 & technical == 3)
 irx_ref <- subset(irx_data, object == "ref", select = c(1, 2, 3, 6, 7, 27))
 irx_ref$ref.y1 <- irx_ref$Y
 irx_ref$ref.y2 <- irx_ref$Y
@@ -2069,12 +2028,13 @@ rmn_lignin_dist <- model_data_pop %>%
     max_dist = max(Distance, na.rm = T),
     Distance = Distance / max_dist
     ) %>%
+  filter(str_detect(cell_type, "SV")) %>%
   unite("ID", genotype, replicate,
         sep = "_",
         remove = FALSE) %>%
   # filter(Distance < 2500) %>%
   # filter(ID != "WT_1") %>%
-  select(genotype, replicate, cell_type, technical, Distance, TE,
+  select(genotype, replicate, technical, Distance, TE,
          # "Cellulose (381 + 1099)" = cellulose,
          # "AUC scaled lignin" = total_lignin,
          # "Total G-units (1603)" = G_tot,
@@ -2093,46 +2053,46 @@ rmn_lignin_dist <- model_data_pop %>%
          # "Convexity" = Solidity
          ) %>%
   drop_na() %>%
-  pivot_longer(-c(genotype, replicate, cell_type, technical, Distance, TE), 
+  pivot_longer(-c(genotype, replicate, technical, Distance, TE), 
                names_to = "variable", 
                values_to = "value") %>%
   anti_join(read_csv("/home/leonard/Dropbox/2020_IRX manuscript/pop_g_layers.csv",
                      col_types = "cccc"))
 
 # bulk model
-regressions <- rmn_lignin_dist %>%
-  ungroup() %>%
-  filter(cell_type == "SV") %>%
-  select(-replicate, -technical) %>%
-  nest(data = c(TE, Distance, value)) %>%
-  group_by(variable) %>%
-  mutate(max = max(map_dbl(data, ~ max(.x$value))),
-         min = max(map_dbl(data, ~ min(.x$value)))) %>%
-  group_by(genotype, variable) %>%
-  mutate(
-    fit = map(data, ~ lm(value ~ Distance, data = .x)),
-    tidied = map(fit, glance),
-    Distance = map_dbl(data, ~ max(.x$Distance))
-  ) %>%
-  unnest(tidied) %>%
-  select(-data, -fit) %>%
-  mutate(face = case_when(p.value > 0.05 ~ "plain",
-                          TRUE ~ "bold")) %>%
-  group_by(variable) %>%
-  mutate(
-    Distance = max(Distance),
-    spacer = max - min,
-    value = case_when(
-      genotype == "WT" ~ max + (0.2 * spacer),
-      genotype == "CCR1" ~ max + (0.1 * spacer),
-      genotype == "C4H" ~ max
-    )
-  )
+# regressions <- rmn_lignin_dist %>%
+#   ungroup() %>%
+#   filter(str_detect(cell_type, "SV")) %>%
+#   select(-replicate, -technical) %>%
+#   nest(data = c(TE, Distance, value)) %>%
+#   group_by(variable) %>%
+#   mutate(max = max(map_dbl(data, ~ max(.x$value))),
+#          min = max(map_dbl(data, ~ min(.x$value)))) %>%
+#   group_by(genotype, variable) %>%
+#   mutate(
+#     fit = map(data, ~ lm(value ~ Distance, data = .x)),
+#     tidied = map(fit, glance),
+#     Distance = map_dbl(data, ~ max(.x$Distance))
+#   ) %>%
+#   unnest(tidied) %>%
+#   select(-data, -fit) %>%
+#   mutate(face = case_when(p.value > 0.05 ~ "plain",
+#                           TRUE ~ "bold")) %>%
+#   group_by(variable) %>%
+#   mutate(
+#     Distance = max(Distance),
+#     spacer = max - min,
+#     value = case_when(
+#       genotype == "WT" ~ max + (0.2 * spacer),
+#       genotype == "CCR1" ~ max + (0.1 * spacer),
+#       genotype == "C4H" ~ max
+#     )
+#   )
 
 # mixed model
 regressions <- rmn_lignin_dist %>%
   ungroup() %>%
-  filter(cell_type == "SV") %>%
+  # filter(str_detect(cell_type, "SV")) %>%
   select(-technical) %>%
   nest(data = c(TE, replicate, Distance, value)) %>%
   group_by(variable) %>%
@@ -2161,68 +2121,72 @@ regressions <- rmn_lignin_dist %>%
       genotype == "CCR1" ~ max + (0.1 * spacer),
       genotype == "C4H" ~ max
     )
-  )
+  ) %>%
+  ungroup() %>%
+  mutate(genotype = recode(genotype, 
+                           "CCR1" = "<i>CCR1</i>-RNAi",
+                           "C4H" = "<i>C4H</i>-RNAi"))
 
 rmn_lignin_dist_pred <- regressions %>%
   unnest(data, pred)
 
-dist_lig <- ggplot(
-  rmn_lignin_dist_pred %>% filter(cell_type == "SV"),
-  aes(
-    x = Distance,
-    y = value,
-    colour = genotype,
-    # fill = replicate
-  )
-) +
-  geom_point(
-    aes(shape = replicate),
-    alpha = 0.5
-    ) +
-  geom_smooth(
-    size = 0.5,
-    method = "lm",
-    se = F
-  ) +
-  ggtext::geom_richtext(
-    data = regressions,
-    size = ggtext_size,
-    vjust = 0,
-    hjust = 1,
-    # colour = "black",
-    label.colour = NA,
-    family = "Helvetica",
-    fill = NA,
-    aes(label =
-          paste0(genotype,
-                 ": R<sup>2</sup> = ",
-                 round(r2, 2)
-                 # ", <i>P</i> = ",
-                 # format(p.value, scientific = TRUE, digits = 2)
-                 ),
-        colour = genotype,
-        # fontface = face
-        )
-  ) +
-  # ggrepel::geom_text_repel(aes(label = TE)) +
-  theme_leo() +
-  theme(axis.title.y = element_blank()) +
-  labs(x = "Distance [px]") +
-  # coord_cartesian(clip = "off") +
-  scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
-  scale_x_continuous(breaks = c(0.05, 0.95), labels = c("Cambium", "Pith")) +
-  scale_colour_manual(values = pal_ostwald_disc) +
-  facet_wrap(vars(variable),
-             scales = "free_y",
-             nrow = 1)
-
-pdf("post_mortem_lignification.pdf", width = twocol, height = onecol * 0.5)
-dist_lig
-dev.off()
+# dist_lig <- ggplot(
+#   rmn_lignin_dist_pred %>% filter(str_detect(cell_type, "SV")),
+#   aes(
+#     x = Distance,
+#     y = value,
+#     colour = genotype,
+#     # fill = replicate
+#   )
+# ) +
+#   geom_point(
+#     aes(shape = replicate),
+#     alpha = 0.5
+#     ) +
+#   geom_smooth(
+#     size = 0.5,
+#     method = "lm",
+#     se = F
+#   ) +
+#   ggtext::geom_richtext(
+#     data = regressions,
+#     size = ggtext_size,
+#     vjust = 0,
+#     hjust = 1,
+#     # colour = "black",
+#     label.colour = NA,
+#     family = "Helvetica",
+#     fill = NA,
+#     aes(label =
+#           paste0(genotype,
+#                  ": R<sup>2</sup> = ",
+#                  round(r2, 2)
+#                  # ", <i>P</i> = ",
+#                  # format(p.value, scientific = TRUE, digits = 2)
+#                  ),
+#         colour = genotype,
+#         # fontface = face
+#         )
+#   ) +
+#   # ggrepel::geom_text_repel(aes(label = TE)) +
+#   theme_leo() +
+#   theme(axis.title.y = element_blank()) +
+#   labs(x = "Distance [px]") +
+#   # coord_cartesian(clip = "off") +
+#   scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
+#   scale_x_continuous(breaks = c(0.05, 0.95), labels = c("Cambium", "Pith")) +
+#   scale_colour_manual(values = pal_ostwald_disc) +
+#   facet_wrap(vars(variable),
+#              scales = "free_y",
+#              nrow = 1)
+# 
+# pdf("post_mortem_lignification.pdf", width = twocol, height = onecol * 0.5)
+# dist_lig
+# dev.off()
 
 
 dist_lig1 <- ggplot(
-  rmn_lignin_dist_pred %>% filter(cell_type == "SV"),
+  rmn_lignin_dist_pred,
   aes(
     x = Distance,
     y = value,
@@ -2254,7 +2218,7 @@ dist_lig1 <- ggplot(
     aes(label =
           paste0(genotype,
                  ": R<sup>2</sup> = ",
-                 round(r2, 2)
+                 format(round(r2, 2), nsmall = 2)
                  # ", <i>P</i> = ",
                  # format(p.value, scientific = TRUE, digits = 2)
                  ),
@@ -2278,61 +2242,61 @@ pdf("individual_intercept.pdf", width = twocol, height = onecol * 0.5)
 dist_lig1
 dev.off()
 
-dist_lig2 <- ggplot(
-  rmn_lignin_dist_pred %>% filter(cell_type == "SV"),
-  aes(
-    x = Distance,
-    y = value,
-    colour = genotype,
-    # fill = replicate
-  )
-) +
-  geom_point(
-    aes(shape = replicate),
-    alpha = 0.5
-    ) +
-  geom_smooth(
-    aes(group = interaction(genotype, replicate),
-        y = value),
-    size = 0.5,
-    method = "loess",
-    span = 5,
-    se = F
-  ) +
-  # ggtext::geom_richtext(
-  #   data = regressions,
-  #   size = ggtext_size,
-  #   vjust = 0,
-  #   hjust = 1,
-  #   # colour = "black",
-  #   label.colour = NA,
-  #   family = "Helvetica",
-  #   fill = NA,
-  #   aes(label =
-  #         paste0(genotype,
-  #                ": R<sup>2</sup> = ",
-  #                round(r2, 2)
-  #                # ", <i>P</i> = ",
-  #                # format(p.value, scientific = TRUE, digits = 2)
-  #                ),
-  #       colour = genotype,
-  #       # fontface = face
-  #       )
-  # ) +
-  # ggrepel::geom_text_repel(aes(label = TE)) +
-  theme_leo() +
-  theme(axis.title.y = element_blank()) +
-  labs(x = "Distance [px]") +
-  coord_cartesian(clip = "off") +
-  scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
-  scale_colour_manual(values = pal_ostwald_disc) +
-  facet_wrap(vars(variable),
-             scales = "free_y",
-             nrow = 1)
-
-pdf("individual_slope+intercept.pdf", width = twocol, height = onecol * 0.5)
-dist_lig2
-dev.off()
+# dist_lig2 <- ggplot(
+#   rmn_lignin_dist_pred %>% filter(str_detect(cell_type, "SV")),
+#   aes(
+#     x = Distance,
+#     y = value,
+#     colour = genotype,
+#     # fill = replicate
+#   )
+# ) +
+#   geom_point(
+#     aes(shape = replicate),
+#     alpha = 0.5
+#     ) +
+#   geom_smooth(
+#     aes(group = interaction(genotype, replicate),
+#         y = value),
+#     size = 0.5,
+#     method = "loess",
+#     span = 5,
+#     se = F
+#   ) +
+#   # ggtext::geom_richtext(
+#   #   data = regressions,
+#   #   size = ggtext_size,
+#   #   vjust = 0,
+#   #   hjust = 1,
+#   #   # colour = "black",
+#   #   label.colour = NA,
+#   #   family = "Helvetica",
+#   #   fill = NA,
+#   #   aes(label =
+#   #         paste0(genotype,
+#   #                ": R<sup>2</sup> = ",
+#   #                round(r2, 2)
+#   #                # ", <i>P</i> = ",
+#   #                # format(p.value, scientific = TRUE, digits = 2)
+#   #                ),
+#   #       colour = genotype,
+#   #       # fontface = face
+#   #       )
+#   # ) +
+#   # ggrepel::geom_text_repel(aes(label = TE)) +
+#   theme_leo() +
+#   theme(axis.title.y = element_blank()) +
+#   labs(x = "Distance [px]") +
+#   coord_cartesian(clip = "off") +
+#   scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
+#   scale_colour_manual(values = pal_ostwald_disc) +
+#   facet_wrap(vars(variable),
+#              scales = "free_y",
+#              nrow = 1)
+# 
+# pdf("individual_slope+intercept.pdf", width = twocol, height = onecol * 0.5)
+# dist_lig2
+# dev.off()
 
 ```
 
@@ -4579,7 +4543,9 @@ coef_tab <- kable(coefs,
 readr::write_file(coef_tab, "sem_coef_tab.txt")
 ```
 
-### Overview
+### Overview vessel lignin and morphology
+
+#### Arabidopsis
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 rmn_irx_long <- rmn_irx %>%
@@ -4805,6 +4771,213 @@ rmn_irx_morph
 dev.off()
 
 pdf("IRX_FigureS1b.pdf", width = onecol * 1.5, height = twocol)
+rmn_irx_lig
+dev.off()
+```
+
+#### Poplar
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+rmn_irx_long <- model_data_pop %>%
+  ungroup() %>%
+  select(genotype, cell_type, n_v, Area, Perim., Circ., Solidity, total_lignin, G_rel, GOH.G, S_rel, cellulose, wiesner_avg, GCHO_rel, S.G, P_rel, Benz_rel) %>%
+  pivot_longer(cols = -c(genotype, cell_type), names_to = "variable", values_to = "value") %>%
+  mutate(
+    variable = factor(variable,
+                      levels = c(
+      "n_v",
+      "Area",
+      "cellulose",
+      "Circ.",
+      "Solidity",
+      "G_rel",
+      "GOH.G",
+      "wiesner_avg",
+      "GCHO_rel",
+      "Perim.",
+      "total_lignin",
+      "S_rel",
+      "P_rel",
+      "Benz_rel",
+      "S.G"
+    ),
+    labels = c("Adj. vessels",
+               "Area [µm²]",
+               "Cellulose",
+               "Circularity",
+               "Convexity",
+               "bold(G)",
+               "bold(G)[CHOH]",
+               "Total~bold(G)[CHO]",
+               "Terminal~bold(G)[CHO]",
+               "Perimeter [µm]",
+               "Lignin",
+               "bold(S)",
+               "bold(P)",
+               "Benzaldehydes",
+               "bold(S)~'/'~bold(G)"
+               )),
+    genotype = ordered(genotype,
+                       levels = c(
+        "WT",
+        "CCR1",
+        "C4H"
+      )
+    ),
+    cell_type = ordered(cell_type, levels = c("PV", "Early SV", "Recent SV"))
+  )
+
+rmn_irx_letters <- letter_groups(
+  rmn_irx_long,
+  value,
+  genotype,
+  "tukey",
+  cell_type,
+  variable,
+  print_position = "above",
+  print_adjust = 1
+) 
+  # mutate(value = case_when(variable == "Area [µm²]" & cell.type %in% c("PX", "SMX") ~
+  #          value + 20,
+  #          variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type %in% c("PX", "SMX") ~
+  #            value + 0.5,
+  #          variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type == "PMX" ~
+  #            value + 0.2,
+  #          variable == "Term~'/'~tot~bold(G)[CHO]" & cell.type %in% c("PMX", "SMX") ~
+  #            value + 2,
+  #        TRUE ~ value))
+
+rmn_irx_lig <- ggplot(
+  filter(rmn_irx_long, !variable %in%
+           c("Adj. vessels",
+             "Area [µm²]",
+             "Circularity",
+             "Convexity",
+             "Perimeter [µm]")),
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
+  geom_quasirandom(
+    aes(fill = cell_type),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  geom_boxplot(
+    fill = "white",
+    alpha = 0.5,
+    width = 0.6,
+    outlier.alpha = 0,
+    lwd = 0.25,
+    fatten = 1,
+    width = 0.25
+  ) +
+  geom_text(
+    data = filter(rmn_irx_letters, 
+                  !variable %in%
+           c("Adj. vessels",
+             "Area [µm²]",
+             "Circularity",
+             "Convexity",
+             "Perimeter [µm]")),
+    aes(label = Letters),
+    size = 6 / (14 / 5),
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = pal_flame_disc) +
+  scale_x_discrete(
+    labels = c(
+      "WT",
+      expression(paste(italic("CCR1"), "-RNAi")),
+      expression(paste(italic("C4H"), "-RNAi"))
+    )
+  ) +
+  theme_leo() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1
+    ),
+    axis.title = element_blank()
+  ) +
+  facet_grid(variable ~ cell_type,
+    scales = "free_y",
+    labeller = labeller(variable = label_parsed, cell_type = label_value)
+  )
+
+rmn_irx_morph <- ggplot(
+  filter(rmn_irx_long, variable %in%
+           c("Adj. vessels",
+             "Area [µm²]",
+             "Circularity",
+             "Convexity",
+             "Perimeter [µm]")),
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
+  geom_quasirandom(
+    aes(fill = cell_type),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  geom_boxplot(
+    fill = "white",
+    alpha = 0.5,
+    width = 0.6,
+    outlier.alpha = 0,
+    lwd = 0.25,
+    fatten = 1,
+    width = 0.25
+  ) +
+  geom_text(
+    data = filter(rmn_irx_letters, 
+                  variable %in%
+           c("Adj. vessels",
+             "Area [µm²]",
+             "Circularity",
+             "Convexity",
+             "Perimeter [µm]")),
+    aes(label = Letters),
+    size = 6 / (14 / 5),
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = pal_flame_disc) +
+  scale_x_discrete(
+    labels = c(
+      "WT",
+      expression(paste(italic("CCR1"), "-RNAi")),
+      expression(paste(italic("C4H"), "-RNAi"))
+    )
+  ) +
+  theme_leo() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1
+    ),
+    axis.title = element_blank()
+  ) +
+  facet_grid(variable ~ cell_type,
+    scales = "free_y",
+    # labeller = label_parsed
+  )
+
+pdf("IRX_FigureS1a_pop.pdf", width = onecol * 1.5, height = onecol * 1.5)
+rmn_irx_morph
+dev.off()
+
+pdf("IRX_FigureS1b_pop.pdf", width = onecol * 1.5, height = twocol)
 rmn_irx_lig
 dev.off()
 ```

@@ -13,6 +13,7 @@ library(cowplot)
 library(grid)
 library(gridExtra)
 library(tidyverse)
+library(broom)
 library(ggrepel)
 library(ggridges)
 library(cowplot)
@@ -84,7 +85,17 @@ pal_ostwald_disc <- c(
   "#d25952"
 )
 
-ggtext_size <- 10 / (14 / 5)
+pal_flame <- c(
+  "#1F265D",
+  # "#203F8F",
+  "#404678",
+  "#897B88",
+  "#E7BBA2",
+  "#FFEDC3",
+  "#FEFEFE"
+)
+
+ggtext_size <- 6 / (14 / 5)
 cm_size <- function(x) x / 2.54
 twocol <- 18 / 2.54
 onehalfcol <- 14 / 2.54
@@ -140,17 +151,19 @@ year_height <- data %>%
     month = month(date)
   ) %>%
   group_by(instance, year, variable, genotype, plant) %>%
-  mutate("season" = case_when(
+  mutate(
+    "season" = case_when(
     date == max(date) ~ "endofyear",
-    TRUE ~ "midyear"
-  )) %>%
+    TRUE ~ "midyear")
+    ) %>%
   filter(season == "endofyear" & variable == "height" & month > 9) %>%
   group_by(instance, genotype, plant) %>%
+  mutate(age = year - min(year)) %>%
   arrange(date, .by_group = TRUE) %>%
   mutate(height_growth = value - lag(value, default = first(value))) %>%
   filter(year != min(year)) %>%
   ungroup() %>%
-  select(genotype, plant, instance, year, height_growth)
+  select(genotype, plant, instance, year, age, height_growth)
 
 year_width <- data %>%
   mutate(
@@ -199,28 +212,48 @@ year_survival <- data %>%
 year_data <- year_height %>%
   full_join(year_width, by = c("genotype", "plant", "instance", "year")) %>%
   full_join(year_injuries, by = c("genotype", "plant", "instance", "year")) %>%
-  anti_join(year_survival, by = c("genotype", "plant", "instance", "year"))
+  anti_join(year_survival, by = c("genotype", "plant", "instance", "year")) %>%
+  ungroup() %>%
+  mutate(
+    line = genotype,
+    genotype = case_when(
+      genotype == "WT" ~ "WT",
+      TRUE ~ "<i>C4H</i>-RNAi"
+    )
+  )
 ```
 
 ## View yearly growth by genotype
 
 ```{r}
 year_growth <- ggplot(
-  year_height,
+  year_data,
   aes(x = genotype, y = height_growth)
 ) +
-  ggbeeswarm::geom_quasirandom(aes(colour = instance),
-    shape = 16,
+  ggbeeswarm::geom_quasirandom(
+    aes(fill = age),
+    shape = 21,
+    stroke = 0.2,
     size = 1,
-    alpha = 0.25
+    alpha = 0.5,
+    width = 0.4
   ) +
   geom_violin(
-    aes(group = interaction(instance,genotype)),
+    # aes(group = interaction(instance,genotype)),
     draw_quantiles = 0.5,
+    colour = "black",
     alpha = 0.5,
-    size = 0.2
+    size = 0.2,
+    width = 0.4
   ) +
-  theme_leo()
+  scale_fill_gradientn(colours = pal_flame) +
+  labs(y = "Yearly growth increment [mm]") +
+  theme_leo() +
+  theme(legend.position = "bottom",
+        legend.key.height = unit(1, "mm"),
+        axis.text.x = ggtext::element_markdown(),
+        axis.title.x = element_blank()) +
+  facet_wrap(~instance)
 
 pdf("year_growth.pdf", height = onecol * 0.5, width = onecol * 0.5)
 year_growth
@@ -279,13 +312,14 @@ year_cumul_temp <- cumul_temp %>%
 optim_data <- year_data %>%
   left_join(year_envir, by = "year") %>%
   left_join(year_cumul_temp, by = "year") %>%
+  mutate(quadratic_age = -(age - 3)^2) %>%
   ungroup() %>%
   filter(genotype == "WT") %>%
   # filter(genotype %in% c("1B", "3B")) %>%
   # filter(instance == 1) %>%
   # filter(instance == 2) %>%
-  select(-c(genotype:year), -highest_light, -average_light) %>%
-  drop_na()
+  select(-c(genotype:year, line), -highest_light, -average_light) %>%
+  drop_na(height_growth)
 
 # Fit the full model 
 full_model <- lm(height_growth ~., data = optim_data %>% select(-width_growth))
@@ -300,67 +334,174 @@ summary(step_model)
 
 ```{r}
 
+#### partial regression plot for age ####
+partial_model <- year_data %>%
+  left_join(year_envir, by = "year") %>%
+  left_join(year_cumul_temp, by = "year") %>%
+  ungroup() %>%
+  mutate(
+    line = genotype,
+    genotype = case_when(
+      genotype == "WT" ~ "WT",
+      TRUE ~ "<i>C4H</i>-RNAi"
+    )
+  ) %>%
+  drop_na(height_growth) %>%
+  nest(data = -c(genotype)) %>%
+  mutate(
+    growth_model = map(data, ~ lm(height_growth ~
+    injuries +
+      lowest_temp +
+      highest_temp +
+      average_high_temp +
+      average_low_temp,
+    data = .x
+    )),
+    age_model = map(data, ~ lm(age ~
+    injuries +
+      lowest_temp +
+      highest_temp +
+      average_high_temp +
+      average_low_temp,
+    data = .x
+    )),
+    growth_model_resid = map(growth_model, residuals),
+    age_model_resid = map(age_model, residuals),
+  ) %>%
+  select(genotype, growth_model_resid, age_model_resid) %>%
+  unnest(c(growth_model_resid, age_model_resid),
+         names_repair = "unique")
+
+pdf("age_residuals.pdf", height = onecol * 0.5, width = onecol * 0.5)
+ggplot(partial_model,
+       aes(
+         x = age_model_resid,
+         y = growth_model_resid
+         )
+       ) +
+  geom_point(shape = 16, alpha = 0.5, size = 0.5) +
+  geom_smooth(span = 1.5, size = 0.1) +
+  theme_leo() +
+  theme(strip.text = ggtext::element_textbox_simple()) +
+  facet_wrap(~ genotype)
+dev.off()
+
+
+simple_model <- year_data %>%
+  left_join(year_envir, by = "year") %>%
+  left_join(year_cumul_temp, by = "year") %>%
+  ungroup() %>%
+  mutate(
+    line = genotype,
+    genotype = case_when(
+      genotype == "WT" ~ "WT",
+      TRUE ~ "<i>C4H</i>-RNAi"
+    )
+  ) %>%
+  drop_na(height_growth) %>%
+  nest(data = -c(genotype, instance)) %>%
+  mutate(
+    simple_model = map(data, ~ lm(height_growth ~
+    injuries +
+      age +
+      lowest_temp +
+      highest_temp +
+      average_high_temp +
+      average_low_temp,
+    data = .x
+    )),
+    simple_pred = map(simple_model, predict),
+    simple_glance = map(simple_model, glance),
+    simple_tidy = map(simple_model, tidy)
+  ) %>%
+  unnest(c(simple_glance, simple_tidy),
+         names_repair = "unique")
+
 model_data <- year_data %>%
   left_join(year_envir, by = "year") %>%
   left_join(year_cumul_temp, by = "year") %>%
   ungroup() %>%
-  # filter(genotype == "WT")
-  filter(genotype %in% c("1B", "3B"))
+  mutate(
+    line = genotype,
+    genotype = case_when(
+      genotype == "WT" ~ "WT",
+      TRUE ~ "<i>C4H</i>-RNAi"
+    )
+  ) %>%
+  drop_na(height_growth) %>%
+  group_by(genotype, instance) %>%
+  nest(data = -c(genotype)) %>%
+  mutate(
+    simple_model = map(data, ~ lm(height_growth ~
+    injuries +
+      age +
+      lowest_temp +
+      highest_temp +
+      average_high_temp +
+      average_low_temp,
+    data = .x
+    )),
+    simple_pred = map(simple_model, predict),
+    simple_glance = map(simple_model, glance),
+    mixed_model = map(data, ~ lme4::lmer(height_growth ~
+    injuries +
+      age +
+      lowest_temp +
+      highest_temp +
+      average_high_temp +
+      average_low_temp +
+      (1 | instance),
+    data = .x
+    )),
+    mixed_r2 = map(mixed_model, MuMIn::r.squaredGLMM),
+    mixed_r2 = map(mixed_r2, 2),
+    mixed_r2 = as.numeric(mixed_r2),
+    mixed_pred = map(mixed_model, predict),
+    mixed_tidy = map(mixed_model, broom.mixed::glance),
+  )
 
-mixed_model <- lme4::lmer(height_growth ~
-                            injuries +
-                            lowest_temp +
-                            highest_temp +
-                            average_high_temp +
-                            average_low_temp +
-                            average_temp +
-                            # instance +
-                            # (1 | year) +
-                            (1 | instance),
-                          data = model_data)
+model_pred <- model_data %>%
+  unnest(c(data, 
+         simple_pred,
+         mixed_pred
+         ))
 
-summary(mixed_model)
-
-MuMIn::r.squaredGLMM(mixed_model)
+pdf("simple_model.pdf", height = onecol * 0.5, width = onecol * 0.5)
+ggplot(model_pred,
+       aes(x = mixed_pred, y = height_growth)) +
+  geom_abline(size = 0.2,
+              linetype = 2) +
+  geom_point(shape = 16, alpha = 0.5, size = 0.5) +
+  geom_smooth(method = "lm", size = 0.5) +
+  # geom_line(aes(x = simple_pred, y = simple_pred)) +
+  ggtext::geom_richtext(
+    data = model_pred %>% select(genotype, instance, mixed_r2) %>% filter(instance == 1) %>% unique(),
+    size = ggtext_size,
+    # vjust = 0,
+    hjust = 0,
+    # colour = "black",
+    label.colour = NA,
+    family = "Helvetica",
+    fill = NA,
+    x = -80,
+    y = 180,
+    aes(label =
+          paste0("R<sup>2</sup><sub>c</sub> = ",
+                 format(round(mixed_r2, 2), nsmall = 2)
+                 # ", <i>P</i> = ",
+                 # format(p.value, scientific = TRUE, digits = 2)
+                 ),
+        # fontface = face
+        )
+  ) +
+  facet_grid(instance ~ genotype) +
+  scale_x_continuous(breaks = c(0, 100, 200)) +
+  scale_y_continuous(breaks = c(0, 100, 200)) +
+  coord_fixed(xlim = c(-50, 200),
+              ylim = c(-50, 200)) +
+  theme_leo() +
+  theme(strip.text = ggtext::element_textbox_simple(),
+        aspect.ratio = 1)
+dev.off()
 ```
 
-## SEM
-
-```{r}
-
-psem_data <- model_data %>%
-  drop_na() %>%
-  as.data.frame()
-
-psem_WT <- psem(
-  # lme4::lmer(height_growth ~
-  lm(height_growth ~
-  injuries +
-    lowest_temp +
-    highest_temp +
-    average_high_temp +
-    average_low_temp +
-    average_temp,
-    # instance +
-    # (1 | genotype) +
-    # (1 | instance),
-  data = psem_data
-  ),
-  # lme4::lmer(width_growth ~
-  lm(width_growth ~
-  injuries +
-    lowest_temp +
-    highest_temp +
-    average_high_temp +
-    average_low_temp +
-    average_temp,
-    # instance +
-    # (1 | genotype) +
-    # (1 | instance),
-  data = psem_data
-  ),
-  data = psem_data
-)
-
-plot(psem_WT)
-```
