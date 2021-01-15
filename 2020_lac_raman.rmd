@@ -218,6 +218,11 @@ rmn_lac_sum <- rmn_lac_scaled %>%
       scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
     "GCHO.GOH" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1] /
       scaled_lig[abs(wavenumber - 1656) == min(abs(wavenumber - 1656))][1],
+    "O4_van_rel" = scaled_lig[abs(wavenumber - 1303) == min(abs(wavenumber - 1303))][1],
+    "other_van_rel" = scaled_lig[abs(wavenumber - 785) == min(abs(wavenumber - 785))][1],
+    "O4_syr_rel" = scaled_lig[abs(wavenumber - 1297) == min(abs(wavenumber - 1297))][1],
+    "other_syr_rel" = scaled_lig[abs(wavenumber - 450) == min(abs(wavenumber - 450))][1],
+    "Benz_rel" = O4_van_rel + other_van_rel + O4_syr_rel + other_syr_rel,
     "AUC" = mean(AUC)
   )
 
@@ -288,7 +293,9 @@ violin_data <- rmn_lac_sum %>%
     "Total lignin" = total_lignin,
     "S/G" = S.G,
     "P-units" = P_rel,
-    "Cellulose cryst." = cellu_cryst,
+    AUC,
+    # "Cellulose cryst." = cellu_cryst,
+    "Benzaldehydes" = Benz_rel,
     # "P/cellulose" = P.cellu,
     # "G-units" = G_rel,
     # "Lignin/cellulose" = lig.cellu,
@@ -317,6 +324,16 @@ violin_data <- rmn_lac_sum %>%
            "Q-17",
            "Q"
          )))
+corr_data <- violin_data %>%
+  group_by(genotype, cell_type, replicate, variable) %>%
+  mutate(cell = row_number()) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  unite("ID", genotype,cell_type, replicate, cell) %>%
+  column_to_rownames(., var = "ID")
+
+pdf("lignin_corr.pdf")
+corrplot::corrplot.mixed(cor(as.matrix(corr_data)))
+dev.off()
 
 rmn_n <- rmn_lac_sum %>%
   group_by(genotype, replicate, cell_type) %>%
@@ -385,7 +402,7 @@ lig_violin <- ggplot(
         ) +
   facet_grid(variable ~ cell_type, scales = "free_y", switch = "y")
 
-pdf("lig_violin.pdf", width = twocol, height = onecol)
+pdf("lig_violin.pdf", width = twocol, height = twocol)
 lig_violin
 dev.off()
 ```

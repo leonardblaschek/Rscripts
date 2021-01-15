@@ -119,7 +119,9 @@ theme_leo <- function(base_size = 6,
     base_family = base_family
   ) %+replace%
     theme(
-      strip.text = element_text(hjust = 0, face = "italic"),
+      strip.text = element_text(hjust = 0, 
+                                # face = "italic"
+                                ),
       axis.ticks = element_line(
         size = 0.125,
         lineend = "square",
@@ -3638,7 +3640,8 @@ rosettes <- read_csv(paste0(datapath, "PhD/IRX/Drought/drought_area.csv")) %>%
     ),
     levels = c("Water", "10% PEG", "20% PEG")
     ),
-    genotype = ordered(genotype, levels = c("WT", "cad4x5"))
+    genotype = ordered(recode(genotype, "cad4x5" = "<i>cad4</i>x<i>5</i>"),
+                       levels = c("WT", "<i>cad4</i>x<i>5</i>"))
   )
 
 letters <- letter_groups(rosettes,
@@ -3694,14 +3697,13 @@ area_medium <- ggplot(
   labs(y = "Rosette area [cm<sup>2</sup>]") +
   theme_leo() +
   theme(
-    text = element_text(family = "Helvetica"),
-    legend.position = "none",
     axis.title.x = element_blank(),
     axis.title.y = ggtext::element_textbox_simple(
       orientation = "left-rotated",
       halign = 0.5
     ),
     axis.text.x = element_text(vjust = 1),
+    strip.text = ggtext::element_markdown()
   ) +
   facet_wrap(~genotype)
 
@@ -3720,8 +3722,8 @@ transpiration <- read_csv(
   pivot_longer(-c(medium, time), names_to = "plant", values_to = "transp_rate") %>%
   mutate(
     genotype = unlist(str_extract_all(plant, "[:alpha:]+")),
-    genotype = ordered(recode(genotype, "CAD" = "cad4x5"),
-      levels = c("WT", "cad4x5")
+    genotype = ordered(recode(genotype, "CAD" = "<i>cad4</i>x<i>5</i>"),
+      levels = c("WT", "<i>cad4</i>x<i>5</i>")
     ),
     replicate = unlist(str_extract_all(plant, "[:digit:]+")),
     medium = ordered(medium,
@@ -3810,14 +3812,13 @@ transpiration_medium <- ggplot(
   labs(y = "Evapotranspiration [mg min<sup>-1</sup>]") +
   theme_leo() +
   theme(
-    text = element_text(family = "Helvetica"),
-    legend.position = "none",
     axis.title.x = element_blank(),
     axis.title.y = ggtext::element_textbox_simple(
       orientation = "left-rotated",
       halign = 0.5
     ),
     axis.text.x = element_text(vjust = 1),
+    strip.text = ggtext::element_markdown()
   ) +
   facet_wrap(~genotype)
 
@@ -3834,7 +3835,8 @@ recovery_data <- read_csv(paste0(datapath, "PhD/IRX/Drought/recovery.csv")) %>%
   mutate(
     state = ordered(state, levels = rev(c("Recovered", "Partly recovered", "Dead"))),
     medium = ordered(medium, levels = c("Water", "10% PEG", "20% PEG")),
-    genotype = ordered(genotype, levels = c("WT", "cad4x5"))
+    genotype = ordered(recode(genotype, "cad4x5" = "<i>cad4</i>x<i>5</i>"),
+                       levels = c("WT", "<i>cad4</i>x<i>5</i>"))
   ) %>%
   group_by(genotype, medium) %>%
   mutate(sum = sum(count)) %>%
@@ -3854,7 +3856,7 @@ recovery_collapse <- ggplot(recovery_data, aes(
   scale_x_discrete(labels = function(x) str_wrap(x, width = 6)) +
   theme_leo() +
   labs(
-    y = "After 95 h in water [%]"
+    y = "Recovery after treatment [%]"
   ) +
   facet_wrap(~genotype, nrow = 1) +
   theme(
@@ -3863,9 +3865,11 @@ recovery_collapse <- ggplot(recovery_data, aes(
     axis.title.x = element_blank(),
     axis.title.y = ggtext::element_textbox_simple(
       orientation = "left-rotated",
-      halign = 0.5
+      halign = 0.5,
+      width = grid::unit(1.1, "npc")
     ),
     axis.text.x = element_text(vjust = 1),
+    strip.text = ggtext::element_markdown(),
     legend.key.height = unit(2, "mm"),
     legend.key.width = unit(2, "mm"),
     legend.spacing = unit(c(0, 0, 0, 0), "mm"),

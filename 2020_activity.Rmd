@@ -666,7 +666,7 @@ data <- data %>%
     ) %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
   mutate(
-    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == 100]
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == 60]
     )
 
 nested_data <- data %>%
