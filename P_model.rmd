@@ -105,12 +105,15 @@ onecol <- 9 / 2.54
 ## Load data
 
 ```{r}
+
+#growth instance 1
 data1 <- read_csv("/home/leonard/Dropbox/2020_P_manuscript/P_data_1.csv") %>%
   pivot_longer(cols = -sample, names_to = "ID", values_to = "value") %>%
   separate(sample, into = c("genotype", "plant")) %>%
   separate(ID, into = c("variable", "date"), sep = " ") %>%
   mutate(instance = "1")
 
+#growth instance 2
 data2 <- read_csv("/home/leonard/Dropbox/2020_P_manuscript/P_data_2.csv") %>%
   pivot_longer(cols = -sample, names_to = "ID", values_to = "value") %>%
   separate(sample, into = c("genotype", "plant")) %>%
@@ -125,7 +128,7 @@ data <- data1 %>%
 ## View growth kinetics
 
 ```{r}
-growth <- ggplot(data %>% filter(variable == "height")) +
+ggplot(data %>% filter(variable == "height")) +
   geom_line(aes(x = date, y = value, colour = genotype, group = interaction(genotype, plant)),
     alpha = 0.1
   ) +
@@ -136,10 +139,6 @@ growth <- ggplot(data %>% filter(variable == "height")) +
   theme_leo() +
   theme(legend.position = "bottom") +
   facet_wrap(~instance, nrow = 2)
-
-pdf("growth.pdf", height = onecol, width = onecol)
-growth
-dev.off()
 ```
 
 ## Split plant data into growth periods
@@ -151,16 +150,21 @@ year_height <- data %>%
     month = month(date)
   ) %>%
   group_by(instance, year, variable, genotype, plant) %>%
+  # identify the last measurement of each year
   mutate(
     "season" = case_when(
     date == max(date) ~ "endofyear",
     TRUE ~ "midyear")
     ) %>%
+  # filter out last measurements that were taken before the end of the growth period
   filter(season == "endofyear" & variable == "height" & month > 9) %>%
   group_by(instance, genotype, plant) %>%
+  # calculate plant age at time of measurement
   mutate(age = year - min(year)) %>%
   arrange(date, .by_group = TRUE) %>%
-  mutate(height_growth = value - lag(value, default = first(value))) %>%
+  # calculate the yearly size change and convert from mm to cm
+  mutate(height_growth = (value - lag(value, default = first(value))) / 10) %>%
+  # filter out the starting years
   filter(year != min(year)) %>%
   ungroup() %>%
   select(genotype, plant, instance, year, age, height_growth)
@@ -171,14 +175,18 @@ year_width <- data %>%
     month = month(date)
   ) %>%
   group_by(instance, year, variable, genotype, plant) %>%
+  # identify the last measurement of each year
   mutate("season" = case_when(
     date == max(date) ~ "endofyear",
     TRUE ~ "midyear"
   )) %>%
+  # filter out last measurements that were taken before the end of the growth period
   filter(season == "endofyear" & variable == "width" & month > 9) %>%
   group_by(instance, genotype, plant) %>%
   arrange(date, .by_group = TRUE) %>%
-  mutate(width_growth = value - lag(value, default = first(value))) %>%
+  # calculate the yearly size change and convert from mm to cm
+  mutate(width_growth = (value - lag(value, default = first(value))) / 10) %>%
+  # filter out the starting years
   filter(year != min(year)) %>%
   ungroup() %>%
   select(genotype, plant, instance, year, width_growth)
@@ -191,7 +199,9 @@ year_injuries <- data %>%
   group_by(instance, year, variable, genotype, plant) %>%
   filter(variable == "injuries") %>%
   group_by(instance, genotype, plant, year) %>%
+  # summarise yearly injuries as the worst injuries sustained at any time in the year
   summarise(injuries = max(value)) %>%
+  # filter out the starting years
   filter(year != min(year)) %>%
   ungroup() %>%
   select(genotype, plant, instance, year, injuries)
@@ -205,6 +215,7 @@ year_survival <- data %>%
   filter(variable == "survival") %>%
   group_by(instance, genotype, plant, year) %>%
   summarise(survival = min(value)) %>%
+  # identify plants that died in the respective or previous years
   filter(survival == 0) %>%
   ungroup() %>%
   select(genotype, plant, instance, year, survival)
@@ -212,6 +223,7 @@ year_survival <- data %>%
 year_data <- year_height %>%
   full_join(year_width, by = c("genotype", "plant", "instance", "year")) %>%
   full_join(year_injuries, by = c("genotype", "plant", "instance", "year")) %>%
+  # remove all data after plant death
   anti_join(year_survival, by = c("genotype", "plant", "instance", "year")) %>%
   ungroup() %>%
   mutate(
@@ -246,11 +258,18 @@ year_growth <- ggplot(
     size = 0.2,
     width = 0.4
   ) +
-  scale_fill_gradientn(colours = pal_flame) +
-  labs(y = "Yearly growth increment [mm]") +
+  scale_fill_gradientn(colours = pal_flame,
+                       guide = guide_legend(
+                         direction = "horizontal",
+                         title.position = "top",
+                         title = "Plant age [y]"
+                         )) +
+  labs(y = "Yearly height change [cm]") +
   theme_leo() +
-  theme(legend.position = "bottom",
+  theme(legend.position = c(0.76,0.92),
         legend.key.height = unit(1, "mm"),
+        legend.key.width = unit(1, "mm"),
+        legend.title.align = 0,
         axis.text.x = ggtext::element_markdown(),
         axis.title.x = element_blank()) +
   facet_wrap(~instance)
@@ -273,20 +292,37 @@ envir <- read_csv("/home/leonard/Dropbox/2020_P_manuscript/env_data.csv") %>%
 year_envir <- envir %>%
   group_by(year) %>%
   summarise(
+    #temperature
     lowest_temp = min(low_temp),
     highest_temp = max(high_temp),
     average_high_temp = mean(high_temp),
     average_low_temp = mean(low_temp),
     average_temp = mean(mean_temp),
-    lowest_humidity = min(low_humidity),
-    heighest_humidity = max(high_humidity),
+    #summer temperature
+    lowest_summer_temp = min(low_temp[month %in% c(6:8)]),
+    highest_summer_temp = max(high_temp[month %in% c(6:8)]),
+    average_summer_high_temp = mean(high_temp[month %in% c(6:8)]),
+    average_summer_low_temp = mean(low_temp[month %in% c(6:8)]),
+    average_summer_temp = mean(mean_temp[month %in% c(6:8)]),
+    #winter temperature
+    lowest_winter_temp = min(low_temp[month %in% c(11, 12, 1, 2, 3, 4)]),
+    highest_winter_temp = max(high_temp[month %in% c(11, 12, 1, 2, 3, 4)]),
+    average_winter_high_temp = mean(high_temp[month %in% c(11, 12, 1, 2, 3, 4)]),
+    average_winter_low_temp = mean(low_temp[month %in% c(11, 12, 1, 2, 3, 4)]),
+    average_winter_temp = mean(mean_temp[month %in% c(11, 12, 1, 2, 3, 4)]),
+    #humidity
     average_high_humidity = mean(high_humidity),
     average_low_humidity = mean(low_humidity),
     average_humidity = mean(mean_humidity),
+    lowest_humidity = min(low_humidity),
+    highest_humidity = max(high_humidity),
+    #precipitation
     average_precipitation = mean(mean_precip),
     lowest_precipitation = min(total_precip),
+    #wind
     highest_wind = max(wind),
     average_wind = mean(wind),
+    #light
     highest_light = max(irradiation),
     average_light = mean(irradiation)
   )
@@ -306,46 +342,181 @@ year_cumul_temp <- cumul_temp %>%
     may_10deg = `cummul h above 10`[month == 5])
 ```
 
+### Export data
+
+```{r}
+export_data <- year_data %>%
+  left_join(year_envir, by = "year") %>%
+  left_join(year_cumul_temp, by = "year") %>%
+  mutate(genotype = case_when(
+      genotype == "WT" ~ "WT",
+      TRUE ~ "C4H-RNAi"
+    ))
+
+write_csv(export_data, "yearly_data.csv")
+```
+
 ## Model optimisation
 
 ```{r}
+
+#### WT model ####
 optim_data <- year_data %>%
   left_join(year_envir, by = "year") %>%
   left_join(year_cumul_temp, by = "year") %>%
-  mutate(quadratic_age = -(age - 3)^2) %>%
   ungroup() %>%
   filter(genotype == "WT") %>%
-  # filter(genotype %in% c("1B", "3B")) %>%
-  # filter(instance == 1) %>%
-  # filter(instance == 2) %>%
-  select(-c(genotype:year, line), -highest_light, -average_light) %>%
+  select(-c(genotype:year, line), 
+         -highest_light, -average_light
+         ) %>%
+  #scale and centre data
+  mutate(across(where(is.numeric), ~ scale(.x))) %>%
   drop_na(height_growth)
 
 # Fit the full model 
 full_model <- lm(height_growth ~., data = optim_data %>% select(-width_growth))
 # Stepwise regression model
-step_model <- MASS::stepAIC(full_model, direction = "both", 
+step_model_WT <- MASS::stepAIC(full_model, direction = "both", 
                       trace = FALSE)
-summary(step_model)
+summary(step_model_WT)
+
+#### C4H model ####
+optim_data <- year_data %>%
+  left_join(year_envir, by = "year") %>%
+  left_join(year_cumul_temp, by = "year") %>%
+  ungroup() %>%
+  filter(genotype == "<i>C4H</i>-RNAi") %>%
+  select(-c(genotype:year, line), 
+         -highest_light, -average_light
+         ) %>%
+  #scale and centre data
+  mutate(across(where(is.numeric), ~ scale(.x))) %>%
+  drop_na(height_growth)
+
+# Fit the full model 
+full_model <- lm(height_growth ~., data = optim_data %>% select(-width_growth))
+# Stepwise regression model
+step_model_c4h <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+summary(step_model_c4h)
+
+#### Models for individual mutant lines ####
+optim_data <- year_data %>%
+  left_join(year_envir, by = "year") %>%
+  left_join(year_cumul_temp, by = "year") %>%
+  ungroup() %>%
+  filter(line == "1B") %>%
+  select(-c(genotype:year, line), 
+         -highest_light, -average_light
+         ) %>%
+  #scale and centre data
+  mutate(across(where(is.numeric), ~ scale(.x))) %>%
+  drop_na(height_growth)
+
+# Fit the full model 
+full_model <- lm(height_growth ~., data = optim_data %>% select(-width_growth))
+# Stepwise regression model
+step_model_1b <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+summary(step_model_1b)
+
+optim_data <- year_data %>%
+  left_join(year_envir, by = "year") %>%
+  left_join(year_cumul_temp, by = "year") %>%
+  ungroup() %>%
+  filter(line == "3B") %>%
+  select(-c(genotype:year, line), 
+         -highest_light, -average_light
+         ) %>%
+  #scale and centre data
+  mutate(across(where(is.numeric), ~ scale(.x))) %>%
+  drop_na(height_growth)
+
+# Fit the full model 
+full_model <- lm(height_growth ~., data = optim_data %>% select(-width_growth))
+# Stepwise regression model
+step_model_3b <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+summary(step_model_3b)
+
+c4h_coefficients <- 
+  tidy(step_model_c4h) %>%
+  mutate(genotype = "C4H-RNAi",
+         line = "1B + 3B") %>%
+  add_row(tidy(step_model_1b) %>% mutate(genotype = "C4H-RNAi",
+                                         line = "1B")) %>%
+  add_row(tidy(step_model_3b) %>% mutate(genotype = "C4H-RNAi",
+                                         line = "3B")) %>%
+  add_row(tidy(step_model_WT) %>% mutate(genotype = "WT",
+                                         line = "T89"))
+
+write_csv(c4h_coefficients, "model_coefficients.csv")
+
+c4h_models <- 
+  glance(step_model_c4h) %>%
+  mutate(genotype = "C4H-RNAi",
+         line = "1B + 3B") %>%
+  add_row(glance(step_model_1b) %>% mutate(genotype = "C4H-RNAi",
+                                         line = "1B")) %>%
+  add_row(glance(step_model_3b) %>% mutate(genotype = "C4H-RNAi",
+                                         line = "3B")) %>%
+  add_row(glance(step_model_WT) %>% mutate(genotype = "WT",
+                                         line = "T89"))
+
+write_csv(c4h_models, "model_statistics.csv")
+
+pdf("model_comparisons.pdf", width = onecol, height = onecol)
+ggplot(
+  c4h_coefficients %>%
+    filter(genotype == "C4H-RNAi" & term != "(Intercept)"),
+  aes(
+    x = term,
+    y = estimate,
+    fill = line
+  )
+) +
+  geom_point(
+    shape = 21,
+    size = 4
+  ) +
+  scale_fill_brewer(palette = "RdYlBu") +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  coord_flip()
+dev.off()
 
 ```
 
-## Models
+## Partial regression and partial residual plots
 
 ```{r}
 
-#### partial regression plot for age ####
+#### height_growth ~ age ####
 partial_model <- year_data %>%
   left_join(year_envir, by = "year") %>%
   left_join(year_cumul_temp, by = "year") %>%
   ungroup() %>%
-  mutate(
-    line = genotype,
-    genotype = case_when(
-      genotype == "WT" ~ "WT",
-      TRUE ~ "<i>C4H</i>-RNAi"
-    )
-  ) %>%
+  drop_na(height_growth)
+
+pdf("age_growth.pdf", height = onecol * 0.5, width = onecol * 0.5)
+ggplot(partial_model,
+       aes(
+         x = age,
+         y = height_growth
+         )
+       ) +
+  geom_point(shape = 16, alpha = 0.5, size = 0.5) +
+  geom_smooth(span = 1.5, size = 0.1) +
+  theme_leo() +
+  theme(strip.text = ggtext::element_textbox_simple()) +
+  facet_wrap(~ genotype)
+dev.off()
+
+#### added-variable plot (partial regression plot) for age ####
+partial_model <- year_data %>%
+  left_join(year_envir, by = "year") %>%
+  left_join(year_cumul_temp, by = "year") %>%
+  ungroup() %>%
   drop_na(height_growth) %>%
   nest(data = -c(genotype)) %>%
   mutate(
@@ -372,13 +543,15 @@ partial_model <- year_data %>%
   unnest(c(growth_model_resid, age_model_resid),
          names_repair = "unique")
 
-pdf("age_residuals.pdf", height = onecol * 0.5, width = onecol * 0.5)
+pdf("age_partial_regression.pdf", height = onecol * 0.5, width = onecol * 0.5)
 ggplot(partial_model,
        aes(
          x = age_model_resid,
          y = growth_model_resid
          )
        ) +
+  labs(x = "Plant age | other predictors",
+       y = "Plant Growth | other predictors") +
   geom_point(shape = 16, alpha = 0.5, size = 0.5) +
   geom_smooth(span = 1.5, size = 0.1) +
   theme_leo() +
@@ -386,53 +559,15 @@ ggplot(partial_model,
   facet_wrap(~ genotype)
 dev.off()
 
-
-simple_model <- year_data %>%
+#### partial residual plot for age ####
+partial_model <- year_data %>%
   left_join(year_envir, by = "year") %>%
   left_join(year_cumul_temp, by = "year") %>%
   ungroup() %>%
-  mutate(
-    line = genotype,
-    genotype = case_when(
-      genotype == "WT" ~ "WT",
-      TRUE ~ "<i>C4H</i>-RNAi"
-    )
-  ) %>%
   drop_na(height_growth) %>%
-  nest(data = -c(genotype, instance)) %>%
-  mutate(
-    simple_model = map(data, ~ lm(height_growth ~
-    injuries +
-      age +
-      lowest_temp +
-      highest_temp +
-      average_high_temp +
-      average_low_temp,
-    data = .x
-    )),
-    simple_pred = map(simple_model, predict),
-    simple_glance = map(simple_model, glance),
-    simple_tidy = map(simple_model, tidy)
-  ) %>%
-  unnest(c(simple_glance, simple_tidy),
-         names_repair = "unique")
-
-model_data <- year_data %>%
-  left_join(year_envir, by = "year") %>%
-  left_join(year_cumul_temp, by = "year") %>%
-  ungroup() %>%
-  mutate(
-    line = genotype,
-    genotype = case_when(
-      genotype == "WT" ~ "WT",
-      TRUE ~ "<i>C4H</i>-RNAi"
-    )
-  ) %>%
-  drop_na(height_growth) %>%
-  group_by(genotype, instance) %>%
   nest(data = -c(genotype)) %>%
   mutate(
-    simple_model = map(data, ~ lm(height_growth ~
+    model = map(data, ~ lm(height_growth ~
     injuries +
       age +
       lowest_temp +
@@ -441,67 +576,43 @@ model_data <- year_data %>%
       average_low_temp,
     data = .x
     )),
-    simple_pred = map(simple_model, predict),
-    simple_glance = map(simple_model, glance),
-    mixed_model = map(data, ~ lme4::lmer(height_growth ~
-    injuries +
-      age +
-      lowest_temp +
-      highest_temp +
-      average_high_temp +
-      average_low_temp +
-      (1 | instance),
-    data = .x
-    )),
-    mixed_r2 = map(mixed_model, MuMIn::r.squaredGLMM),
-    mixed_r2 = map(mixed_r2, 2),
-    mixed_r2 = as.numeric(mixed_r2),
-    mixed_pred = map(mixed_model, predict),
-    mixed_tidy = map(mixed_model, broom.mixed::glance),
-  )
+    resid = map(model, residuals),
+    age = map(data, "age"),
+    age_coef = map(model, ~{coef(.x)["age"]})
+  ) %>%
+  select(genotype, resid, age, age_coef) %>%
+  unnest(c(resid, age, age_coef),
+         names_repair = "unique") %>%
+  mutate(partial_resid = resid + age * age_coef)
 
-model_pred <- model_data %>%
-  unnest(c(data, 
-         simple_pred,
-         mixed_pred
-         ))
-
-pdf("simple_model.pdf", height = onecol * 0.5, width = onecol * 0.5)
-ggplot(model_pred,
-       aes(x = mixed_pred, y = height_growth)) +
-  geom_abline(size = 0.2,
-              linetype = 2) +
+pdf("age_partial_residuals.pdf", height = onecol * 0.5, width = onecol * 0.5)
+ggplot(partial_model,
+       aes(
+         x = age,
+         y = partial_resid
+         )
+       ) +
+  # geom_line(aes(y = age * age_coef)) +
+  labs(x = "Plant age [y]",
+       y = "Partial residuals of height change [cm]") +
   geom_point(shape = 16, alpha = 0.5, size = 0.5) +
-  geom_smooth(method = "lm", size = 0.5) +
-  # geom_line(aes(x = simple_pred, y = simple_pred)) +
-  ggtext::geom_richtext(
-    data = model_pred %>% select(genotype, instance, mixed_r2) %>% filter(instance == 1) %>% unique(),
-    size = ggtext_size,
-    # vjust = 0,
-    hjust = 0,
-    # colour = "black",
-    label.colour = NA,
-    family = "Helvetica",
-    fill = NA,
-    x = -80,
-    y = 180,
-    aes(label =
-          paste0("R<sup>2</sup><sub>c</sub> = ",
-                 format(round(mixed_r2, 2), nsmall = 2)
-                 # ", <i>P</i> = ",
-                 # format(p.value, scientific = TRUE, digits = 2)
-                 ),
-        # fontface = face
-        )
-  ) +
-  facet_grid(instance ~ genotype) +
-  scale_x_continuous(breaks = c(0, 100, 200)) +
-  scale_y_continuous(breaks = c(0, 100, 200)) +
-  coord_fixed(xlim = c(-50, 200),
-              ylim = c(-50, 200)) +
+  geom_smooth(span = 1.5, size = 0.1) +
   theme_leo() +
-  theme(strip.text = ggtext::element_textbox_simple(),
-        aspect.ratio = 1)
+  theme(strip.text = ggtext::element_textbox_simple()) +
+  facet_wrap(~ genotype)
 dev.off()
+```
+
+### Export data
+
+```{r}
+export_data <- partial_model %>%
+  mutate(genotype = case_when(
+      genotype == "WT" ~ "WT",
+      TRUE ~ "C4H-RNAi"
+    )) %>%
+  arrange(genotype, age)
+
+write_csv(export_data, "partial_residuals.csv")
 ```
 
