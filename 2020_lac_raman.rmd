@@ -86,6 +86,14 @@ pal_ostwald_disc <- c(
   "#d25952"
 )
 
+pal_pedersen_disc <- c(
+  "#264653",
+  "#2a9d8f",
+  "#e9c46a",
+  "#f4a261",
+  "#e76f51"
+)
+
 ggtext_size <- 6 / (14 / 5)
 cm_size <- function(x) x / 2.54
 twocol <- 18 / 2.54
@@ -252,8 +260,8 @@ rmn_lac_test <- ggplot(
   #          family = "Helvetica",
   #          size = ggtext_size) +
   geom_line(aes(
-    group = interaction(genotype, replicate, TE),
-    colour = genotype
+    group = interaction(cell_type, replicate, TE),
+    colour = cell_type
   ),
   alpha = 0.25,
   size = 0.1
@@ -266,17 +274,18 @@ rmn_lac_test <- ggplot(
   #           colour = NA,
   #           alpha = 0.25) +
   geom_line(data = rmn_lac_avg,
-            aes(colour = genotype,
+            aes(colour = cell_type,
                 y = roll_scaled_cellu),
             size = 0.2) +
-  scale_color_brewer(palette = "Set1", aesthetics = c("colour", "fill")) +
+  # scale_color_brewer(palette = "Set1", aesthetics = c("colour", "fill")) +
+  scale_colour_manual(values = pal_pedersen_disc) +
   theme_leo() +
   theme(
     legend.position = "bottom",
     legend.title = element_blank()
   ) +
   guides(colour = guide_legend(override.aes = list(alpha = 1, size = 1))) +
-  facet_wrap(~cell_type, ncol = 1)
+  facet_wrap(~genotype, ncol = 1)
 
 # plotly::ggplotly(rmn_lac_test)
 pdf("rmn_lac.pdf", height = twocol, width = onecol)
@@ -392,13 +401,15 @@ lig_violin <- ggplot(
             aes(label = Letters),
             size = ggtext_size,
             family = "Helvetica") +
+  scale_colour_manual(values = pal_pedersen_disc) +
   # scale_colour_brewer(palette = "Set1") +
-  scale_colour_viridis_d(drop = FALSE) +
+  # scale_colour_viridis_d(drop = FALSE) +
   scale_x_discrete(drop = FALSE) +
   theme_leo() +
   theme(axis.title = element_blank(),
         strip.placement = "outside",
         strip.text = element_text(hjust = 0.5, face = "plain"),
+        legend.position = "bottom"
         ) +
   facet_grid(variable ~ cell_type, scales = "free_y", switch = "y")
 
