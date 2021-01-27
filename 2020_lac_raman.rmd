@@ -99,6 +99,14 @@ cm_size <- function(x) x / 2.54
 twocol <- 18 / 2.54
 onehalfcol <- 14 / 2.54
 onecol <- 9 / 2.54
+
+#### machine dependent paths ####
+## office
+# datapath <- "/data/"
+
+## laptop
+datapath <- "/home/leonard/Documents/Uni/"
+
 ```
 
 ## Load spectra
@@ -106,7 +114,7 @@ onecol <- 9 / 2.54
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 rmn_files <-
   list.files(
-    path = "/data/PhD/Raman/2020-11_lac_mutants/",
+    path = paste0(datapath, "PhD/Raman/2020-11_lac_mutants/"),
     pattern = "*.txt",
     recursive = TRUE,
     full.names = TRUE
@@ -333,16 +341,6 @@ violin_data <- rmn_lac_sum %>%
            "Q-17",
            "Q"
          )))
-corr_data <- violin_data %>%
-  group_by(genotype, cell_type, replicate, variable) %>%
-  mutate(cell = row_number()) %>%
-  pivot_wider(names_from = variable, values_from = value) %>%
-  unite("ID", genotype,cell_type, replicate, cell) %>%
-  column_to_rownames(., var = "ID")
-
-pdf("lignin_corr.pdf")
-corrplot::corrplot.mixed(cor(as.matrix(corr_data)))
-dev.off()
 
 rmn_n <- rmn_lac_sum %>%
   group_by(genotype, replicate, cell_type) %>%
@@ -418,4 +416,90 @@ lig_violin
 dev.off()
 ```
 
+## Multivariate analysis
 
+```{r}
+pca_data <- rmn_lac_sum %>%
+  select(
+    "Total lignin" = total_lignin,
+    "S/G" = S.G,
+    "P-units" = P_rel,
+    AUC,
+    # "Cellulose cryst." = cellu_cryst,
+    "Benzaldehydes" = Benz_rel,
+    # "P/cellulose" = P.cellu,
+    "G-units" = G_rel,
+    "S-units" = S_rel,
+    "G-CHO/G-OH" = GCHO.GOH
+  ) %>%
+  filter(cell_type != "LP") %>%
+  group_by(genotype, replicate, cell_type) %>%
+  mutate(cell = row_number()) %>%
+  pivot_wider(everything(), names_from = cell_type, values_from = c(4:11)) %>%
+  unite("ID", genotype, replicate, cell)
+
+pca_result <- prcomp(pca_data[, -1], center = TRUE, scale. = TRUE)
+rownames(pca_result$x) <- pca_data$ID
+
+# factoextra::fviz_pca_biplot(pca_result)
+
+gg_pca <- as_tibble(pca_result$x, rownames = NA) %>%
+  rownames_to_column(var = "ID") %>%
+  separate(ID, sep = "_", into = c("genotype", "replicate", "cell"))
+
+pca <- ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
+  geom_hline(yintercept = 0, linetype = 1, size = 0.2) +
+  geom_vline(xintercept = 0, linetype = 1, size = 0.2) +
+  stat_ellipse(geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
+  geom_text(data = filter(gg_pca, cell == 5 & replicate == 4), aes(label = genotype)) +
+  # stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2, size = 0.2) +
+  geom_point(
+    size = 3,
+    stroke = 0.4,
+    alpha = 0.75,
+    shape = 21
+  ) +
+  # annotate("text",
+  #   x = c(-35, 18, 7, -25),
+  #   y = c(18, 25, -17, -25),
+  #   label = c("Epidermis", "Vascular\nbundle", "Interfascicular\nfibre", "Pith"),
+  #   family = "Helvetica",
+  #   size = ggtext_size,
+  #   hjust = 0
+  # ) +
+  labs(
+    x = "PC 1 [36.4 %]",
+    y = "PC 2 [19.5 %]"
+  ) +
+  scale_fill_viridis_d() +
+  theme_leo() +
+  theme(
+    plot.margin = unit(c(2, 2, 3, 2), "mm")
+  )
+
+pca
+
+# corr_data <- rmn_lac_sum %>%
+#   select(
+#     "Total lignin" = total_lignin,
+#     "S/G" = S.G,
+#     "P-units" = P_rel,
+#     AUC,
+#     # "Cellulose cryst." = cellu_cryst,
+#     "Benzaldehydes" = Benz_rel,
+#     # "P/cellulose" = P.cellu,
+#     "G-units" = G_rel,
+#     "S-units" = S_rel,
+#     "G-CHO/G-OH" = GCHO.GOH
+#   ) %>%
+#   filter(cell_type != "LP") %>%
+#   group_by(genotype, replicate, cell_type) %>%
+#   mutate(cell = row_number()) %>%
+#   pivot_wider(everything(), names_from = cell_type, values_from = c(4:11)) %>%
+#   unite("ID", genotype, replicate, cell) %>%
+#   column_to_rownames(., var = "ID")
+# 
+# pdf("lignin_corr.pdf")
+# corrplot::corrplot.mixed(cor(as.matrix(corr_data)))
+# dev.off()
+```

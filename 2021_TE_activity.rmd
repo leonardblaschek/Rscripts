@@ -1,0 +1,59 @@
+---
+title: "TE activity"
+author: "Leonard Blaschek"
+date: "1/27/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+
+## Load viability and differentiation data
+
+```{r}
+
+growth_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2021-01_inductions/",
+    pattern = "*.txt",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_tsv(flnm,
+    comment = "#",
+    col_names = "code",
+    col_types = "c",
+    # locale = locale(decimal_mark = ",")
+  ) %>%
+    mutate(filename = basename(flnm)) %>%
+    separate(filename, into = c("date", "replicate", "dpi", "treatment"), sep = "_") %>%
+    mutate(replicate = str_remove(replicate, fixed("R")),
+           dpi = as.numeric(str_remove(dpi, fixed("d"))),
+           treatment = str_remove(treatment, fixed(".txt")))
+}
+  
+  
+growth_data <- map(growth_files, read_plus) %>%
+  bind_rows() %>%
+  mutate(
+    n = str_length(code),
+    nTEs_alive = str_count(code, "k"),
+    nTEs_dead = str_count(code, "l"),
+    TEs_alive = str_count(code, "i"),
+    TEs_dead = str_count(code, "o"),
+    nTE_viab = nTEs_alive / (nTEs_alive + nTEs_dead),
+    TE_prop = (TEs_alive + TEs_dead) / n,
+    TE_viab = TEs_alive / (TEs_alive + TEs_dead)
+  )
+```
+
+## Plot differentiation curves
+
+```{r}
+
+```
