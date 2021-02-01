@@ -656,7 +656,7 @@ dev.off()
 #
 # write_csv(rmn_data_corrected, "rmn_data_corrected.csv")
 
-#### load tidied and baseline correced Raman spectra ####
+#### load tidied and baseline corrected Raman spectra ####
 rmn_data_corrected <- read_csv("rmn_data_corrected.csv", col_types = "ccccnnn") %>%
   mutate(
     genotype = ordered(genotype,

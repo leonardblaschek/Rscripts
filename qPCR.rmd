@@ -153,9 +153,9 @@ plate <- tibble(
   unite("Pos", row, column, sep = "") %>%
   mutate(replicate = "A1")
 
-write_tsv(plate, "/home/leonard/Documents/Uni/PhD/qPCR/2020-10-26_plate.tsv")
+write_tsv(plate, "/data/PhD/qPCR/2020-10-26_plate.tsv")
 
-results <- read_tsv("/home/leonard/Documents/Uni/PhD/qPCR/2020-10-26_cp.tsv",
+results <- read_tsv("/data/PhD/qPCR/2020-10-26_cp.tsv",
   skip = 1
 ) %>%
   left_join(plate) %>%
@@ -258,9 +258,9 @@ plate <- tibble(
 ) %>%
   unite("Pos", row, column, sep = "")
 
-write_tsv(plate, "/home/leonard/Documents/Uni/PhD/qPCR/2020-10-27_plate.tsv")
+write_tsv(plate, "/data/PhD/qPCR/2020-10-27_plate.tsv")
 
-results <- read_tsv("/home/leonard/Documents/Uni/PhD/qPCR/2020-10-27_cp.tsv",
+results <- read_tsv("/data/PhD/qPCR/2020-10-27_cp.tsv",
   skip = 1
 ) %>%
   left_join(plate)
@@ -375,9 +375,9 @@ plate <- tibble(
 ) %>%
   unite("Pos", row, column, sep = "")
 
-write_tsv(plate, "/home/leonard/Documents/Uni/PhD/qPCR/2020-10-28_plate.tsv")
+write_tsv(plate, "/data/PhD/qPCR/2020-10-28_plate.tsv")
 
-results <- read_tsv("/home/leonard/Documents/Uni/PhD/qPCR/2020-10-28_cp.tsv",
+results <- read_tsv("/data/PhD/qPCR/2020-10-28_cp.tsv",
   skip = 1
 ) %>%
   left_join(plate)
@@ -534,9 +534,9 @@ plate <- tibble(
 ) %>%
   unite("Pos", row, column, sep = "")
 
-write_tsv(plate, "/home/leonard/Documents/Uni/PhD/qPCR/2020-10-31_plate.tsv")
+write_tsv(plate, "/data/PhD/qPCR/2020-10-31_plate.tsv")
 
-results <- read_tsv("/home/leonard/Documents/Uni/PhD/qPCR/2020-10-31_cp.tsv",
+results <- read_tsv("/data/PhD/qPCR/2020-10-31_cp.tsv",
   skip = 1
 ) %>%
   left_join(plate)
@@ -693,9 +693,9 @@ plate <- tibble(
 ) %>%
   unite("Pos", row, column, sep = "")
 
-write_tsv(plate, "/home/leonard/Documents/Uni/PhD/qPCR/2020-11-02_plate.tsv")
+write_tsv(plate, "/data/PhD/qPCR/2020-11-02_plate.tsv")
 
-results <- read_tsv("/home/leonard/Documents/Uni/PhD/qPCR/2020-11-02_cp.tsv",
+results <- read_tsv("/data/PhD/qPCR/2020-11-02_cp.tsv",
   skip = 1
 ) %>%
   left_join(plate)
@@ -830,7 +830,7 @@ ggplot() +
 
 result_files <-
   list.files(
-    path = "/home/leonard/Documents/Uni/PhD/qPCR/",
+    path = "/data/PhD/qPCR/",
     pattern = "cp.tsv",
     recursive = FALSE,
     full.names = TRUE
@@ -838,7 +838,7 @@ result_files <-
 
 plate_files <-
   list.files(
-    path = "/home/leonard/Documents/Uni/PhD/qPCR/",
+    path = "/data/PhD/qPCR/",
     pattern = "plate.tsv",
     recursive = FALSE,
     full.names = TRUE

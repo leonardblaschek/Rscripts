@@ -1,0 +1,3422 @@
+---
+title: "Laccase manuscript"
+author: "Leonard Blaschek"
+date: "01/02/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(baseline)
+library(broom)
+library(gganimate)
+library(ggbeeswarm)
+library(ggrepel)
+library(ggridges)
+library(ggtext)
+library(glue)
+library(jsonlite)
+library(lubridate)
+library(patchwork)
+library(showtext)
+library(slider)
+library(tidyverse)
+library(tukeygrps)
+
+#### import Helvetica ####
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 10,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      # axis.ticks = element_line(
+      #   size = 0.125,
+      #   lineend = "square",
+      #   color = "black"
+      # ),
+      axis.text.x = element_text(
+        size = 10,
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        size = 10,
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.title = element_text(
+        colour = "black",
+        size = 10
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      # panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = 10),
+      legend.key.height = unit(4, "mm"),
+      plot.title = element_text(
+        size = 10,
+        hjust = 0
+      ),
+      complete = TRUE
+    )
+}
+
+pal_ostwald_disc <- c(
+  "#275d95",
+  "#e8c245",
+  "#d25952"
+)
+
+pal_ostwald_disc_long <- c(
+  "#8fab1d",
+  "#2d7d73",
+  "#1d566f",
+  "#275d95",
+  "#e8c245",
+  "#d25952"
+)
+
+pal_pedersen_disc <- c(
+  "#264653",
+  "#2a9d8f",
+  "#e9c46a",
+  "#f4a261",
+  "#e76f51"
+)
+
+ggtext_size <- 10 / (14 / 5)
+cm_size <- function(x) x / 2.54
+
+#### machine dependent paths ####
+## office
+datapath <- "/data/"
+
+## laptop
+# datapath <- "/home/leonard/Documents/Uni/"
+```
+
+# Phenotyping
+
+## End point phenotyping
+
+```{r message=FALSE}
+siliques <- read_csv(paste0(
+  datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_siliques.csv"
+)) %>%
+  bind_rows(read_csv(paste0(
+    datapath, "PhD/Phenotyping/2020-09_lac_mutants/2020-11-05_siliques.csv"
+  )) %>%
+    select(-plant)) %>%
+  mutate(rep = as.character(rep)) %>%
+  pivot_longer(-c(genotype, rep), names_to = "sil", values_to = "length") %>%
+  mutate(genotype = ordered(recode(genotype,
+    "lac4/5/10/12/17" = "Q",
+    "lac5/10/12/17" = "Q-4",
+    "lac4/10/12/17" = "Q-5",
+    "lac4/5/12/17" = "Q-10",
+    "lac4/5/10/17" = "Q-12",
+    "lac4/5/10/12" = "Q-17"
+  ),
+  levels = c("Col-0", "Q-4", "Q-5", "Q-10", "Q-12", "Q-17", "Q")
+  ))
+
+pheno_data <- read_csv(paste0(
+  datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_harvesting.csv"
+)) %>%
+  rename("stem.weight" = stem.w) %>%
+  bind_rows(read_csv(paste0(
+    datapath, "PhD/Phenotyping/2020-09_lac_mutants/2020-11-05_harvesting.csv"
+  )) %>%
+    select(-plant)) %>%
+  mutate(rep = as.character(rep)) %>%
+  left_join(siliques %>%
+    group_by(genotype, rep) %>%
+    summarise(mean.sil.length = mean(length))) %>%
+  mutate(genotype = ordered(recode(genotype,
+    "Col-0" = "WT",
+    "lac4/5/10/12/17" = "Q",
+    "lac5/10/12/17" = "Q-4",
+    "lac4/10/12/17" = "Q-5",
+    "lac4/5/12/17" = "Q-10",
+    "lac4/5/10/17" = "Q-12",
+    "lac4/5/10/12" = "Q-17"
+  ),
+  levels = c("WT", "Q-4", "Q-5", "Q-10", "Q-12", "Q-17", "Q")
+  )) %>%
+  select(-mat.sil, -green.sil, -fl.stands)
+# mutate(
+#   total.sil = mat.sil + green.sil,
+#   senescence = green.sil / total.sil
+# )
+
+ggplot(
+  pheno_data,
+  aes(
+    y = genotype,
+    x = stretched.height
+  )
+) +
+  # geom_violin() +
+  # ggbeeswarm::geom_quasirandom() +
+  ggridges::geom_density_ridges_gradient(aes(fill = stat(x)),
+    bandwidth = 2.5,
+    quantile_lines = TRUE, quantiles = 2
+  ) +
+  scale_fill_gradientn(colours = wesanderson::wes_palette("Zissou1", n = 5)) +
+  theme_leo()
+
+ggplot(siliques) +
+  # geom_violin() +
+  # ggbeeswarm::geom_quasirandom(aes(x = genotype,
+  #                                  y = length)) +
+  ggridges::geom_density_ridges_gradient(aes(
+    x = length,
+    y = genotype,
+    fill = stat(x)
+  ),
+  bandwidth = 0.05,
+  quantile_lines = TRUE, quantiles = 2
+  ) +
+  scale_fill_gradientn(colours = wesanderson::wes_palette("Zissou1", n = 5)) +
+  theme_leo()
+
+letters <- letter_groups(pheno_data,
+  stretched.height,
+  genotype,
+  "tukey",
+  print_position = "above",
+  print_adjust = 1
+)
+
+
+height <- ggplot(
+  pheno_data,
+  aes(
+    x = genotype,
+    y = stretched.height,
+    fill = genotype
+  )
+) +
+  ggbeeswarm::geom_quasirandom(aes(
+    colour = genotype
+  ),
+  # fill = "grey90",
+  shape = 16,
+  alpha = 0.5,
+  size = 3
+  ) +
+  geom_violin(
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.4,
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Stem height [cm]") +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    # legend.position = "bottom",
+    axis.title.x = element_blank()
+  )
+
+# pdf("lac_height.pdf", width = twocol, height = onecol * 0.25)
+# raw_absorbance /
+#   activity_grid /
+height
+# dev.off()
+```
+
+## Image based phenotyping
+
+### Hue
+
+```{r message=FALSE}
+# pcv_data <- fromJSON(paste0(
+#   datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/images/front/output/2020-05-11_lab_segmentation/results.json"))
+# hues <- pcv_data$entities$observations$hue_frequencies %>%
+#   mutate(
+#     date = pcv_data$entities$metadata$timestamp$value,
+#     replicate = pcv_data$entities$metadata$frame$value,
+#     genotype = pcv_data$entities$metadata$id$value
+#   ) %>%
+#   select(genotype, replicate, date, "count" = value, "hue" = label, ) %>%
+#   unnest(cols = c(count, hue))
+#
+# circular_mean_hue <- pcv_data$entities$observations$hue_circular_mean %>%
+#   mutate(
+#     date = pcv_data$entities$metadata$timestamp$value,
+#     replicate = pcv_data$entities$metadata$frame$value,
+#     genotype = pcv_data$entities$metadata$id$value
+#   ) %>%
+#   select(genotype, replicate, date, "mean_hue" = value)
+#
+# hues <- hues %>%
+#   filter(hue != 1) %>%
+#   group_by(genotype, replicate) %>%
+#   left_join(circular_mean_hue) %>%
+#   mutate(
+#     pixel_count = sum(count),
+#     count_scaled = count / pixel_count,
+#     rolling_count = slide_dbl(count_scaled, mean, .before = 3)
+#   )
+#
+# hues_avg <- hues %>%
+#   ungroup() %>%
+#   mutate(genotype = ordered(genotype,
+#                             levels = c(
+#                               "Col-0",
+#                               "Q",
+#                               "Q-4",
+#                               "Q-5",
+#                               "Q-10",
+#                               "Q-12",
+#                               "Q-17"
+#                             ))) %>%
+#   group_by(genotype, hue) %>%
+#   summarise(count_mean = mean(count_scaled),
+#             mean_mean = mean(mean_hue)) %>%
+#   group_by(genotype) %>%
+#   mutate(rolling_mean = slide_dbl(count_mean, mean, .before = 3))
+#
+# H <- round(((1:20) / 20), digits = 2)
+# S <- 0.7
+# V <- 0.85
+#
+# hue_values <- NULL
+# for (i in H) {
+#   hue_values[i * 20] <- (hsv(i, S, V))
+# }
+#
+#
+# pheno_avg <- pheno_data %>%
+#   group_by(genotype) %>%
+#   summarise_if(is.numeric, mean) %>%
+#   mutate(genotype = recode(genotype,
+#       "lac4/5/10/12/17" = "Q",
+#       "lac5/10/12/17" = "Q-4",
+#       "lac4/10/12/17" = "Q-5",
+#       "lac4/5/12/17" = "Q-10",
+#       "lac4/5/10/17" = "Q-12",
+#       "lac4/5/10/12" = "Q-17"
+#     ))
+#
+# hue_dens <- ggplot() +
+#   geom_density_ridges_gradient(
+#     data = hues_avg,
+#     aes(
+#       x = hue,
+#       height = rolling_mean,
+#       y = reorder(genotype, mean_mean),
+#       # y = genotype,
+#       fill = hue
+#     ),
+#     # scale = 10,
+#     stat = "identity",
+#     size = 0.2
+#   ) +
+#   # geom_density_ridges(
+#   #   data = hues,
+#   #   aes(
+#   #     x = hue,
+#   #     height = rolling_count,
+#   #     y = genotype,
+#   #     group = interaction(genotype, replicate)
+#   #   ),
+#   #   # scale = 10,
+#   #   fill = NA,
+#   #   colour = rgb(0, 0, 0, 0.25),
+#   #   stat = "identity",
+#   #   size = 0.2
+#   # ) +
+#   # geom_text(data = pheno_avg,
+#   #           aes(label = paste("Senescence index =", round(senescence, digits = 2)),
+#   #               y = genotype),
+#   #           x = 100,
+#   #           family = "Helvetica",
+#   #           size = ggtext_size,
+#   #           hjust = 0,
+#   #           vjust = 1.1) +
+#   scale_fill_gradientn(colors = hue_values) +
+#   scale_x_continuous(limits = c(0, 150)) +
+#   labs(x = "Hue",
+#        y = "") +
+#   theme_leo()
+#
+# pdf("harvest_hue.pdf", width = cm_size(10), height = cm_size(10))
+# hue_dens
+# dev.off()
+```
+
+### Height
+```{r message=FALSE}
+# pcv_data <- fromJSON("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/front/output/2020-05-11_lab_segmentation/results.json")
+# heights <- as.tibble(pcv_data$entities$observations$height$value) %>%
+#   mutate(
+#     longest_path = pcv_data$entities$observations$longest_path$value,
+#     date = pcv_data$entities$metadata$timestamp$value,
+#     rep = pcv_data$entities$metadata$frame$value,
+#     genotype = pcv_data$entities$metadata$id$value
+#   )
+#
+# scale_factor <- read_csv("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/front/output/2020-05-11_lab_segmentation/size_marker.csv",
+#   col_names = c("id", "space")
+# ) %>%
+#   mutate(id = str_remove(id, fixed(".jpg"))) %>%
+#   separate(id, into = c("date", "genotype", "rep"), sep = "_")
+#
+# heights <- heights %>%
+#   left_join(scale_factor) %>%
+#   mutate(
+#     scaled_height = value / space,
+#     scaled_path = longest_path / space,
+#     genotype = recode(genotype,
+#       Q = "lac4/5/10/12/17",
+#       `Q-4` = "lac5/10/12/17",
+#       `Q-5` = "lac4/10/12/17",
+#       `Q-10` = "lac4/5/12/17",
+#       `Q-12` = "lac4/5/10/17",
+#       `Q-17` = "lac4/5/10/12"
+#     )
+#   ) %>%
+#   left_join(pheno_data %>% select(genotype, rep, apparent.height, stretched.height),
+#     by = c("genotype", "rep")
+#   )
+#
+# height_validation <- ggplot(
+#   data = heights,
+#   aes(
+#     x = scaled_height,
+#     y = apparent.height
+#   )
+# ) +
+#   geom_point() +
+#   geom_smooth(method = "lm")
+#
+# height_validation
+#
+# summary(lm(heights$scaled_height ~ heights$apparent.height))
+#
+# height_validation <- ggplot(
+#   data = heights,
+#   aes(
+#     x = scaled_path,
+#     y = stretched.height,
+#     colour = genotype
+#   )
+# ) +
+#   geom_point() +
+#   geom_smooth(
+#     method = "lm",
+#     colour = "blue"
+#   )
+#
+# height_validation
+#
+# summary(lm(heights$scaled_path ~ heights$stretched.height))
+```
+
+### Rosette growth
+
+```{r message=FALSE}
+# #### read-in function ###
+# read_plus <- function(flnm) {
+#   json <- fromJSON(flnm)
+#   json$observations$area$value %>%
+#     as_tibble() %>%
+#     mutate(filename = basename(flnm))
+# }
+#
+# #### load data ###
+# rosette_files <-
+#   list.files(
+#     path = "/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/top/renamed/nikon_images/",
+#     pattern = "*.json",
+#     recursive = FALSE,
+#     full.names = TRUE
+#   )
+#
+# tray_id <- read_csv("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/top/renamed/tray_id.csv",
+#   col_types = "cccc"
+# )
+#
+# size_marker <- read_csv("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/top/renamed/nikon_images/output/size_marker_trays.csv",
+#   col_names = c("filename", "space")
+# ) %>%
+#   separate(filename, into = c("date", "tray"), sep = "_") %>%
+#   mutate(
+#     date = ymd(date),
+#     tray = str_remove(tray, fixed(".jpg"))
+#   )
+#
+# rosette_area <- lapply(rosette_files, read_plus) %>%
+#   bind_rows() %>%
+#   separate(filename, into = c("date", "tray", "plant"), sep = "_") %>%
+#   mutate(
+#     date = ymd(date),
+#     tray = str_remove(tray, fixed(".jpg")),
+#     plant = str_remove(plant, fixed(".json"))) %>%
+#   left_join(tray_id) %>%
+#   left_join(size_marker) %>%
+#   mutate(area = value / space,
+#          mutation = case_when(genotype == "Col-0" ~ "WT",
+#                               TRUE ~ "mutant")) %>%
+#   group_by(genotype, date) %>%
+#   mutate(area_avg = mean(area)) %>%
+#   group_by(genotype) %>%
+#   mutate(max = max(area_avg)) %>%
+#   filter(date > "2020-01-27")
+#
+# rosette_growth <- ggplot(
+#   data = rosette_area,
+#   aes(
+#     x = date,
+#     y = area
+#   )
+# ) +
+#   geom_line(aes(
+#     colour = mutation,
+#     group = interaction(genotype, replicate)
+#   ),
+#   size = 0.2,
+#   alpha = 0.25
+#   ) +
+#   geom_line(aes(
+#     colour = mutation,
+#     group = genotype,
+#     y = area_avg
+#   )) +
+#   theme_leo() +
+#   coord_cartesian(clip = "off") +
+#   scale_x_date(limits = c(ymd("20200127"), ymd("20200214"))) +
+#   geom_text_repel(
+#     data = distinct(rosette_area, max),
+#     x = ymd("20200212"),
+#     aes(
+#       y = max,
+#       label = genotype
+#     ),
+#     family = "Helvetica",
+#     segment.colour = "grey75",
+#     hjust = 0,
+#     direction = "y",
+#     nudge_x = 0.5,
+#     min.segment.length = 0
+#   ) +
+#   labs(x = "Date",
+#        y = "Rosette Area [scaled px]") +
+#   scale_colour_manual(values = pal_ostwald_disc[c(3,1)])
+#
+# pdf("rosette_growth.pdf", width = cm_size(10), height = cm_size(10))
+# rosette_growth
+# dev.off()
+```
+
+### Root growth
+
+```{r}
+root_data <- read_csv(paste0(
+  datapath, "PhD/Phenotyping/2020-10_lac_root_growth/2020-10_root_growth.csv"
+))
+
+ggplot(root_data, aes(
+  y = length.cm,
+  x = genotype
+)) +
+  geom_violin(draw_quantiles = 0.5) +
+  geom_quasirandom() +
+  theme_leo()
+```
+
+# RT-qPCR
+
+## Individual experiments
+
+### 2020-10-26
+
+\small
+
+```{r}
+plate <- tibble(
+  row = rep(LETTERS[1:8], length.out = 96, each = 12),
+  column = rep(1:12, length.out = 96, each = 1),
+  sample = c(
+    rep(c("WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1"),
+      length.out = 36, each = 1
+    ),
+    rep(c("NTC", "CC", "CC", "CC", "CC", "CC"),
+      length.out = 36, each = 1
+    ),
+    rep(NA, length.out = 24)
+  ),
+  concentration = c(
+    rep(0.1, length.out = 36),
+    rep(c(1, 0.1, 0.01, 0.001, 0.0001, 0),
+      length.out = 36, each = 1
+    ),
+    rep(NA, length.out = 24)
+  ),
+  gene = ordered(c(
+    rep(c("LAC4", "UBI", "LAC4", "18S", "LAC4", "EF1a"), length.out = 72, each = 6),
+    rep(NA, length.out = 24)
+  ),
+  levels = c("LAC4", "UBI", "18S", "EF1a")
+  )
+) %>%
+  unite("Pos", row, column, sep = "") %>%
+  mutate(replicate = "A1")
+
+write_tsv(plate, paste0(
+  datapath, "PhD/qPCR/2020-10-26_plate.tsv"
+))
+
+results <- read_tsv(paste0(
+  datapath, "PhD/qPCR/2020-10-26_cp.tsv"
+),
+skip = 1
+) %>%
+  left_join(plate) %>%
+  drop_na(sample)
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 35),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  scale_x_log10() +
+  theme_leo()
+
+CCs <- filter(results, sample == "CC") %>%
+  select(gene, concentration, Cp) %>%
+  filter(Cp < 35) %>%
+  nest(data = c(concentration, Cp)) %>%
+  mutate(
+    fit = map(data, ~ lm(Cp ~ log10(concentration), data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    r.squared = unlist(map(model, ~ .x[["r.squared"]]))
+  ) %>%
+  unnest(tidied) %>%
+  select(gene, r.squared, term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(efficiency = (10^(-1 / `log10(concentration)`) - 1) * 100)
+
+
+results <- left_join(results, CCs) %>%
+  group_by(gene, concentration, sample) %>%
+  mutate(technical = row_number())
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 35),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  geom_label(
+    data = filter(results, concentration == 1 & technical == 1),
+    aes(label = paste0(
+      gene,
+      ": R² = ",
+      round(r.squared, digits = 3),
+      "; efficiency = ",
+      round(efficiency, digits = 0),
+      "%"
+    )),
+    hjust = 1,
+    vjust = 1,
+    colour = "black",
+    label.size = 0,
+    fill = rgb(1, 1, 1, 0.85),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_colour_brewer(palette = "Pastel1") +
+  scale_x_log10() +
+  theme_leo()
+```
+
+### 2020-10-27
+
+```{r}
+plate <- tibble(
+  row = rep(LETTERS[1:8], length.out = 96, each = 12),
+  column = rep(1:12, length.out = 96, each = 1),
+  sample = c(rep(c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "CC", "CC", "CC", "CC", "NTC",
+    "CC", "CC", "CC", "CC", "CC", "NTC"
+  ),
+  length.out = 96, each = 1
+  )),
+  gene = ordered(c(rep(c("LAC4", "UBI", "18S", "EF1a"), length.out = 96, each = 24)),
+    levels = c("LAC4", "UBI", "18S", "EF1a")
+  ),
+  replicate = rep(c("A1", "A2"), each = 6, length.out = 96),
+  concentration = rep(c(
+    rep(c(0.1, 0.16666), length.out = 12, each = 6),
+    rep(c(1, 0.1, 0.02, 0.01, 0.005, 0), length.out = 12, each = 1)
+  ), length.out = 96, each = 1)
+) %>%
+  unite("Pos", row, column, sep = "")
+
+write_tsv(plate, paste0(
+  datapath, "/PhD/qPCR/2020-10-27_plate.tsv"
+))
+
+results <- read_tsv(paste0(
+  datapath, "PhD/qPCR/2020-10-27_cp.tsv"
+),
+skip = 1
+) %>%
+  left_join(plate)
+
+CCs <- filter(results, sample == "CC") %>%
+  select(gene, replicate, concentration, Cp) %>%
+  nest(data = c(concentration, Cp)) %>%
+  mutate(
+    fit = map(data, ~ lm(Cp ~ log10(concentration), data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    r.squared = unlist(map(model, ~ .x[["r.squared"]]))
+  ) %>%
+  unnest(tidied) %>%
+  select(gene, replicate, r.squared, term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(efficiency = (10^(-1 / `log10(concentration)`) - 1) * 100)
+
+
+results <- left_join(results, CCs)
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 35),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  geom_label(
+    data = filter(results, concentration == 0.005),
+    aes(label = paste0(
+      gene,
+      ": R² = ",
+      round(r.squared, digits = 3),
+      "; efficiency = ",
+      round(efficiency, digits = 0),
+      "%"
+    )),
+    hjust = 0,
+    vjust = 0,
+    colour = "black",
+    label.size = 0,
+    fill = rgb(1, 1, 1, 0.85),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_colour_brewer(palette = "Pastel1") +
+  scale_x_log10() +
+  theme_leo() +
+  facet_wrap(~replicate)
+
+normalised <- results %>%
+  filter(sample != "CC" & sample != "NTC") %>%
+  group_by(replicate, sample) %>%
+  mutate(dCt = Cp[gene == "EF1a"] - Cp) %>%
+  group_by(replicate, gene) %>%
+  mutate(
+    ddCt = dCt - dCt[sample == "WT"],
+    fold = 2^ddCt
+  ) %>%
+  pivot_longer(c(dCt, ddCt, fold), names_to = "metric", values_to = "value")
+
+ggplot(normalised) +
+  geom_point(aes(
+    x = sample,
+    y = value,
+    fill = replicate
+  ),
+  shape = 21,
+  alpha = 0.75,
+  stroke = 0.2,
+  size = 3
+  ) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  theme_leo() +
+  theme(axis.title = element_blank()) +
+  facet_grid(metric ~ gene, scales = "free")
+```
+
+### 2020-10-28
+
+```{r}
+plate <- tibble(
+  row = rep(LETTERS[1:8], length.out = 96, each = 12),
+  column = rep(1:12, length.out = 96, each = 1),
+  sample = ordered(rep(c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "CC", "CC", "CC", "CC", "NTC",
+    "CC", "CC", "CC", "CC", "CC", "NTC"
+  ),
+  length.out = 96, each = 1
+  ), levels = c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "NTC"
+  )),
+  gene = ordered(c(rep(c("LAC10", "LAC12", "LAC17", "EF1a"), length.out = 96, each = 24)),
+    levels = c("LAC10", "LAC12", "LAC17", "EF1a")
+  ),
+  replicate = rep(c("A1", "A2"), each = 6, length.out = 96),
+  concentration = rep(c(
+    rep(c(0.1, 0.16666), length.out = 12, each = 6),
+    rep(c(1, 0.1, 0.02, 0.01, 0.005, 0), length.out = 12, each = 1)
+  ), length.out = 96, each = 1)
+) %>%
+  unite("Pos", row, column, sep = "")
+
+write_tsv(plate, paste0(
+  datapath, "PhD/qPCR/2020-10-28_plate.tsv"
+))
+
+results <- read_tsv(paste0(
+  datapath, "PhD/qPCR/2020-10-28_cp.tsv"
+),
+skip = 1
+) %>%
+  left_join(plate)
+
+CCs <- filter(results, sample == "CC") %>%
+  select(gene, replicate, concentration, Cp) %>%
+  nest(data = c(concentration, Cp)) %>%
+  mutate(
+    fit = map(data, ~ lm(Cp ~ log10(concentration), data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    r.squared = unlist(map(model, ~ .x[["r.squared"]]))
+  ) %>%
+  unnest(tidied) %>%
+  select(gene, replicate, r.squared, term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(efficiency = (10^(-1 / `log10(concentration)`) - 1) * 100)
+
+
+results <- left_join(results, CCs)
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 35),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  geom_label_repel(
+    data = filter(results, concentration == 0.005),
+    aes(label = paste0(
+      gene,
+      ": R² = ",
+      round(r.squared, digits = 3),
+      "; efficiency = ",
+      round(efficiency, digits = 0),
+      "%"
+    )),
+    hjust = 0,
+    vjust = 0,
+    colour = "black",
+    label.size = 0,
+    fill = rgb(1, 1, 1, 0.85),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_colour_brewer(palette = "Pastel1") +
+  scale_x_log10() +
+  theme_leo() +
+  facet_wrap(~replicate)
+
+normalised <- results %>%
+  filter(sample != "CC" & sample != "NTC") %>%
+  group_by(replicate, sample) %>%
+  mutate(dCt = Cp[gene == "EF1a"] - Cp) %>%
+  group_by(replicate, gene) %>%
+  mutate(
+    ddCt = dCt - dCt[sample == "WT"],
+    fold = 2^ddCt
+  ) %>%
+  pivot_longer(c(dCt, ddCt, fold), names_to = "metric", values_to = "value")
+
+normalised_avg <- normalised %>%
+  group_by(sample, gene, metric) %>%
+  summarise(mean = mean(value))
+
+ggplot(normalised) +
+  geom_point(aes(
+    x = sample,
+    y = value,
+    fill = replicate
+  ),
+  shape = 21,
+  alpha = 0.75,
+  stroke = 0.2,
+  size = 3
+  ) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  theme_leo() +
+  theme(axis.title = element_blank()) +
+  facet_grid(metric ~ gene, scales = "free")
+
+ggplot() +
+  geom_tile(
+    data = normalised_avg %>%
+      filter(metric == "ddCt"),
+    aes(
+      x = sample,
+      y = gene,
+      fill = mean
+    )
+  ) +
+  geom_text(
+    data = normalised_avg %>%
+      filter(metric == "fold"),
+    aes(
+      x = sample,
+      y = gene,
+      label = round(mean, digits = 2)
+    ),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  # scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  scale_fill_gradientn(
+    colours = rev(pal_ostwald_cont),
+    # limits = c(0,10),
+    # na.value = "#ED4137"
+  ) +
+  theme_leo() +
+  guides(fill = guide_colorbar(title = "ddCt")) +
+  labs(title = "Fold-change of laccase gene expression in single mutants") +
+  theme(
+    axis.title = element_blank(),
+    legend.position = "bottom"
+  )
+```
+
+### 2020-10-31
+
+```{r}
+plate <- tibble(
+  row = rep(LETTERS[1:8], length.out = 96, each = 12),
+  column = rep(1:12, length.out = 96, each = 1),
+  sample = ordered(rep(c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "CC", "CC", "CC", "CC", "NTC",
+    "CC", "CC", "CC", "CC", "CC", "NTC"
+  ),
+  length.out = 96, each = 1
+  ), levels = c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "NTC"
+  )),
+  gene = ordered(c(rep(c("LAC4", "LAC10", "LAC12", "EF1a"), length.out = 96, each = 24)),
+    levels = c("LAC4", "LAC10", "LAC12", "EF1a")
+  ),
+  replicate = rep(c("B1", "B2"), each = 6, length.out = 96),
+  concentration = rep(c(
+    rep(0.16666, length.out = 12),
+    rep(c(1, 0.1, 0.02, 0.01, 0.005, 0), length.out = 12, each = 1)
+  ), length.out = 96, each = 1)
+) %>%
+  unite("Pos", row, column, sep = "")
+
+write_tsv(plate, paste0(
+  datapath, "PhD/qPCR/2020-10-31_plate.tsv"
+))
+
+results <- read_tsv(paste0(
+  datapath, "PhD/qPCR/2020-10-31_cp.tsv"
+),
+skip = 1
+) %>%
+  left_join(plate)
+
+CCs <- filter(results, sample == "CC") %>%
+  select(gene, replicate, concentration, Cp) %>%
+  nest(data = c(concentration, Cp)) %>%
+  mutate(
+    fit = map(data, ~ lm(Cp ~ log10(concentration), data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    r.squared = unlist(map(model, ~ .x[["r.squared"]]))
+  ) %>%
+  unnest(tidied) %>%
+  select(gene, replicate, r.squared, term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(efficiency = (10^(-1 / `log10(concentration)`) - 1) * 100)
+
+
+results <- left_join(results, CCs)
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 35),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  geom_label_repel(
+    data = filter(results, concentration == 0.005),
+    aes(label = paste0(
+      gene,
+      ": R² = ",
+      round(r.squared, digits = 3),
+      "; efficiency = ",
+      round(efficiency, digits = 0),
+      "%"
+    )),
+    hjust = 0,
+    vjust = 0,
+    colour = "black",
+    label.size = 0,
+    fill = rgb(1, 1, 1, 0.85),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_colour_brewer(palette = "Pastel1") +
+  scale_x_log10() +
+  theme_leo() +
+  facet_wrap(~replicate)
+
+normalised <- results %>%
+  filter(sample != "CC" & sample != "NTC") %>%
+  group_by(replicate, sample) %>%
+  mutate(dCt = Cp[gene == "EF1a"] - Cp) %>%
+  group_by(replicate, gene) %>%
+  mutate(
+    ddCt = dCt - dCt[sample == "WT"],
+    fold = 2^ddCt
+  ) %>%
+  pivot_longer(c(dCt, ddCt, fold), names_to = "metric", values_to = "value")
+
+normalised_avg <- normalised %>%
+  group_by(sample, gene, metric) %>%
+  summarise(mean = mean(value))
+
+ggplot(normalised) +
+  geom_point(aes(
+    x = sample,
+    y = value,
+    fill = replicate
+  ),
+  shape = 21,
+  alpha = 0.75,
+  stroke = 0.2,
+  size = 3
+  ) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  theme_leo() +
+  theme(axis.title = element_blank()) +
+  facet_grid(metric ~ gene, scales = "free")
+
+ggplot() +
+  geom_tile(
+    data = normalised_avg %>%
+      filter(metric == "ddCt"),
+    aes(
+      x = sample,
+      y = gene,
+      fill = mean
+    )
+  ) +
+  geom_text(
+    data = normalised_avg %>%
+      filter(metric == "fold"),
+    aes(
+      x = sample,
+      y = gene,
+      label = round(mean, digits = 2)
+    ),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  # scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  scale_fill_gradientn(
+    colours = rev(pal_ostwald_cont),
+    # limits = c(0,10),
+    # na.value = "#ED4137"
+  ) +
+  theme_leo() +
+  guides(fill = guide_colorbar(title = "ddCt")) +
+  labs(title = "Fold-change of laccase gene expression in single mutants") +
+  theme(
+    axis.title = element_blank(),
+    legend.position = "bottom"
+  )
+```
+
+### 2020-11-02
+
+```{r}
+plate <- tibble(
+  row = rep(LETTERS[1:8], length.out = 96, each = 12),
+  column = rep(1:12, length.out = 96, each = 1),
+  sample = ordered(rep(c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "CC", "CC", "CC", "CC", "NTC",
+    "CC", "CC", "CC", "CC", "CC", "NTC"
+  ),
+  length.out = 96, each = 1
+  ), levels = c(
+    "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1",
+    "CC", "NTC"
+  )),
+  gene = ordered(c(rep(c("LAC11", "LAC17", "UBI", "EF1a"), length.out = 96, each = 24)),
+    levels = c("LAC11", "LAC17", "UBI", "EF1a")
+  ),
+  replicate = rep(c("B1", "B2", "B2", "B1"), each = 6, length.out = 96),
+  concentration = rep(c(
+    rep(0.16666, length.out = 12),
+    rep(c(1, 0.1, 0.02, 0.01, 0.005, 0), length.out = 12, each = 1)
+  ), length.out = 96, each = 1)
+) %>%
+  unite("Pos", row, column, sep = "")
+
+write_tsv(plate, paste0(
+  datapath, "PhD/qPCR/2020-11-02_plate.tsv"
+))
+
+results <- read_tsv(paste0(
+  datapath, "PhD/qPCR/2020-11-02_cp.tsv"
+),
+skip = 1
+) %>%
+  left_join(plate)
+
+CCs <- filter(results, sample == "CC") %>%
+  select(gene, replicate, concentration, Cp) %>%
+  nest(data = c(concentration, Cp)) %>%
+  mutate(
+    fit = map(data, ~ lm(Cp ~ log10(concentration), data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    r.squared = unlist(map(model, ~ .x[["r.squared"]]))
+  ) %>%
+  unnest(tidied) %>%
+  select(gene, replicate, r.squared, term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(efficiency = (10^(-1 / `log10(concentration)`) - 1) * 100)
+
+
+results <- left_join(results, CCs)
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 35),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  geom_label_repel(
+    data = filter(results, concentration == 0.005),
+    aes(label = paste0(
+      gene,
+      ": R² = ",
+      round(r.squared, digits = 3),
+      "; efficiency = ",
+      round(efficiency, digits = 0),
+      "%"
+    )),
+    hjust = 0,
+    vjust = 0,
+    colour = "black",
+    label.size = 0,
+    fill = rgb(1, 1, 1, 0.85),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_colour_brewer(palette = "Pastel1") +
+  scale_x_log10() +
+  theme_leo() +
+  facet_wrap(~replicate)
+
+normalised <- results %>%
+  filter(sample != "CC" & sample != "NTC") %>%
+  group_by(replicate, sample) %>%
+  mutate(dCt = Cp[gene == "EF1a"] - Cp) %>%
+  group_by(replicate, gene) %>%
+  mutate(
+    ddCt = dCt - dCt[sample == "WT"],
+    fold = 2^ddCt
+  ) %>%
+  pivot_longer(c(dCt, ddCt, fold), names_to = "metric", values_to = "value")
+
+normalised_avg <- normalised %>%
+  group_by(sample, gene, metric) %>%
+  summarise(mean = mean(value))
+
+ggplot(normalised) +
+  geom_point(aes(
+    x = sample,
+    y = value,
+    fill = replicate
+  ),
+  shape = 21,
+  alpha = 0.75,
+  stroke = 0.2,
+  size = 3
+  ) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  theme_leo() +
+  theme(axis.title = element_blank()) +
+  facet_grid(metric ~ gene, scales = "free")
+
+ggplot() +
+  geom_tile(
+    data = normalised_avg %>%
+      filter(metric == "ddCt"),
+    aes(
+      x = sample,
+      y = gene,
+      fill = mean
+    )
+  ) +
+  geom_text(
+    data = normalised_avg %>%
+      filter(metric == "fold"),
+    aes(
+      x = sample,
+      y = gene,
+      label = round(mean, digits = 2)
+    ),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  # scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  scale_fill_gradientn(
+    colours = rev(pal_ostwald_cont),
+    # limits = c(0,10),
+    # na.value = "#ED4137"
+  ) +
+  theme_leo() +
+  guides(fill = guide_colorbar(title = "ddCt")) +
+  labs(title = "Fold-change of laccase gene expression in single mutants") +
+  theme(
+    axis.title = element_blank(),
+    legend.position = "bottom"
+  )
+```
+
+## Combined results
+
+```{r}
+
+result_files <-
+  list.files(
+    path = paste0(datapath, "PhD/qPCR/"),
+    pattern = "cp.tsv",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+plate_files <-
+  list.files(
+    path = paste0(datapath, "PhD/qPCR/"),
+    pattern = "plate.tsv",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_results <- function(flnm) {
+  read_tsv(flnm, skip = 1) %>%
+    mutate(
+      filename = str_remove(basename(flnm), fixed(".tsv"))
+    ) %>%
+    separate(filename, into = c("date", "file"), sep = "_") %>%
+    select(-file)
+}
+
+read_plates <- function(flnm) {
+  read_tsv(flnm) %>%
+    mutate(
+      filename = str_remove(basename(flnm), fixed(".tsv"))
+    ) %>%
+    separate(filename, into = c("date", "file"), sep = "_") %>%
+    select(-file)
+}
+
+results <- map(result_files, read_results) %>%
+  bind_rows()
+
+plates <- map(plate_files, read_plates) %>%
+  bind_rows()
+
+ref_genes <- tribble(
+  ~date, ~gene, ~ref,
+  "2020-10-26", "18S", "ref",
+  "2020-10-27", "EF1a", "ref",
+  "2020-10-28", "EF1a", "ref",
+  "2020-10-31", "EF1a", "ref",
+  "2020-11-02", "EF1a", "ref",
+)
+
+excluded_experiments <- c("2020-10-26")
+
+results <- results %>%
+  left_join(plates, by = c("date", "Pos")) %>%
+  left_join(ref_genes, by = c("date", "gene")) %>%
+  filter(!(date %in% excluded_experiments)) %>%
+  mutate(ref = case_when(
+    is.na(ref) ~ "goi",
+    TRUE ~ ref
+  )) %>%
+  drop_na(sample) %>%
+  mutate(
+    gene = ordered(gene, levels = c("LAC4", "LAC10", "LAC11", "LAC12", "LAC17", "UBI", "18S", "EF1a")),
+    sample = ordered(sample, levels = c("CC", "NTC", "WT", "lac4-2", "lac5-1", "lac10-1", "lac12-2", "lac17-1"))
+  ) %>%
+  group_by(date, replicate, gene, sample, concentration, ref) %>%
+  summarise(Cp = mean(Cp))
+
+CCs <- filter(results, sample == "CC" & Cp < 40) %>%
+  nest(data = c(concentration, Cp)) %>%
+  mutate(
+    fit = map(data, ~ lm(Cp ~ log10(concentration), data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    r.squared = unlist(map(model, ~ .x[["r.squared"]]))
+  ) %>%
+  unnest(tidied) %>%
+  select(date, gene, replicate, r.squared, term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(efficiency = (10^(-1 / `log10(concentration)`) - 1) * 100)
+
+CCs <- results %>%
+  filter(concentration == 1) %>%
+  select(gene, date, replicate, concentration, Cp) %>%
+  left_join(CCs)
+
+avg_CCs <- CCs %>%
+  group_by(gene) %>%
+  summarise(
+    max = max(efficiency) + 5,
+    efficiency = mean(efficiency)
+  )
+
+ggplot(
+  CCs,
+  aes(
+    x = gene,
+    y = efficiency
+  )
+) +
+  stat_summary(
+    fun = mean, color = NA,
+    fill = "#e8c245",
+    alpha = 0.5,
+    geom = "bar",
+    aes(group = 1), size = 5,
+    show.legend = FALSE
+  ) +
+  geom_jitter(width = 0.1) +
+  geom_text(
+    data = avg_CCs,
+    aes(
+      label = paste0(round(efficiency, digits = 0), " %"),
+      y = max
+    ),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  theme_leo()
+
+ggplot(
+  data = filter(results, sample == "CC" & Cp < 40),
+  aes(
+    x = concentration,
+    y = Cp,
+    colour = gene
+  )
+) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    se = F
+  ) +
+  # geom_label_repel(
+  #   data = CCs,
+  #   aes(label = paste0(
+  #     gene,
+  #     ": R² = ",
+  #     round(r.squared, digits = 3),
+  #     "; efficiency = ",
+  #     round(efficiency, digits = 0),
+  #     "%"
+  #   )),
+  #   hjust = 0,
+  #   vjust = 0,
+  #   colour = "black",
+  #   label.size = 0,
+  #   fill = rgb(1, 1, 1, 0.5),
+  #   family = "Helvetica",
+  #   size = ggtext_size
+  # ) +
+  scale_colour_brewer(palette = "Pastel1") +
+  scale_x_log10() +
+  theme_leo() +
+  facet_wrap(date ~ replicate)
+
+normalised <- results %>%
+  filter(sample != "CC" & sample != "NTC") %>%
+  filter(gene != "18S") %>%
+  group_by(date, replicate, sample) %>%
+  mutate(dCt = Cp[ref == "ref"] - Cp) %>%
+  group_by(date, replicate, gene) %>%
+  mutate(
+    ddCt = dCt - dCt[sample == "WT"],
+    fold = 2^ddCt
+  ) %>%
+  pivot_longer(c(dCt, ddCt, fold), names_to = "metric", values_to = "value")
+
+normalised_avg <- normalised %>%
+  group_by(sample, gene, metric) %>%
+  summarise(
+    mean = mean(value, na.rm = TRUE),
+    sd = sd(value, na.rm = TRUE)
+  )
+
+ggplot(
+  filter(normalised, gene %in% c("LAC4", "LAC11", "LAC12", "LAC17")),
+  aes(
+    x = sample,
+    y = value
+  )
+) +
+  # geom_bar(stat = "identity") +
+  ggbeeswarm::geom_quasirandom(aes(fill = replicate),
+    shape = 21,
+    alpha = 0.75,
+    stroke = 0.2,
+    size = 1.5
+  ) +
+  geom_boxplot(
+    outlier.alpha = 0,
+    alpha = 0.75,
+    size = 0.2
+  ) +
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  scale_fill_manual(values = pal_ostwald_disc_long) +
+  theme_leo() +
+  theme(axis.title = element_blank()) +
+  coord_flip() +
+  facet_grid(gene ~ metric, scales = "free")
+
+ggplot() +
+  geom_tile(
+    data = normalised_avg %>%
+      filter(metric == "ddCt"),
+    aes(
+      x = sample,
+      y = gene,
+      fill = mean
+    ),
+    # alpha = 0.75
+  ) +
+  geom_text(
+    data = normalised_avg %>%
+      filter(metric == "fold"),
+    aes(
+      x = sample,
+      y = gene,
+      label = paste0(round(mean, digits = 2), " ± ", round(sd, digits = 2))
+    ),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  # scale_fill_manual(values = pal_ostwald_disc_long[c(1, 3)]) +
+  scale_fill_gradientn(
+    colours = rev(pal_ostwald_cont),
+    # colours = wesanderson::wes_palette("Zissou1", 3, type = "continuous"),
+    limits = c(-5, 5),
+    # midpoint = 0,
+    oob = scales::squish
+  ) +
+  theme_leo() +
+  guides(fill = guide_colorbar(title = "ddCt")) +
+  labs(title = "Fold-change of laccase gene expression in single mutants") +
+  theme(
+    axis.title = element_blank(),
+    legend.position = "bottom"
+  )
+
+WT_ex <- normalised %>%
+  filter(gene %in% c("LAC4", "LAC11", "LAC12", "LAC17") &
+    sample == "WT" &
+    metric == "dCt") %>%
+  mutate(gene = ordered(glue("<i>{gene}</i>"), levels = c("<i>LAC4</i>", "<i>LAC11</i>", "<i>LAC12</i>", "<i>LAC17</i>")))
+
+
+WT_dCt <- ggplot(
+  WT_ex,
+  aes(
+    x = gene,
+    y = value
+  )
+) +
+  # geom_bar(stat = "identity") +
+  ggbeeswarm::geom_quasirandom(
+    shape = 16,
+    alpha = 0.75,
+    # stroke = 0.2,
+    size = 1
+  ) +
+  geom_boxplot(
+    outlier.alpha = 0,
+    alpha = 0.75,
+    size = 0.2,
+    fatten = 1,
+    colour = "black",
+    width = 0.25
+  ) +
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  # scale_y_log10() +
+  scale_fill_manual(values = pal_ostwald_disc_long) +
+  labs(y = "Relative expression (&Delta;Ct)") +
+  theme_leo() +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_markdown(),
+    axis.title.x = element_textbox_simple()
+  ) +
+  coord_flip()
+
+pdf("WT_expression.pdf", height = onecol * 0.5, width = onecol * 0.5)
+WT_dCt
+dev.off()
+```
+
+# Section activity
+
+## WT inactivation
+
+```{r}
+
+data <- read_csv(paste0(datapath, "PhD/Laccase_activity/2020-09_activity/DAF/2020-09-18_inactivation/2020-09-18_inactivation.csv")) %>%
+  mutate(time = slice * interval) %>%
+  select(-c(slice, interval)) %>%
+  group_by(time, genotype, replicate, technical, substrate, treatment, pH, date, cell_type) %>%
+  mutate(point = row_number())
+
+#### subtract water column and background ####
+data <- data %>%
+  group_by(time, genotype, replicate, substrate, technical, treatment, pH, date) %>%
+  mutate(
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
+  ) %>%
+  group_by(genotype, replicate, substrate, technical, treatment, pH, date, cell_type, point) %>%
+  mutate(
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == 100]
+  )
+
+nested_data <- data %>%
+  filter(time >= 100 & time <= 230) %>%
+  select(-mean_absorbance, -corrected_absorbance) %>%
+  nest(time, zeroed_absorbance, median_hue) %>%
+  mutate(
+    fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  filter(term == "time")
+
+raw_absorbance <- ggplot(
+  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = treatment
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = 100,
+    xmax = 230,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(point, treatment, technical)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  geom_smooth(
+    size = 0.2,
+    se = F
+  ) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  # coord_cartesian(xlim = c(60, 100)) +
+  facet_wrap(~cell_type)
+
+activity_grid <- ggplot(
+  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = treatment
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = 100,
+    xmax = 230,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(treatment, point, technical)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  geom_smooth(
+    size = 0.2,
+    se = F
+  ) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  # coord_cartesian(ylim = c(0, 0.2)) +
+  facet_wrap(~cell_type)
+
+slopes <- ggplot(
+  nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+  aes(
+    x = treatment,
+    y = estimate,
+    colour = treatment,
+    shape = as.character(technical)
+  )
+) +
+  geom_quasirandom(aes(group = treatment),
+    size = 1,
+    dodge.width = 0.5,
+    alpha = 0.5
+  ) +
+  geom_violin(
+    aes(group = interaction(treatment, genotype)),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.5),
+    size = 0.2,
+    scale = "width"
+  ) +
+  # scale_colour_manual(values = c("#275d95")) +
+  # scale_x_continuous(breaks = c(4, 5, 6, 7)) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  facet_wrap(~cell_type, ncol = 4)
+
+# pdf("WT_inactivation.pdf", width = twocol, height = onecol * 0.5)
+raw_absorbance
+activity_grid
+slopes
+# dev.off()
+```
+
+### Extension
+
+After overnight incubation, added another 2 µl of 7 mM DAF stock to each well and took a picture every 10 min for 30 cycles.
+
+```{r}
+
+data <- read_csv(paste0(datapath, "PhD/Laccase_activity/2020-09_activity/DAF/2020-09-18_inactivation/2020-09-18_inactivation_extended.csv")) %>%
+  mutate(time = slice * interval) %>%
+  select(-c(slice, interval)) %>%
+  group_by(time, genotype, replicate, technical, substrate, treatment, pH, date, cell_type) %>%
+  mutate(point = row_number())
+
+#### subtract water column and background ####
+data <- data %>%
+  group_by(time, genotype, replicate, substrate, technical, treatment, pH, date) %>%
+  mutate(
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
+  ) %>%
+  group_by(genotype, replicate, substrate, technical, treatment, pH, date, cell_type, point) %>%
+  mutate(
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == 100]
+  )
+
+nested_data <- data %>%
+  filter(time >= 100 & time <= 230) %>%
+  select(-mean_absorbance, -corrected_absorbance) %>%
+  nest(time, zeroed_absorbance, median_hue) %>%
+  mutate(
+    fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  filter(term == "time")
+
+raw_absorbance <- ggplot(
+  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = treatment
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = 100,
+    xmax = 230,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(point, treatment)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  geom_smooth(
+    size = 0.2,
+    se = F
+  ) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  # coord_cartesian(xlim = c(60, 100)) +
+  facet_wrap(~cell_type)
+
+activity_grid <- ggplot(
+  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = treatment
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = 100,
+    xmax = 230,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(treatment, point)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  geom_smooth(
+    size = 0.2,
+    se = F
+  ) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  # coord_cartesian(ylim = c(0, 0.2)) +
+  facet_wrap(~cell_type)
+
+slopes <- ggplot(
+  nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX")),
+  aes(
+    x = treatment,
+    y = estimate,
+    colour = treatment
+  )
+) +
+  geom_quasirandom(
+    dodge.width = 0.5,
+    alpha = 0.5
+  ) +
+  geom_violin(
+    aes(group = interaction(treatment, genotype)),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.5),
+    size = 0.2,
+    scale = "width"
+  ) +
+  # scale_colour_manual(values = c("#275d95")) +
+  # scale_x_continuous(breaks = c(4, 5, 6, 7)) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  facet_wrap(~cell_type, ncol = 4)
+
+# pdf("WT_inactivation_extended.pdf", width = twocol, height = onecol * 0.5)
+raw_absorbance
+activity_grid
+slopes
+# dev.off()
+```
+
+## DAB pH 5
+
+```{r}
+lm_start <- 150
+lm_stop <- 400
+
+
+data_dab <- read_csv(paste0(
+  datapath,
+  "PhD/Laccase_activity/2020-09_activity/2020-09_lac_activity.csv"
+),
+comment = '"#',
+col_types = "ccDcccdcddd"
+) %>%
+  mutate(
+    time = slice * interval,
+    genotype = ordered(genotype, levels = c(
+      "WT",
+      "Q-4",
+      "Q-5",
+      "Q-10",
+      "Q-12",
+      "Q-17",
+      "Q"
+    )),
+    cell_type = ordered(cell_type, levels = c(
+      "IF",
+      "LP",
+      "XF",
+      "PX",
+      "MX",
+      "PH",
+      "BG"
+    ))
+  ) %>%
+  select(-c(slice, interval)) %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  mutate(
+    point = row_number(),
+    replicate = as.character(replicate)
+  )
+
+#### subtract water column and background ####
+data_dab <- data_dab %>%
+  filter(substrate == "DAB") %>%
+  anti_join(read_csv(paste0(
+    datapath,
+    "PhD/Laccase_activity/2020-09_activity/excluded_sections.csv"
+  ),
+  col_type = "ccDccc"
+  )) %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
+  mutate(
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
+  ) %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
+  mutate(
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == lm_start]
+  )
+
+nested_data_dab <- data_dab %>%
+  filter(time >= lm_start & time <= lm_stop) %>%
+  select(-mean_absorbance, -corrected_absorbance) %>%
+  nest(data = c(time, zeroed_absorbance, median_hue)) %>%
+  mutate(
+    fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "time") %>%
+  group_by(genotype, replicate, date, treatment) %>%
+  mutate(PH_slope = mean(estimate[cell_type == "PH"]))
+# %>%
+#   group_by(genotype, date, substrate, treatment, pH, cell_type) %>%
+#   mutate(mean_estimate = mean(estimate)) %>%
+#   group_by(date, substrate, treatment, pH, cell_type) %>%
+#   mutate(rel_estimate = estimate / mean_estimate[genotype == "WT"])
+
+
+data_dab <- data_dab %>%
+  left_join(select(nested_data_dab, c(genotype:point, adj.r.squared)))
+
+slope_dist <- ggplot(nested_data_dab) +
+  geom_density(aes(
+    x = adj.r.squared,
+    fill = genotype
+  ),
+  # binwidth = 0.01,
+  # position = "identity",
+  alpha = 0.25,
+  size = 0.1
+  ) +
+  geom_vline(
+    xintercept = 0.85,
+    colour = "black",
+    linetype = 2
+  ) +
+  theme_leo() +
+  facet_wrap(~cell_type, ncol = 1)
+
+unfiltered_data_dab <- data_dab %>%
+  filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+    pH == 5 &
+    treatment == "none")
+
+data_dab <- data_dab %>%
+  filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+    pH == 5 &
+    treatment == "none" &
+    adj.r.squared > 0.85)
+
+nested_data_dab <- nested_data_dab %>%
+  filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+    pH == 5 &
+    treatment == "none" &
+    adj.r.squared > 0.85)
+
+avg_slopes <- nested_data_dab %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  summarise(mean_slope = mean(estimate))
+
+bulk_activity <- avg_slopes %>%
+  group_by(genotype, substrate, treatment, pH, cell_type) %>%
+  # summarise(mean = mean(mean_slope)) %>%
+  pivot_wider(names_from = cell_type, values_from = mean_slope) %>%
+  summarise(mean = 0.5 * IF + 0.25 * XF + 0.23 * MX + 0.02 * PX)
+
+bulk_bars <- ggplot(bulk_activity, aes(x = genotype, y = mean)) +
+  stat_summary(
+    fun = mean, color = NA,
+    fill = pal_ostwald_disc[2],
+    alpha = 0.5,
+    geom = "bar",
+    aes(group = 1), size = 5,
+    show.legend = FALSE
+  ) +
+  geom_jitter(width = 0.1) +
+  labs(y = "Stem activity towards DAB") +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+
+activity_grid <- ggplot(
+  data_dab,
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = genotype,
+    linetype = treatment
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = lm_start,
+    xmax = lm_stop,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(genotype, replicate, point, date, treatment)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  geom_smooth(
+    data = filter(data_dab, time >= lm_start & time <= lm_stop),
+    size = 0.2,
+    se = F,
+    method = "lm",
+    fullrange = T
+  ) +
+  labs(
+    x = "Time [min]",
+    y = "Corrected & zeroed abs."
+  ) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  coord_cartesian(xlim = c(0, 600)) +
+  facet_wrap(~cell_type, nrow = 1)
+
+raw_absorbance <- ggplot(
+  unfiltered_data_dab,
+  aes(
+    x = time,
+    y = mean_absorbance,
+    colour = genotype
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = lm_start,
+    xmax = lm_stop,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(genotype, replicate, point, date)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  # geom_smooth(size = 0.2,
+  #             se = F) +
+  labs(
+    x = "Time [min]",
+    y = "Raw absorbance"
+  ) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  coord_cartesian(xlim = c(0, 600)) +
+  facet_wrap(~cell_type, nrow = 1)
+
+
+letters_tech <- letter_groups(nested_data_dab,
+  estimate,
+  genotype,
+  "tukey",
+  cell_type,
+  print_position = "above",
+  print_adjust = 1
+)
+
+letters <- letter_groups(avg_slopes,
+  mean_slope,
+  genotype,
+  "tukey",
+  cell_type,
+  print_position = "above",
+  print_adjust = 1
+) %>%
+  select(-mean_slope) %>%
+  left_join(select(letters_tech, -Letters))
+
+
+slopes <- ggplot(
+  nested_data_dab,
+  aes(
+    x = genotype,
+    y = estimate,
+    fill = genotype
+  )
+) +
+  geom_quasirandom(aes(
+    shape = replicate,
+    group = genotype,
+    fill = genotype
+  ),
+  colour = "black",
+  # fill = "grey90",
+  dodge.width = 0.5,
+  alpha = 0.5,
+  stroke = 0.1,
+  size = 0.5
+  ) +
+  geom_violin(
+    aes(group = interaction(treatment, genotype)),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.4,
+    position = position_dodge(width = 0.5),
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_point(
+    data = avg_slopes,
+    aes(
+      y = mean_slope,
+      shape = replicate
+    ),
+    colour = "black",
+    alpha = 0.75,
+    stroke = 0.1,
+    size = 1
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "DAB oxidation rate") +
+  scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    # legend.position = "bottom",
+    axis.title.x = element_blank()
+  ) +
+  facet_wrap(~cell_type, nrow = 1)
+
+# pdf("DAB_pH5.pdf", width = twocol, height = onecol * 0.35)
+# raw_absorbance /
+#   activity_grid /
+slopes
+# dev.off()
+
+# pdf("DAB_pH5_diagnostics.pdf", width = onecol, height = onecol)
+slope_dist
+# dev.off()
+
+# pdf("bulk_DAF.pdf", width = 0.5 * onecol, height = 0.5 * onecol)
+bulk_bars
+# dev.off()
+```
+
+
+## pH pilot
+
+```{r}
+data <- read_csv(paste0(
+  datapath,
+  "PhD/Laccase_activity/2020-09_activity/2020-09_lac_activity.csv"
+),
+comment = '"#'
+) %>%
+  mutate(time = slice * interval) %>%
+  select(-c(slice, interval)) %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  mutate(point = row_number())
+
+#### subtract water column and background ####
+data <- data %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
+  mutate(
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
+  ) %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
+  mutate(
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == 60]
+  )
+
+nested_data <- data %>%
+  filter(time >= 100 & time <= 150) %>%
+  select(-mean_absorbance, -corrected_absorbance) %>%
+  nest(time, zeroed_absorbance, median_hue) %>%
+  mutate(
+    fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  filter(term == "time")
+
+avg_slopes <- nested_data %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  summarise(mean_slope = mean(estimate))
+
+raw_absorbance <- ggplot(
+  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+    date == "2020-09-14"),
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = cell_type
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = 100,
+    xmax = 150,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(point, cell_type)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  geom_smooth(
+    size = 0.2,
+    se = F
+  ) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  # coord_cartesian(xlim = c(60, 100)) +
+  facet_grid(treatment ~ pH)
+
+
+activity_grid <- ggplot(
+  data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+    date == "2020-09-14"),
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = cell_type
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = 100,
+    xmax = 150,
+    fill = "grey95"
+  ) +
+  geom_smooth(
+    size = 0.2,
+    se = F
+  ) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  # coord_cartesian(xlim = c(60, 100)) +
+  facet_grid(treatment ~ pH)
+
+
+slopes <- ggplot(
+  nested_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+    date == "2020-09-14"),
+  aes(
+    x = pH,
+    y = estimate,
+    colour = treatment
+  )
+) +
+  geom_quasirandom(
+    dodge.width = 0.5,
+    alpha = 0.5
+  ) +
+  geom_violin(
+    aes(group = interaction(treatment, pH)),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.5),
+    size = 0.2,
+    scale = "width"
+  ) +
+  scale_colour_manual(values = c("grey80", "#275d95")) +
+  scale_x_continuous(breaks = c(4, 5, 6, 7)) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_wrap(~cell_type, ncol = 4)
+
+# pdf("WT_DAF_pH.pdf", width = twocol, height = onecol * 0.5)
+raw_absorbance
+activity_grid
+slopes
+# dev.off()
+```
+
+## DAF pH 5
+
+```{r}
+# start and stop of the time-window for linear regressions
+lm_start <- 100
+lm_stop <- 300
+
+
+data_daf <- read_csv(paste0(
+  datapath,
+  "PhD/Laccase_activity/2020-09_activity/2020-09_lac_activity.csv"
+),
+comment = '"#',
+col_types = "ccDcccdcddd"
+) %>%
+  mutate(
+    time = slice * interval,
+    genotype = ordered(genotype, levels = c(
+      "WT",
+      "Q-4",
+      "Q-5",
+      "Q-10",
+      "Q-12",
+      "Q-17",
+      "Q"
+    )),
+    cell_type = ordered(cell_type, levels = c(
+      "IF",
+      "LP",
+      "XF",
+      "PX",
+      "MX",
+      "PH",
+      "BG"
+    ))
+  ) %>%
+  select(-c(slice, interval)) %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  mutate(
+    point = row_number(),
+    replicate = as.character(replicate)
+  )
+
+#### subtract water column and background ####
+data_daf <- data_daf %>%
+  filter(substrate == "DAF") %>%
+  anti_join(read_csv(paste0(
+    datapath,
+    "PhD/Laccase_activity/2020-09_activity/excluded_sections.csv"
+  ),
+  col_type = "ccDccc"
+  )) %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
+  mutate(
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "BG"])
+  ) %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
+  mutate(
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == lm_start]
+  )
+
+nested_data_daf <- data_daf %>%
+  filter(time >= lm_start & time <= lm_stop) %>%
+  select(-mean_absorbance, -corrected_absorbance) %>%
+  nest(data = c(time, zeroed_absorbance, median_hue)) %>%
+  mutate(
+    fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "time")
+# %>%
+#   group_by(genotype, date, substrate, treatment, pH, cell_type) %>%
+#   mutate(mean_estimate = mean(estimate)) %>%
+#   group_by(date, substrate, treatment, pH, cell_type) %>%
+#   mutate(rel_estimate = estimate / mean_estimate[genotype == "WT"])
+
+
+data_daf <- data_daf %>%
+  left_join(select(nested_data_daf, c(genotype:point, adj.r.squared)))
+
+slope_dist <- ggplot(nested_data_daf) +
+  geom_density(aes(
+    x = adj.r.squared,
+    fill = genotype
+  ),
+  # binwidth = 0.01,
+  # position = "identity",
+  alpha = 0.25,
+  size = 0.1
+  ) +
+  geom_vline(
+    xintercept = 0.85,
+    colour = "black",
+    linetype = 2
+  ) +
+  theme_leo() +
+  facet_wrap(~cell_type, ncol = 1)
+
+
+data_daf <- data_daf %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+  pH == 5 &
+  treatment == "none" &
+  adj.r.squared > 0.85)
+nested_data_daf <- nested_data_daf %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+  pH == 5 &
+  treatment == "none" &
+  adj.r.squared > 0.85)
+
+avg_slopes <- nested_data_daf %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  summarise(mean_slope = mean(estimate))
+
+bulk_activity <- avg_slopes %>%
+  group_by(genotype, substrate, treatment, pH, cell_type) %>%
+  # summarise(mean = mean(mean_slope)) %>%
+  pivot_wider(names_from = cell_type, values_from = mean_slope) %>%
+  summarise(mean = 0.5 * IF + 0.25 * XF + 0.23 * MX + 0.02 * PX)
+
+bulk_bars <- ggplot(bulk_activity, aes(x = genotype, y = mean)) +
+  stat_summary(
+    fun = mean, color = NA,
+    fill = pal_ostwald_disc[1],
+    alpha = 0.5,
+    geom = "bar",
+    aes(group = 1), size = 5,
+    show.legend = FALSE
+  ) +
+  geom_jitter(width = 0.1) +
+  labs(y = "Stem activity towards DAF") +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+
+activity_grid <- ggplot(
+  data_daf,
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = genotype,
+    linetype = treatment
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = lm_start,
+    xmax = lm_stop,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(genotype, replicate, point, date, treatment)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  geom_smooth(
+    data = filter(data_daf, time >= lm_start & time <= lm_stop),
+    size = 0.2,
+    se = F,
+    method = "lm",
+    fullrange = T
+  ) +
+  labs(
+    x = "Time [min]",
+    y = "Corrected & zeroed abs."
+  ) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  coord_cartesian(xlim = c(0, 400)) +
+  facet_grid(~cell_type)
+
+raw_absorbance <- ggplot(
+  data_daf,
+  aes(
+    x = time,
+    y = mean_absorbance,
+    colour = genotype
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = lm_start,
+    xmax = lm_stop,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(genotype, replicate, point, date)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  # geom_smooth(size = 0.2,
+  #             se = F) +
+  labs(
+    x = "Time [min]",
+    y = "Raw absorbance"
+  ) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  coord_cartesian(xlim = c(0, 400)) +
+  facet_wrap(~cell_type, ncol = 5)
+
+
+letters_tech <- letter_groups(nested_data_daf,
+  estimate,
+  genotype,
+  "tukey",
+  cell_type,
+  print_position = "above",
+  print_adjust = 1
+)
+
+letters <- letter_groups(avg_slopes,
+  mean_slope,
+  genotype,
+  "tukey",
+  cell_type,
+  print_position = "above",
+  print_adjust = 1
+) %>%
+  select(-mean_slope) %>%
+  left_join(select(letters_tech, -Letters))
+
+
+slopes <- ggplot(
+  nested_data_daf,
+  aes(
+    x = genotype,
+    y = estimate,
+    fill = genotype
+  )
+) +
+  geom_quasirandom(aes(
+    shape = replicate,
+    group = genotype,
+    fill = genotype
+  ),
+  colour = "black",
+  # fill = "grey90",
+  dodge.width = 0.5,
+  alpha = 0.5,
+  stroke = 0.1,
+  size = 0.5
+  ) +
+  geom_violin(
+    aes(group = interaction(treatment, genotype)),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.4,
+    position = position_dodge(width = 0.5),
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_point(
+    data = avg_slopes,
+    aes(
+      y = mean_slope,
+      shape = replicate
+    ),
+    colour = "black",
+    alpha = 0.75,
+    stroke = 0.1,
+    size = 1
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "DAF oxidation rate") +
+  scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    # legend.position = "bottom",
+    axis.title.x = element_blank()
+  ) +
+  facet_wrap(~cell_type, ncol = 5)
+
+# pdf("DAF_pH5.pdf", width = twocol, height = onecol * 0.35)
+# raw_absorbance /
+#   activity_grid /
+slopes
+# dev.off()
+
+# pdf("DAF_pH5_diagnostics.pdf", width = onecol, height = onecol)
+slope_dist
+# dev.off()
+
+# pdf("bulk_DAF.pdf", width = 0.5 * onecol, height = 0.5 * onecol)
+bulk_bars
+# dev.off()
+```
+
+### Animations
+
+
+```{r}
+# gganimate conflicts with showtext, so to generate the animation with the custom theme, comment out showtext, the font_add lines and the "Helvetica" lines in the setup.
+lm_start <- 100
+lm_stop <- 300
+
+data_sample <- data %>%
+  filter(
+    # genotype == "WT" &
+    date == "2020-10-01" &
+      cell_type == "IF"
+    # point == 1
+  )
+
+data_lm <- data %>%
+  filter(
+    # genotype == "WT" &
+    date == "2020-10-01" &
+      cell_type == "IF" &
+      time >= lm_start &
+      time <= lm_stop
+    # point == 1
+  ) %>%
+  group_by(genotype) %>%
+  nest() %>%
+  mutate(model = data %>% map(~ lm(zeroed_absorbance ~ time, data = .))) %>%
+  mutate(Pred = map2(model, data, predict)) %>%
+  unnest(Pred, data)
+
+raw_absorbance <- ggplot(
+  data_sample,
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = genotype
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = lm_start,
+    xmax = lm_stop,
+    fill = "grey95"
+  ) +
+  geom_line(
+    aes(group = interaction(genotype, replicate, point, date)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  geom_point(
+    aes(group = interaction(genotype, replicate, point, date)),
+    alpha = 0.1,
+    size = 1
+  ) +
+  geom_line(
+    data = data_lm,
+    aes(y = Pred),
+    size = 0.5,
+    linetype = 2,
+    se = F,
+    method = "lm",
+    fullrange = T
+  ) +
+  labs(
+    x = "Time [min]",
+    y = "Corrected absorbance"
+  ) +
+  # theme_leo() +
+  # theme(legend.position = "bottom") +
+  # coord_cartesian(xlim = c(0, 400),
+  #                 ylim = c(0,2)) +
+  # facet_wrap(~cell_type, ncol = 5) +
+  transition_reveal(time)
+
+
+animate(raw_absorbance,
+  # renderer = magick_renderer(),
+  # device = "tiff",
+  height = 2,
+  width = 2,
+  units = "in",
+  res = 300
+)
+
+anim_save("Full_IF_1_animation.gif")
+```
+
+# TE activity
+
+## Load viability and differentiation data
+
+```{r}
+
+growth_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2021-01_inductions/",
+    pattern = "*.txt",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_tsv(flnm,
+    comment = "#",
+    col_names = "code",
+    col_types = "c",
+    # locale = locale(decimal_mark = ",")
+  ) %>%
+    mutate(filename = basename(flnm)) %>%
+    separate(filename, into = c("date", "replicate", "dpi", "treatment"), sep = "_") %>%
+    mutate(
+      replicate = str_remove(replicate, fixed("R")),
+      dpi = as.numeric(str_remove(dpi, fixed("d"))),
+      treatment = str_remove(treatment, fixed(".txt"))
+    )
+}
+
+
+growth_data <- map(growth_files, read_plus) %>%
+  bind_rows() %>%
+  mutate(
+    n = str_length(code),
+    nTEs_alive = str_count(code, "k"),
+    nTEs_dead = str_count(code, "l"),
+    TEs_alive = str_count(code, "i"),
+    TEs_dead = str_count(code, "o"),
+    nTE_viab = nTEs_alive / (nTEs_alive + nTEs_dead),
+    TE_prop = (TEs_alive + TEs_dead) / n,
+    TE_viab = TEs_alive / (TEs_alive + TEs_dead)
+  )
+
+growth_avg <- growth_data %>%
+  group_by(treatment, dpi) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+```
+
+## Plot differentiation curves
+
+```{r}
+
+growth <- ggplot(growth_data) +
+  geom_tile(
+    data = growth_avg,
+    aes(
+      x = dpi,
+      y = TE_prop,
+      fill = nTE_viab
+    ),
+    width = 1,
+    height = Inf,
+    alpha = 0.75
+  ) +
+  geom_point(aes(
+    x = dpi,
+    y = TE_prop,
+    fill = TE_viab
+  ),
+  size = 3,
+  shape = 21,
+  stroke = 0.2
+  ) +
+  geom_line(
+    data = growth_avg,
+    (aes(
+      x = dpi,
+      y = TE_prop
+    ))
+  ) +
+  scale_fill_gradientn(colours = pal_ostwald_cont, trans = "reverse", name = "Viability", limits = c(1, 0)) +
+  scale_x_continuous(limits = c(2.5, 9.5), expand = expansion(add = 0)) +
+  labs(
+    x = "Days past induction",
+    y = "TE proportion"
+  ) +
+  theme_leo() +
+  theme(legend.position = "bottom")
+
+# pdf("TE_growth.pdf", width = onecol, height = onecol)
+growth
+# dev.off()
+```
+
+# Raman microspectroscopy
+
+## Load spectra
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+rmn_files <-
+  list.files(
+    path = paste0(datapath, "PhD/Raman/2020-11_lac_mutants/"),
+    pattern = "*.txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_tsv(flnm,
+    comment = "#",
+    col_names = c("wavenumber", "intensity"),
+    col_types = "cc",
+    # locale = locale(decimal_mark = ",")
+  ) %>%
+    mutate(
+      filename = basename(flnm)
+    ) %>%
+    separate(filename, into = c("date", "genotype", "replicate", "cell_type", "TE"), sep = "_") %>%
+    select(-date) %>%
+    mutate(
+      wavenumber = as.numeric(str_replace(wavenumber, fixed(","), fixed("."))),
+      intensity = as.numeric(str_replace(intensity, fixed(","), fixed("."))),
+      TE = str_remove(TE, fixed(".txt")),
+    ) %>%
+    filter(wavenumber > 300 &
+      cell_type != "IFML") %>%
+    pivot_wider(
+      id_cols = c(genotype, replicate, cell_type, TE),
+      names_from = wavenumber,
+      values_from = intensity
+    ) %>%
+    group_by(genotype, replicate, cell_type, TE) %>%
+    nest()
+}
+
+rmn_lac <- map(rmn_files, read_plus) %>%
+  bind_rows()
+
+#### baseline correction ####
+rmn_als <- function(x) {
+  corrected_spectra <- baseline.als(as.matrix(x),
+    lambda = 5,
+    p = 0.01,
+    maxit = 100
+  )
+  as_tibble(corrected_spectra$corrected, rownames = NA)
+}
+
+rmn_lac_corrected <- rmn_lac %>%
+  mutate(corrected_data = map(data, rmn_als)) %>%
+  select(-data) %>%
+  unnest() %>%
+  pivot_longer(-c(genotype, cell_type, replicate, TE),
+    names_to = "wavenumber",
+    values_to = "corrected.intensity"
+  ) %>%
+  drop_na() %>%
+  mutate(wavenumber = as.numeric(wavenumber))
+
+#### filtering and scaling ####
+
+# alignment
+lig_peak <- rmn_lac_corrected %>%
+  unite("ID",
+    genotype, cell_type, replicate, TE,
+    remove = F,
+    sep = "_"
+  ) %>%
+  filter(round(wavenumber, digits = 0) %in% c(370:390)) %>%
+  group_by(genotype, replicate, cell_type, TE) %>%
+  mutate(
+    peak_pos = wavenumber[which.max(corrected.intensity)]
+  ) %>%
+  select(-wavenumber, -corrected.intensity) %>%
+  unique() %>%
+  group_by(genotype, cell_type) %>%
+  mutate(peak_pos_ref = peak_pos[replicate == 5 & TE == 1])
+
+rmn_lac_aligned <- rmn_lac_corrected %>%
+  left_join(lig_peak) %>%
+  group_by(genotype, replicate, cell_type, TE, wavenumber) %>%
+  mutate(wavenumber = wavenumber + (peak_pos_ref - peak_pos))
+
+# scaling and filtering
+rmn_lac_scaled <- rmn_lac_aligned %>%
+  group_by(genotype, cell_type, replicate, TE) %>%
+  mutate(
+    AUC = MESS::auc(wavenumber, corrected.intensity),
+    scaled = corrected.intensity / AUC,
+    scaled_lig = corrected.intensity / (
+      (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) + corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1]
+    ),
+    scaled_cellu = corrected.intensity /
+      corrected.intensity[abs(wavenumber - 375) == min(abs(wavenumber - 375))][1]
+  )
+
+rmn_lac_avg <- rmn_lac_scaled %>%
+  mutate(wavenumber = round(wavenumber, digits = 1)) %>%
+  group_by(genotype, cell_type) %>%
+  arrange(genotype, cell_type, wavenumber) %>%
+  summarise(
+    roll_mean = slider::slide_index_dbl(scaled, wavenumber, mean, .before = 1, .after = 1),
+    roll_sd = slider::slide_index_dbl(scaled, wavenumber, sd, .before = 2, .after = 2),
+    roll_scaled_cellu = slider::slide_index_dbl(scaled_cellu, wavenumber, mean, .before = 1, .after = 1),
+    wavenumber = wavenumber
+  )
+
+rmn_lac_sum <- rmn_lac_scaled %>%
+  group_by(genotype, cell_type, replicate, TE) %>%
+  summarise(
+    "unscaled_lignin" =
+      (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
+        corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "broad_lignin" =
+      corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] +
+        corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1] +
+        corrected.intensity[abs(wavenumber - 1656) == min(abs(wavenumber - 1656))][1] +
+        corrected.intensity[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
+    "total_lignin" = (scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
+      scaled[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "P_rel" = scaled_lig[abs(wavenumber - 990) == min(abs(wavenumber - 990))][1],
+    "G_rel" = scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "G_tot" = scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "GOH_rel" = scaled_lig[abs(wavenumber - 1656) == min(abs(wavenumber - 1656))][1],
+    "GCHO_rel" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
+    "GCHO_tot" = scaled[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
+    "S_rel" = scaled_lig[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "S_tot" = scaled[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "cellulose" =
+      scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1] +
+        scaled[abs(wavenumber - 375) == min(abs(wavenumber - 375))][1] +
+        scaled[abs(wavenumber - 1120) == min(abs(wavenumber - 1120))][1],
+    "cellu_cryst" = scaled[abs(wavenumber - 375) == min(abs(wavenumber - 375))][1] /
+      scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1],
+    "lig.cellu" = total_lignin / cellulose,
+    "G.cellu" = scaled_cellu[abs(wavenumber - 990) == min(abs(wavenumber - 990))][1],
+    "P.cellu" = scaled_cellu[abs(wavenumber - 990) == min(abs(wavenumber - 990))][1],
+    "S.G" = scaled_lig[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1] /
+      scaled_lig[abs(wavenumber - 1276) == min(abs(wavenumber - 1276))][1],
+    "GOH.G" = scaled_lig[abs(wavenumber - 1656) == min(abs(wavenumber - 1656))][1] /
+      scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "GCHO.GOH" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1] /
+      scaled_lig[abs(wavenumber - 1656) == min(abs(wavenumber - 1656))][1],
+    "O4_van_rel" = scaled_lig[abs(wavenumber - 1303) == min(abs(wavenumber - 1303))][1],
+    "other_van_rel" = scaled_lig[abs(wavenumber - 785) == min(abs(wavenumber - 785))][1],
+    "O4_syr_rel" = scaled_lig[abs(wavenumber - 1297) == min(abs(wavenumber - 1297))][1],
+    "other_syr_rel" = scaled_lig[abs(wavenumber - 450) == min(abs(wavenumber - 450))][1],
+    "Benz_rel" = O4_van_rel + other_van_rel + O4_syr_rel + other_syr_rel,
+    "AUC" = mean(AUC)
+  )
+```
+
+## View spectra
+
+```{r}
+rmn_lac_test <- ggplot(
+  rmn_lac_scaled %>% filter(genotype == "WT" & cell_type == "MX"),
+  aes(
+    x = wavenumber,
+    y = scaled_cellu
+  )
+) +
+  scale_x_continuous(
+    trans = "reverse",
+    # limits = c(1020, 980)
+  ) +
+  # scale_y_continuous(limits = c(-0.001, 0.003)) +
+  geom_vline(
+    xintercept = c(1656, 1600, 1330, 1120, 1095, 990, 855, 375),
+    size = 0.2
+  ) +
+  # annotate("text",
+  #          label = c("1660", "1600", "1330", "1120", "1095", "1001", "375"),
+  #          y = 0.007,
+  #          x = c(1661, 1601, 1331, 1170, 1096, 1002, 376),
+  #          hjust = 0,
+  #          family = "Helvetica",
+  #          size = ggtext_size) +
+  geom_line(aes(
+    group = interaction(cell_type, replicate, TE),
+    colour = cell_type
+  ),
+  alpha = 0.25,
+  size = 0.1
+  ) +
+  # geom_ribbon(data = rmn_lac_avg,
+  #           aes(fill = genotype,
+  #               y = roll_mean,
+  #               ymin = roll_mean - roll_sd,
+  #               ymax = roll_mean + roll_sd),
+  #           colour = NA,
+  #           alpha = 0.25) +
+  geom_line(
+    data = rmn_lac_avg %>% filter(genotype == "WT" & cell_type == "MX"),
+    aes(
+      colour = cell_type,
+      y = roll_scaled_cellu
+    ),
+    size = 0.2
+  ) +
+  labs(
+    x = expression(paste("Wavenumber [", cm^-1, "]")),
+    y = "Scaled scattering intensity"
+  ) +
+  # scale_color_brewer(palette = "Set1", aesthetics = c("colour", "fill")) +
+  scale_colour_manual(values = pal_pedersen_disc) +
+  theme_leo() +
+  theme(
+    # legend.position = "bottom",
+    legend.title = element_blank()
+  ) +
+  guides(colour = guide_legend(override.aes = list(alpha = 1, size = 1))) +
+  facet_wrap(~genotype, ncol = 1)
+
+plotly::ggplotly(rmn_lac_test)
+# pdf("rmn_lac.pdf", height = onecol * 0.5, width = onecol * 1.5)
+# rmn_lac_test
+# dev.off()
+```
+
+## Lignin composition
+
+```{r}
+
+violin_data <- rmn_lac_sum %>%
+  select(
+    "Total lignin" = total_lignin,
+    "S/G" = S.G,
+    "P-units" = P_rel,
+    AUC,
+    # "Cellulose cryst." = cellu_cryst,
+    "Benzaldehydes" = Benz_rel,
+    # "P/cellulose" = P.cellu,
+    # "G-units" = G_rel,
+    # "Lignin/cellulose" = lig.cellu,
+    "G-CHO/G-OH" = GCHO.GOH
+  ) %>%
+  filter(cell_type != "LP") %>%
+  pivot_longer(
+    cols = -c(genotype:replicate),
+    names_to = "variable",
+    values_to = "value"
+  ) %>%
+  mutate(
+    cell_type = ordered(cell_type,
+      levels = c(
+        "IF",
+        "LP",
+        "XF",
+        "PX",
+        "MX"
+      )
+    ),
+    genotype = ordered(genotype, levels = c(
+      "WT",
+      "Q-4",
+      "Q-5",
+      "Q-10",
+      "Q-12",
+      "Q-17",
+      "Q"
+    )),
+    instance = case_when(
+      replicate %in% c(1:5) ~ "1",
+      TRUE ~ "2"
+    )
+  )
+
+rmn_n <- rmn_lac_sum %>%
+  group_by(genotype, replicate, cell_type) %>%
+  summarise(n = n())
+
+letters <- letter_groups(violin_data,
+  value,
+  genotype,
+  "tukey",
+  variable,
+  cell_type,
+  print_position = "above"
+) %>%
+  mutate(value = case_when(
+    variable == "S/G" & cell_type %in% c("PX", "MX") ~
+    value + 1,
+    variable == "Total lignin" & cell_type == "MX" ~
+    value + 0.0005,
+    variable == "P-units" & cell_type == "MX" ~
+    value + 0.025,
+    TRUE ~ value
+  ))
+
+lig_violin <- ggplot(
+  violin_data,
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
+  ggbeeswarm::geom_quasirandom(
+    aes(colour = instance),
+    size = 1,
+    # dodge.width = 0.5,
+    alpha = 0.5
+  ) +
+  # geom_violin(
+  #   draw_quantiles = 0.5,
+  #   fill = "white",
+  #   colour = "black",
+  #   alpha = 0.85,
+  #   width = 0.2,
+  #   # position = position_dodge(width = 0.5),
+  #   size = 0.2,
+  #   scale = "width"
+  # ) +
+  # geom_boxplot(
+  #   # draw_quantiles = 0.5,
+  #   outlier.alpha = 0,
+  #   fill = "white",
+  #   colour = "black",
+  #   alpha = 0.85,
+  #   width = 0.2,
+  #   # position = position_dodge(width = 0.5),
+  #   size = 0.2,
+  #   fatten = 1
+  # ) +
+  geom_violin(
+    draw_quantiles = 0.5,
+    # outlier.alpha = 0,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.4,
+    scale = "width",
+    # position = position_dodge(width = 0.5),
+    size = 0.2,
+    # fatten = 1
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1, 3)]) +
+  # scale_colour_brewer(palette = "Set1") +
+  # scale_colour_viridis_d(drop = FALSE) +
+  scale_x_discrete(drop = FALSE) +
+  theme_leo() +
+  theme(
+    axis.title = element_blank(),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5, face = "plain"),
+    legend.position = "bottom"
+  ) +
+  facet_grid(variable ~ cell_type, scales = "free_y", switch = "y")
+
+# pdf("lig_violin_complete.pdf", width = twocol, height = twocol)
+lig_violin
+# dev.off()
+```
+
+## Raman PCA
+
+```{r}
+pca_data <- rmn_lac_sum %>%
+  select(
+    "Total lignin" = total_lignin,
+    "S/G" = S.G,
+    "P-units" = P_rel,
+    AUC,
+    # "Cellulose cryst." = cellu_cryst,
+    "Benzaldehydes" = Benz_rel,
+    # "P/cellulose" = P.cellu,
+    "G-units" = G_rel,
+    "S-units" = S_rel,
+    "G-CHO/G-OH" = GCHO.GOH
+  ) %>%
+  filter(cell_type != "LP") %>%
+  group_by(genotype, replicate, cell_type) %>%
+  mutate(cell = row_number()) %>%
+  pivot_wider(everything(), names_from = cell_type, values_from = c(4:11)) %>%
+  unite("ID", genotype, replicate, cell)
+
+pca_result <- prcomp(pca_data[, -1], center = TRUE, scale. = TRUE)
+rownames(pca_result$x) <- pca_data$ID
+
+# factoextra::fviz_pca_biplot(pca_result)
+
+gg_pca <- as_tibble(pca_result$x, rownames = NA) %>%
+  rownames_to_column(var = "ID") %>%
+  separate(ID, sep = "_", into = c("genotype", "replicate", "cell"))
+
+gg_pca_ellipse <- gg_pca %>%
+  group_by(genotype) %>%
+  summarise(
+    PC1 = mean(PC1),
+    PC2 = mean(PC2)
+  )
+
+# pdf("overall_PCA.pdf", width = onecol * 1.5, height = onecol)
+ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
+  geom_hline(yintercept = 0, linetype = 1, size = 0.2) +
+  geom_vline(xintercept = 0, linetype = 1, size = 0.2) +
+  geom_point(
+    size = 3,
+    stroke = 0.4,
+    alpha = 0.75,
+    shape = 21
+  ) +
+  stat_ellipse(geom = "polygon", type = "t", level = 0.4) +
+  geom_label_repel(
+    data = gg_pca_ellipse,
+    aes(label = genotype),
+    # fill = NA,
+    size = ggtext_size * 1.5,
+    segment.alpha = 0,
+    label.size = NA,
+    family = "Helvetica"
+  ) +
+  # stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2, size = 0.2) +
+  # annotate("text",
+  #   x = c(-35, 18, 7, -25),
+  #   y = c(18, 25, -17, -25),
+  #   label = c("Epidermis", "Vascular\nbundle", "Interfascicular\nfibre", "Pith"),
+  #   family = "Helvetica",
+  #   size = ggtext_size,
+  #   hjust = 0
+  # ) +
+  labs(
+    # x = "PC 1 [36.4 %]",
+    # y = "PC 2 [19.5 %]",
+    title = "Overall lignin"
+  ) +
+  scale_fill_viridis_d(alpha = 0.5) +
+  theme_leo() +
+  theme(
+    plot.margin = unit(c(2, 2, 3, 2), "mm"),
+    plot.title = element_text(size = 10)
+  )
+# dev.off()
+
+cell_type_pca <- function(celltype) {
+  pca_data <- rmn_lac_sum %>%
+    select(
+      "Total lignin" = total_lignin,
+      "S/G" = S.G,
+      "P-units" = P_rel,
+      AUC,
+      # "Cellulose cryst." = cellu_cryst,
+      "Benzaldehydes" = Benz_rel,
+      # "P/cellulose" = P.cellu,
+      "G-units" = G_rel,
+      "S-units" = S_rel,
+      "G-CHO/G-OH" = GCHO.GOH
+    ) %>%
+    filter(cell_type %in% celltype) %>%
+    group_by(genotype, replicate, cell_type) %>%
+    mutate(cell = row_number()) %>%
+    pivot_wider(everything(), names_from = cell_type, values_from = c(4:11)) %>%
+    unite("ID", genotype, replicate, cell)
+
+  pca_result <- prcomp(pca_data[, -1], center = TRUE, scale. = TRUE)
+  rownames(pca_result$x) <- pca_data$ID
+
+  # factoextra::fviz_pca_biplot(pca_result)
+
+  gg_pca <- as_tibble(pca_result$x, rownames = NA) %>%
+    rownames_to_column(var = "ID") %>%
+    separate(ID, sep = "_", into = c("genotype", "replicate", "cell"))
+
+  gg_pca_ellipse <- gg_pca %>%
+    group_by(genotype) %>%
+    summarise(
+      PC1 = mean(PC1),
+      PC2 = mean(PC2)
+    )
+
+  ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
+    geom_hline(yintercept = 0, linetype = 1, size = 0.2) +
+    geom_vline(xintercept = 0, linetype = 1, size = 0.2) +
+    geom_point(
+      size = 1,
+      stroke = 0.2,
+      alpha = 0.75,
+      shape = 21
+    ) +
+    stat_ellipse(geom = "polygon", type = "t", level = 0.4) +
+    geom_label_repel(
+      data = gg_pca_ellipse,
+      aes(
+        label = genotype,
+        fill = genotype
+      ),
+      size = ggtext_size,
+      segment.alpha = 0,
+      label.size = NA,
+      family = "Helvetica"
+    ) +
+    # stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2, size = 0.2) +
+    # annotate("text",
+    #   x = c(-35, 18, 7, -25),
+    #   y = c(18, 25, -17, -25),
+    #   label = c("Epidermis", "Vascular\nbundle", "Interfascicular\nfibre", "Pith"),
+    #   family = "Helvetica",
+    #   size = ggtext_size,
+    #   hjust = 0
+    # ) +
+    labs(
+      # x = "PC 1 [36.4 %]",
+      # y = "PC 2 [19.5 %]",
+      title = celltype
+    ) +
+    scale_fill_viridis_d(alpha = 0.5) +
+    theme_leo() +
+    theme(
+      plot.margin = unit(c(2, 2, 3, 2), "mm"),
+      plot.title = element_text(size = 10)
+    )
+}
+
+# pdf("celltype_PCAs.pdf", width = onecol * 1.5, height = onecol)
+cell_type_pca("PX") + cell_type_pca("MX") + cell_type_pca("XF") + cell_type_pca("IF")
+# dev.off()
+
+# corr_data <- rmn_lac_sum %>%
+#   select(
+#     "Total lignin" = total_lignin,
+#     "S/G" = S.G,
+#     "P-units" = P_rel,
+#     AUC,
+#     # "Cellulose cryst." = cellu_cryst,
+#     "Benzaldehydes" = Benz_rel,
+#     # "P/cellulose" = P.cellu,
+#     "G-units" = G_rel,
+#     "S-units" = S_rel,
+#     "G-CHO/G-OH" = GCHO.GOH
+#   ) %>%
+#   filter(cell_type != "LP") %>%
+#   group_by(genotype, replicate, cell_type) %>%
+#   mutate(cell = row_number()) %>%
+#   pivot_wider(everything(), names_from = cell_type, values_from = c(4:11)) %>%
+#   unite("ID", genotype, replicate, cell) %>%
+#   column_to_rownames(., var = "ID")
+#
+# pdf("lignin_corr.pdf")
+# corrplot::corrplot.mixed(cor(as.matrix(corr_data)))
+# dev.off()
+```
+
+# Multivariate analysis
+
+```{r}
+pca_rmn <- rmn_lac_sum %>%
+  select(
+    "Total lignin" = total_lignin,
+    "S/G" = S.G,
+    "P-units" = P_rel,
+    AUC,
+    # "Cellulose cryst." = cellu_cryst,
+    "Benzaldehydes" = Benz_rel,
+    # "P/cellulose" = P.cellu,
+    "G-units" = G_rel,
+    "S-units" = S_rel,
+    "G-CHO/G-OH" = GCHO.GOH
+  ) %>%
+  filter(cell_type != "LP") %>%
+  group_by(genotype, cell_type) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE))) 
+
+pca_activity <- ungroup(nested_data_dab) %>%
+  add_row(ungroup(nested_data_daf)) %>%
+  select(genotype, cell_type, substrate, estimate) %>%
+  group_by(genotype, cell_type, substrate) %>%
+  summarise(estimate = mean(estimate, na.rm = TRUE)) %>%
+  pivot_wider(everything(), names_from = substrate, values_from = estimate)
+
+pca_complete <- pca_rmn %>%
+  left_join(pca_activity) %>%
+  pivot_wider(everything(), names_from = cell_type, values_from = -c(1,2))
+
+pca_result <- prcomp(pca_complete[, -1], center = TRUE, scale. = TRUE)
+rownames(pca_result$x) <- pca_complete$genotype
+
+factoextra::fviz_pca_biplot(pca_result)
+
+cell_type_pca <- function(celltype) {
+  pca_data <- pca_rmn %>%
+  left_join(pca_activity) %>%
+  filter(cell_type == celltype) %>%
+  pivot_wider(everything(), names_from = cell_type, values_from = -c(genotype, cell_type))
+
+  pca_result <- prcomp(pca_data[, -1], center = TRUE, scale. = TRUE)
+  rownames(pca_result$x) <- pca_data$genotype
+
+  # factoextra::fviz_pca_biplot(pca_result)
+
+  gg_pca <- as_tibble(pca_result$x, rownames = NA) %>%
+    rownames_to_column(var = "genotype")
+
+  # gg_pca_ellipse <- gg_pca %>%
+  #   group_by(genotype) %>%
+  #   summarise(
+  #     PC1 = mean(PC1),
+  #     PC2 = mean(PC2)
+  #   )
+
+  ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
+    geom_hline(yintercept = 0, linetype = 1, size = 0.2) +
+    geom_vline(xintercept = 0, linetype = 1, size = 0.2) +
+    geom_point(
+      size = 1,
+      stroke = 0.2,
+      alpha = 0.75,
+      shape = 21
+    ) +
+    # stat_ellipse(geom = "polygon", type = "t", level = 0.4) +
+    geom_label_repel(
+      data = gg_pca,
+      aes(
+        label = genotype,
+        fill = genotype
+      ),
+      size = ggtext_size,
+      segment.alpha = 0,
+      label.size = NA,
+      family = "Helvetica"
+    ) +
+    # stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2, size = 0.2) +
+    # annotate("text",
+    #   x = c(-35, 18, 7, -25),
+    #   y = c(18, 25, -17, -25),
+    #   label = c("Epidermis", "Vascular\nbundle", "Interfascicular\nfibre", "Pith"),
+    #   family = "Helvetica",
+    #   size = ggtext_size,
+    #   hjust = 0
+    # ) +
+    labs(
+      # x = "PC 1 [36.4 %]",
+      # y = "PC 2 [19.5 %]",
+      title = celltype
+    ) +
+    scale_fill_viridis_d(alpha = 0.5) +
+    theme_leo() +
+    theme(
+      plot.margin = unit(c(2, 2, 3, 2), "mm"),
+      plot.title = element_text(size = 10)
+    )
+}
+
+# pdf("celltype_PCAs.pdf", width = onecol * 1.5, height = onecol)
+cell_type_pca("PX") + cell_type_pca("MX") + cell_type_pca("XF") + cell_type_pca("IF")
+```
+

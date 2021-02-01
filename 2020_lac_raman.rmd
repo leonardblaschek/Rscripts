@@ -102,10 +102,10 @@ onecol <- 9 / 2.54
 
 #### machine dependent paths ####
 ## office
-# datapath <- "/data/"
+datapath <- "/data/"
 
 ## laptop
-datapath <- "/home/leonard/Documents/Uni/"
+# datapath <- "/home/leonard/Documents/Uni/"
 
 ```
 
@@ -174,8 +174,30 @@ rmn_lac_corrected <- rmn_lac %>%
 
 #### filtering and scaling ####
 
+# alignment
+lig_peak <- rmn_lac_corrected %>%
+  unite("ID",
+    genotype, cell_type, replicate, TE,
+    remove = F,
+    sep = "_"
+  ) %>%
+  filter(round(wavenumber, digits = 0) %in% c(370:390)) %>%
+  group_by(genotype, replicate, cell_type, TE) %>%
+  mutate(
+    peak_pos = wavenumber[which.max(corrected.intensity)]
+  ) %>%
+  select(-wavenumber, -corrected.intensity) %>%
+  unique() %>%
+  group_by(genotype, cell_type) %>%
+  mutate(peak_pos_ref = peak_pos[replicate == 5 & TE == 1])
+
+rmn_lac_aligned <- rmn_lac_corrected %>%
+  left_join(lig_peak) %>%
+  group_by(genotype, replicate, cell_type, TE, wavenumber) %>%
+  mutate(wavenumber = wavenumber + (peak_pos_ref - peak_pos))
+
 # scaling and filtering
-rmn_lac_scaled <- rmn_lac_corrected %>%
+rmn_lac_scaled <- rmn_lac_aligned %>%
   group_by(genotype, cell_type, replicate, TE) %>%
   mutate(
     AUC = MESS::auc(wavenumber, corrected.intensity),
@@ -248,7 +270,7 @@ rmn_lac_sum <- rmn_lac_scaled %>%
 
 ```{r}
 rmn_lac_test <- ggplot(
-  rmn_lac_scaled,
+  rmn_lac_scaled %>% filter(genotype == "WT" & cell_type == "MX"),
   aes(
     x = wavenumber,
     y = scaled_cellu
@@ -281,22 +303,24 @@ rmn_lac_test <- ggplot(
   #               ymax = roll_mean + roll_sd),
   #           colour = NA,
   #           alpha = 0.25) +
-  geom_line(data = rmn_lac_avg,
+  geom_line(data = rmn_lac_avg %>% filter(genotype == "WT" & cell_type == "MX"),
             aes(colour = cell_type,
                 y = roll_scaled_cellu),
             size = 0.2) +
+  labs(x = expression(paste("Wavenumber [", cm^-1,"]")),
+       y = "Scaled scattering intensity") + 
   # scale_color_brewer(palette = "Set1", aesthetics = c("colour", "fill")) +
   scale_colour_manual(values = pal_pedersen_disc) +
   theme_leo() +
   theme(
-    legend.position = "bottom",
+    # legend.position = "bottom",
     legend.title = element_blank()
   ) +
   guides(colour = guide_legend(override.aes = list(alpha = 1, size = 1))) +
   facet_wrap(~genotype, ncol = 1)
 
 # plotly::ggplotly(rmn_lac_test)
-pdf("rmn_lac.pdf", height = twocol, width = onecol)
+pdf("rmn_lac.pdf", height = onecol * 0.5, width = onecol * 1.5)
 rmn_lac_test
 dev.off()
 ```
@@ -340,7 +364,9 @@ violin_data <- rmn_lac_sum %>%
            "Q-12",
            "Q-17",
            "Q"
-         )))
+         )),
+         instance = case_when(replicate %in% c(1:5) ~ "1",
+                              TRUE ~ "2"))
 
 rmn_n <- rmn_lac_sum %>%
   group_by(genotype, replicate, cell_type) %>%
@@ -369,7 +395,7 @@ lig_violin <- ggplot(
   )
 ) +
   ggbeeswarm::geom_quasirandom(
-    aes(colour = replicate),
+    aes(colour = instance),
     size = 1,
     # dodge.width = 0.5,
     alpha = 0.5
@@ -384,22 +410,34 @@ lig_violin <- ggplot(
   #   size = 0.2,
   #   scale = "width"
   # ) +
-  geom_boxplot(
-    # draw_quantiles = 0.5,
-    outlier.alpha = 0,
+  # geom_boxplot(
+  #   # draw_quantiles = 0.5,
+  #   outlier.alpha = 0,
+  #   fill = "white",
+  #   colour = "black",
+  #   alpha = 0.85,
+  #   width = 0.2,
+  #   # position = position_dodge(width = 0.5),
+  #   size = 0.2,
+  #   fatten = 1
+  # ) +
+  geom_violin(
+    draw_quantiles = 0.5,
+    # outlier.alpha = 0,
     fill = "white",
     colour = "black",
     alpha = 0.85,
-    width = 0.2,
+    width = 0.4,
+    scale = "width",
     # position = position_dodge(width = 0.5),
     size = 0.2,
-    fatten = 1
+    # fatten = 1
   ) +
   geom_text(data = letters,
             aes(label = Letters),
             size = ggtext_size,
             family = "Helvetica") +
-  scale_colour_manual(values = pal_pedersen_disc) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
   # scale_colour_brewer(palette = "Set1") +
   # scale_colour_viridis_d(drop = FALSE) +
   scale_x_discrete(drop = FALSE) +
@@ -411,7 +449,7 @@ lig_violin <- ggplot(
         ) +
   facet_grid(variable ~ cell_type, scales = "free_y", switch = "y")
 
-pdf("lig_violin.pdf", width = twocol, height = twocol)
+pdf("lig_violin_complete.pdf", width = twocol, height = twocol)
 lig_violin
 dev.off()
 ```
@@ -447,18 +485,30 @@ gg_pca <- as_tibble(pca_result$x, rownames = NA) %>%
   rownames_to_column(var = "ID") %>%
   separate(ID, sep = "_", into = c("genotype", "replicate", "cell"))
 
-pca <- ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
+gg_pca_ellipse <- gg_pca %>%
+  group_by(genotype) %>%
+  summarise(PC1 = mean(PC1),
+            PC2 = mean(PC2))
+
+pdf("overall_PCA.pdf", width = onecol * 1.5, height = onecol)
+ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
   geom_hline(yintercept = 0, linetype = 1, size = 0.2) +
   geom_vline(xintercept = 0, linetype = 1, size = 0.2) +
-  stat_ellipse(geom = "polygon", alpha = 0.5, type = "t", level = 0.4) +
-  geom_text(data = filter(gg_pca, cell == 5 & replicate == 4), aes(label = genotype)) +
-  # stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2, size = 0.2) +
   geom_point(
     size = 3,
     stroke = 0.4,
     alpha = 0.75,
     shape = 21
   ) +
+  stat_ellipse(geom = "polygon", type = "t", level = 0.4) +
+  geom_label_repel(data = gg_pca_ellipse, 
+                   aes(label = genotype), 
+                   # fill = NA,
+                   size = ggtext_size * 1.5,
+                   segment.alpha = 0,
+                   label.size = NA,
+                   family = "Helvetica") +
+  # stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2, size = 0.2) +
   # annotate("text",
   #   x = c(-35, 18, 7, -25),
   #   y = c(18, 25, -17, -25),
@@ -468,16 +518,94 @@ pca <- ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
   #   hjust = 0
   # ) +
   labs(
-    x = "PC 1 [36.4 %]",
-    y = "PC 2 [19.5 %]"
+    # x = "PC 1 [36.4 %]",
+    # y = "PC 2 [19.5 %]",
+    title = "Overall lignin"
   ) +
-  scale_fill_viridis_d() +
+  scale_fill_viridis_d(alpha = 0.5) +
   theme_leo() +
   theme(
-    plot.margin = unit(c(2, 2, 3, 2), "mm")
+    plot.margin = unit(c(2, 2, 3, 2), "mm"),
+    plot.title = element_text(size = 10)
   )
+dev.off()
 
-pca
+cell_type_pca <- function(celltype) {
+  pca_data <- rmn_lac_sum %>%
+  select(
+    "Total lignin" = total_lignin,
+    "S/G" = S.G,
+    "P-units" = P_rel,
+    AUC,
+    # "Cellulose cryst." = cellu_cryst,
+    "Benzaldehydes" = Benz_rel,
+    # "P/cellulose" = P.cellu,
+    "G-units" = G_rel,
+    "S-units" = S_rel,
+    "G-CHO/G-OH" = GCHO.GOH
+  ) %>%
+  filter(cell_type %in% celltype) %>%
+  group_by(genotype, replicate, cell_type) %>%
+  mutate(cell = row_number()) %>%
+  pivot_wider(everything(), names_from = cell_type, values_from = c(4:11)) %>%
+  unite("ID", genotype, replicate, cell)
+
+pca_result <- prcomp(pca_data[, -1], center = TRUE, scale. = TRUE)
+rownames(pca_result$x) <- pca_data$ID
+
+# factoextra::fviz_pca_biplot(pca_result)
+
+gg_pca <- as_tibble(pca_result$x, rownames = NA) %>%
+  rownames_to_column(var = "ID") %>%
+  separate(ID, sep = "_", into = c("genotype", "replicate", "cell"))
+
+gg_pca_ellipse <- gg_pca %>%
+  group_by(genotype) %>%
+  summarise(PC1 = mean(PC1),
+            PC2 = mean(PC2))
+
+ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
+  geom_hline(yintercept = 0, linetype = 1, size = 0.2) +
+  geom_vline(xintercept = 0, linetype = 1, size = 0.2) +
+  geom_point(
+    size = 1,
+    stroke = 0.2,
+    alpha = 0.75,
+    shape = 21
+  ) +
+  stat_ellipse(geom = "polygon", type = "t", level = 0.4) +
+  geom_label_repel(data = gg_pca_ellipse, 
+                   aes(label = genotype,
+                       fill = genotype), 
+                   size = ggtext_size,
+                   segment.alpha = 0,
+                   label.size = NA,
+                   family = "Helvetica") +
+  # stat_ellipse(aes(fill = NULL), colour = "black", linetype = 2, size = 0.2) +
+  # annotate("text",
+  #   x = c(-35, 18, 7, -25),
+  #   y = c(18, 25, -17, -25),
+  #   label = c("Epidermis", "Vascular\nbundle", "Interfascicular\nfibre", "Pith"),
+  #   family = "Helvetica",
+  #   size = ggtext_size,
+  #   hjust = 0
+  # ) +
+  labs(
+    # x = "PC 1 [36.4 %]",
+    # y = "PC 2 [19.5 %]",
+    title = celltype
+  ) +
+  scale_fill_viridis_d(alpha = 0.5) +
+  theme_leo() +
+  theme(
+    plot.margin = unit(c(2, 2, 3, 2), "mm"),
+    plot.title = element_text(size = 10)
+  )
+}
+
+pdf("celltype_PCAs.pdf", width = onecol * 1.5, height = onecol)
+cell_type_pca("PX") + cell_type_pca("MX") + cell_type_pca("XF") + cell_type_pca("IF")
+dev.off()
 
 # corr_data <- rmn_lac_sum %>%
 #   select(
