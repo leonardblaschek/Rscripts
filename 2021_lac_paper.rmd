@@ -34,27 +34,29 @@ font_add(
 showtext_auto()
 
 #### generating plot theme ####
-theme_leo <- function(base_size = 10,
+theme_leo <- function(base_size = 6,
                       base_family = "Helvetica") {
   theme_minimal(
     base_size = base_size,
     base_family = base_family
   ) %+replace%
     theme(
-      strip.text = element_text(hjust = 0, face = "italic"),
-      # axis.ticks = element_line(
-      #   size = 0.125,
-      #   lineend = "square",
-      #   color = "black"
-      # ),
+      strip.text = element_text(hjust = 0, 
+                                # face = "italic"
+                                ),
+      axis.ticks = element_line(
+        size = 0.125,
+        lineend = "square",
+        color = "black"
+      ),
       axis.text.x = element_text(
-        size = 10,
+        size = 6,
         colour = "black", # flipped coords
         margin = margin(1, 1, 1, 1)
       ),
       axis.text.y = element_text(
         colour = "black",
-        size = 10,
+        size = 6,
         angle = 0,
         vjust = 0.5,
         hjust = 1,
@@ -62,17 +64,17 @@ theme_leo <- function(base_size = 10,
       ),
       axis.title = element_text(
         colour = "black",
-        size = 10
+        size = 6
       ),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      # panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
       panel.spacing = unit(1.5, "mm"),
       legend.position = "none",
-      legend.text = element_text(size = 10),
+      legend.text = element_text(size = 6),
       legend.key.height = unit(4, "mm"),
       plot.title = element_text(
-        size = 10,
+        size = 6,
         hjust = 0
       ),
       complete = TRUE
@@ -104,6 +106,9 @@ pal_pedersen_disc <- c(
 
 ggtext_size <- 10 / (14 / 5)
 cm_size <- function(x) x / 2.54
+twocol <- 18 / 2.54
+onehalfcol <- 14 / 2.54
+onecol <- 9 / 2.54
 
 #### machine dependent paths ####
 ## office
@@ -3364,7 +3369,16 @@ cell_type_pca <- function(celltype) {
   # factoextra::fviz_pca_biplot(pca_result)
 
   gg_pca <- as_tibble(pca_result$x, rownames = NA) %>%
-    rownames_to_column(var = "genotype")
+    rownames_to_column(var = "genotype") %>%
+    mutate(genotype = ordered(genotype, levels = c(
+      "WT",
+      "Q-4",
+      "Q-5",
+      "Q-10",
+      "Q-12",
+      "Q-17",
+      "Q"
+    )))
 
   # gg_pca_ellipse <- gg_pca %>%
   #   group_by(genotype) %>%
@@ -3377,7 +3391,7 @@ cell_type_pca <- function(celltype) {
     geom_hline(yintercept = 0, linetype = 1, size = 0.2) +
     geom_vline(xintercept = 0, linetype = 1, size = 0.2) +
     geom_point(
-      size = 1,
+      size = 3,
       stroke = 0.2,
       alpha = 0.75,
       shape = 21
@@ -3416,7 +3430,8 @@ cell_type_pca <- function(celltype) {
     )
 }
 
-# pdf("celltype_PCAs.pdf", width = onecol * 1.5, height = onecol)
+pdf("celltype_PCAs.pdf", width = onecol * 1.5, height = onecol)
 cell_type_pca("PX") + cell_type_pca("MX") + cell_type_pca("XF") + cell_type_pca("IF")
+dev.off()
 ```
 
