@@ -96,6 +96,16 @@ pal_ostwald_disc_long <- c(
   "#d25952"
 )
 
+pal_ostwald_cont <- c(
+  "#155DA7",
+  "#0A75B9",
+  # "#0C89C9",
+  "#FED32F",
+  # "#F8A63A",
+  "#EF663A",
+  "#ED4137"
+)
+
 pal_pedersen_disc <- c(
   "#264653",
   "#2a9d8f",
@@ -104,7 +114,7 @@ pal_pedersen_disc <- c(
   "#e76f51"
 )
 
-ggtext_size <- 10 / (14 / 5)
+ggtext_size <- 6 / (14 / 5)
 cm_size <- function(x) x / 2.54
 twocol <- 18 / 2.54
 onehalfcol <- 14 / 2.54
@@ -2716,6 +2726,24 @@ growth_data <- map(growth_files, read_plus) %>%
     TE_viab = TEs_alive / (TEs_alive + TEs_dead)
   )
 
+## extrapolate gradient
+# extra_data <- tibble(
+#   dpi = rep.int(seq(from = 0, to = 21, by = 0.1), 4),
+#   treatment = rep_len(c("ctrl", "ind"), length(dpi)),
+#   replicate = rep_len(c("1", "1", "2", "2"), length(dpi))
+#   )
+# 
+# growth_data <-growth_data %>%
+#   full_join(extra_data) %>%
+#   filter(treatment == "ind") %>%
+#   group_by(replicate) %>%
+#   mutate(
+#     # n = n()
+#     # across(where(is.numeric), ~ zoo::na.approx(.x))
+#     TE_viab_approx = zoo::na.approx(TE_viab, na.rm = FALSE),
+#     nTE_viab_approx = zoo::na.approx(TE_viab, na.rm = FALSE)
+#     )
+
 growth_avg <- growth_data %>%
   group_by(treatment, dpi) %>%
   summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
@@ -2725,9 +2753,9 @@ growth_avg <- growth_data %>%
 
 ```{r}
 
-growth <- ggplot(growth_data) +
+growth <- ggplot(growth_data %>% filter(treatment == "ind")) +
   geom_tile(
-    data = growth_avg,
+    data = growth_avg %>% filter(treatment == "ind"),
     aes(
       x = dpi,
       y = TE_prop,
@@ -2747,14 +2775,14 @@ growth <- ggplot(growth_data) +
   stroke = 0.2
   ) +
   geom_line(
-    data = growth_avg,
+    data = growth_avg  %>% filter(treatment == "ind"),
     (aes(
       x = dpi,
       y = TE_prop
     ))
   ) +
   scale_fill_gradientn(colours = pal_ostwald_cont, trans = "reverse", name = "Viability", limits = c(1, 0)) +
-  scale_x_continuous(limits = c(2.5, 9.5), expand = expansion(add = 0)) +
+  scale_x_continuous(limits = c(2.5, 14.5), expand = expansion(add = 0)) +
   labs(
     x = "Days past induction",
     y = "TE proportion"
@@ -3003,7 +3031,7 @@ violin_data <- rmn_lac_sum %>%
     "S/G" = S.G,
     "P-units" = P_rel,
     AUC,
-    # "Cellulose cryst." = cellu_cryst,
+    "Cellulose cryst." = cellu_cryst,
     "Benzaldehydes" = Benz_rel,
     # "P/cellulose" = P.cellu,
     # "G-units" = G_rel,
@@ -3044,6 +3072,12 @@ violin_data <- rmn_lac_sum %>%
 rmn_n <- rmn_lac_sum %>%
   group_by(genotype, replicate, cell_type) %>%
   summarise(n = n())
+
+```
+
+### Overview
+
+```{r}
 
 letters <- letter_groups(violin_data,
   value,
@@ -3128,10 +3162,116 @@ lig_violin <- ggplot(
   ) +
   facet_grid(variable ~ cell_type, scales = "free_y", switch = "y")
 
-# pdf("lig_violin_complete.pdf", width = twocol, height = twocol)
+pdf("lig_violin_complete.pdf", width = twocol, height = twocol)
 lig_violin
-# dev.off()
+dev.off()
 ```
+
+### Single plots
+
+```{r}
+scatter_data <- rmn_lac_sum %>%
+  select(
+    "Total lignin" = total_lignin,
+    "S/G" = S.G,
+    "P-units" = P_rel,
+    AUC,
+    "Cellulose cryst." = cellu_cryst,
+    "Benzaldehydes" = Benz_rel,
+    # "P/cellulose" = P.cellu,
+    # "G-units" = G_rel,
+    # "Lignin/cellulose" = lig.cellu,
+    "G-CHO/G-OH" = GCHO.GOH
+  ) %>%
+  filter(cell_type != "LP")
+
+# single correlations
+lig_sg <- ggplot(scatter_data,
+       aes(x = `Total lignin`, y = `S/G`)
+       ) +
+  geom_point(
+    shape = 16,
+    alpha = 0.5
+    # aes(colour = genotype)
+    ) +
+  # stat_ellipse(aes(colour = genotype),
+  #              # geom = "polygon",
+  #              type = "t", 
+  #              level = 0.4) +
+  geom_smooth(method = "lm",
+              se = F,
+              colour = pal_ostwald_disc[1]) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_wrap(~cell_type)
+
+pdf("lignin_SG.pdf", width = onecol, height = onecol)
+lig_sg
+dev.off()
+
+# single comparisons
+
+lig_violin <- function(var, ct) {
+  letters <- letter_groups(violin_data %>% 
+                             filter(variable == var & cell_type == ct),
+    value,
+    genotype,
+    "tukey",
+    print_position = "below",
+    print_adjust = 1
+  ) 
+
+  ggplot(
+    data = violin_data %>% 
+      filter(variable == var & cell_type == ct),
+    aes(x = genotype, y = value)
+  ) +
+    geom_quasirandom(
+      aes(fill = genotype),
+      dodge.width = 0.6,
+      shape = 21,
+      alpha = 0.75,
+      size = 1,
+      stroke = 0.2
+    ) +
+    geom_violin(aes(
+      group = genotype
+    ),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+    ) +
+    geom_text(
+      data = letters,
+      aes(label = Letters),
+      size = ggtext_size,
+      family = "Helvetica",
+      position = position_dodge(width = 0.6)
+    ) +
+    labs(y = var,
+         title = ct) +
+    # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
+    # scale_fill_manual(values = pal_flame_disc) +
+    # expand_limits(y = 0) +
+    theme_leo() +
+    theme(
+      text = element_text(family = "Helvetica"),
+      axis.title.x = element_blank()
+    )
+}
+pdf("single_plots.pdf", width = onecol * 1.5, height = onecol)
+lig_violin("Total lignin", "XF") +
+lig_violin("G-CHO/G-OH", "XF") +
+lig_violin("Total lignin", "MX") +
+lig_violin("S/G", "MX")
+dev.off()
+```
+
 
 ## Raman PCA
 
@@ -3296,28 +3436,27 @@ cell_type_pca <- function(celltype) {
 cell_type_pca("PX") + cell_type_pca("MX") + cell_type_pca("XF") + cell_type_pca("IF")
 # dev.off()
 
-# corr_data <- rmn_lac_sum %>%
-#   select(
-#     "Total lignin" = total_lignin,
-#     "S/G" = S.G,
-#     "P-units" = P_rel,
-#     AUC,
-#     # "Cellulose cryst." = cellu_cryst,
-#     "Benzaldehydes" = Benz_rel,
-#     # "P/cellulose" = P.cellu,
-#     "G-units" = G_rel,
-#     "S-units" = S_rel,
-#     "G-CHO/G-OH" = GCHO.GOH
-#   ) %>%
-#   filter(cell_type != "LP") %>%
-#   group_by(genotype, replicate, cell_type) %>%
-#   mutate(cell = row_number()) %>%
-#   pivot_wider(everything(), names_from = cell_type, values_from = c(4:11)) %>%
-#   unite("ID", genotype, replicate, cell) %>%
-#   column_to_rownames(., var = "ID")
-#
+corr_data <- rmn_lac_sum %>%
+  select(
+    "Total lignin" = total_lignin,
+    "S/G" = S.G,
+    "P-units" = P_rel,
+    AUC,
+    # "Cellulose cryst." = cellu_cryst,
+    "Benzaldehydes" = Benz_rel,
+    # "P/cellulose" = P.cellu,
+    "G-units" = G_rel,
+    "S-units" = S_rel,
+    "G-CHO/G-OH" = GCHO.GOH
+  ) %>%
+  filter(cell_type != "LP") %>%
+  group_by(genotype, replicate) %>%
+  mutate(cell = row_number()) %>%
+  unite("ID", genotype, replicate, cell, cell_type) %>%
+  column_to_rownames(., var = "ID")
+
 # pdf("lignin_corr.pdf")
-# corrplot::corrplot.mixed(cor(as.matrix(corr_data)))
+corrplot::corrplot.mixed(cor(as.matrix(corr_data)))
 # dev.off()
 ```
 
