@@ -2765,6 +2765,15 @@ growth <- ggplot(growth_data %>% filter(treatment == "ind")) +
     height = Inf,
     alpha = 0.75
   ) +
+  geom_line(
+    aes(
+    x = dpi,
+    y = TE_prop,
+    group = replicate
+    ),
+    size = 0.2,
+    alpha = 0.5
+  ) +
   geom_point(aes(
     x = dpi,
     y = TE_prop,
@@ -3069,6 +3078,11 @@ violin_data <- rmn_lac_sum %>%
     )
   )
 
+violin_data_avg <- violin_data %>%
+  group_by(genotype, cell_type, replicate, variable, instance) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+  
+
 rmn_n <- rmn_lac_sum %>%
   group_by(genotype, replicate, cell_type) %>%
   summarise(n = n())
@@ -3105,7 +3119,8 @@ lig_violin <- ggplot(
   )
 ) +
   ggbeeswarm::geom_quasirandom(
-    aes(colour = instance),
+    # aes(colour = instance),
+    shape = 16,
     size = 1,
     # dodge.width = 0.5,
     alpha = 0.5
@@ -3142,6 +3157,14 @@ lig_violin <- ggplot(
     # position = position_dodge(width = 0.5),
     size = 0.2,
     # fatten = 1
+  ) +
+  geom_point(
+    data = violin_data_avg,
+    aes(y = value,
+        colour = instance),
+    shape = 16,
+    alpha = 0.75,
+    size = 1.5
   ) +
   geom_text(
     data = letters,
