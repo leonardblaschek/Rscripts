@@ -9,6 +9,7 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 library(baseline)
 library(broom)
+library(colorspace)
 library(gganimate)
 library(ggbeeswarm)
 library(ggrepel)
@@ -2292,6 +2293,323 @@ slopes
 # dev.off()
 ```
 
+## pH optimum
+
+```{r}
+# Define the boundaries of the linear phase for each substrate and pH
+lm_bounds <- tribble(
+  ~substrate, ~pH, ~lm_start, ~lm_stop,
+  "PYGL", "4", 210, 600,
+  "PYGL", "5", 105, 240,
+  "PYGL", "6", 30, 180,
+  "PYGL", "7", 15, 90,
+  "DAF", "4", 70, 140,
+  "DAF", "5", 90, 200,
+  "DAF", "6", 90, 200,
+  "DAF", "7", 90, 200
+)
+
+pH_data <- read_csv(paste0(
+  datapath,
+  "PhD/Laccase_activity/2021-01_optimal_pH/pH_data.csv"
+),
+comment = '"#'
+) %>%
+  mutate(time = slice * interval) %>%
+  select(-c(slice, interval)) %>%
+  separate(image,
+    into = c("date", "substrate", "genotype", "replicate", "pH", "treatment"),
+    sep = "_"
+  ) %>%
+  mutate(
+    pH = str_remove(pH, "pH"),
+    treatment = str_remove(treatment, fixed(".tiff"))
+  ) %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  mutate(point = row_number()) %>%
+  left_join(lm_bounds)
+
+#### subtract water column and background ####
+pH_data <- pH_data %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
+  mutate(
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
+  ) %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
+  mutate(
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == lm_start]
+  ) %>%
+  filter(cell_type %in% c("IF", "CML", "LP", "MX", "PX", "XF"))
+
+nested_pH_data <- pH_data %>%
+  filter(time >= lm_start & time <= lm_stop) %>%
+  select(-mean_absorbance, -corrected_absorbance) %>%
+  nest(data = c(time, zeroed_absorbance, median_hue)) %>%
+  mutate(
+    fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  filter(term == "time")
+
+avg_pH_slopes <- nested_pH_data %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  summarise(mean_slope = mean(estimate))
+```
+
+
+### PYGL
+
+```{r}
+
+ctrl_slopes <- avg_pH_slopes %>%
+  filter(treatment == "autoclaved" & substrate == "PYGL") %>%
+  ungroup() %>%
+  select(-treatment, replicate) %>%
+  group_by(genotype, cell_type, pH) %>%
+  summarise(mean_slope = mean(mean_slope))
+
+pygl_slopes <- nested_pH_data %>%
+  filter(substrate == "PYGL") %>%
+  left_join(ctrl_slopes) %>%
+  mutate(corrected_estimate = estimate - mean_slope)
+
+activity_grid <- ggplot(
+  pH_data %>% filter(substrate == "PYGL"),
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = cell_type
+  )
+) +
+  # annotate("rect",
+  #   ymin = -Inf,
+  #   ymax = Inf,
+  #   xmin = lm_start,
+  #   xmax = lm_stop,
+  #   fill = "grey95"
+  # ) +
+  geom_rect(
+    data = lm_bounds %>% filter(substrate == "PYGL"),
+    aes(
+      xmin = lm_start,
+      xmax = lm_stop,
+      x = NULL, 
+      y = NULL,
+      colour = NULL
+    ),
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "grey95"
+  ) +
+  geom_smooth(
+    size = 0.2,
+    se = F
+  ) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  # coord_cartesian(xlim = c(60, 100)) +
+  facet_grid(treatment ~ pH)
+
+
+slopes <- ggplot(
+  pygl_slopes,
+  aes(
+    x = pH,
+    y = corrected_estimate,
+    colour = treatment
+  )
+) +
+  geom_hline(
+    yintercept = 0,
+    size = 0.2
+  ) +
+  geom_quasirandom(
+    dodge.width = 0.5,
+    alpha = 0.5,
+    shape = 16
+  ) +
+  geom_violin(
+    aes(group = interaction(treatment, pH)),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.5),
+    size = 0.2,
+    scale = "width"
+  ) +
+  scale_colour_manual(values = c("grey80", "#275d95")) +
+  scale_y_log10() +
+  # scale_y_continuous(trans = pseudo_log_trans(base = 10)) +
+  # scale_y_continuous(trans = "pseudo_log") +
+  # scale_x_discrete() +
+  theme_leo() +
+  theme(legend.position = "bottom",
+        panel.grid.major.y = element_line(size = 0.2)) +
+  facet_wrap(
+    ~cell_type, 
+    ncol = 3, 
+    # scales = "free_y"
+    )
+
+pygl_slopes_cont <- pygl_slopes %>%
+  mutate(pH = as.numeric(pH)) %>%
+  filter(treatment == "untreated") %>%
+  group_by(genotype, replicate, pH, cell_type) %>%
+  summarise(mean_estimate = mean(corrected_estimate))
+
+ph_cont <- ggplot(pygl_slopes_cont,
+       aes(x = pH,
+           y = mean_estimate)) +
+  geom_point(size = 1,
+             alpha = 0.5,
+             shape = 16) +
+  geom_smooth(span = 1.25,
+              colour = "#275d95",
+              size = 0.2) +
+  theme_leo() +
+  facet_wrap(
+    ~cell_type, 
+    ncol = 3, 
+    scales = "free_y"
+    )
+
+pdf("PYGL_pH.pdf", width = twocol, height = onecol * 1.75)
+activity_grid /
+slopes /
+ph_cont
+dev.off()
+```
+
+### DAF
+
+```{r}
+activity_grid <- ggplot(
+  pH_data %>% filter(substrate == "DAF"),
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = cell_type,
+    linetype = genotype
+  )
+) +
+  # annotate("rect",
+  #   ymin = -Inf,
+  #   ymax = Inf,
+  #   xmin = lm_start,
+  #   xmax = lm_stop,
+  #   fill = "grey95"
+  # ) +
+  geom_rect(
+    data = lm_bounds %>% filter(substrate == "DAF"),
+    aes(
+      xmin = lm_start,
+      xmax = lm_stop,
+      linetype = NULL,
+      x = NULL, 
+      y = NULL,
+      colour = NULL
+    ),
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "grey95"
+  ) +
+  geom_smooth(
+    size = 0.2,
+    se = F
+  ) +
+  labs(x = "Time [min]") +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  # coord_cartesian(xlim = c(60, 100)) +
+  facet_grid(treatment ~ pH)
+
+
+slopes <- ggplot(
+  nested_pH_data %>% filter(substrate == "DAF"),
+  aes(
+    x = pH,
+    y = estimate,
+    colour = interaction(treatment, genotype)
+  )
+) +
+  geom_hline(
+    yintercept = 0,
+    size = 0.2
+  ) +
+  geom_quasirandom(
+    dodge.width = 0.5,
+    alpha = 0.5,
+    shape = 16
+  ) +
+  geom_violin(
+    aes(group = interaction(treatment, pH, genotype)),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.5),
+    size = 0.2,
+    scale = "width"
+  ) +
+  scale_colour_manual(values = c(lighten(desaturate("#d25952", amount = 0.75), amount = 0.5),
+                                 "#d25952", 
+                                 lighten(desaturate("#275d95", amount = 0.75), amount = 0.5), 
+                                 "#275d95")) +
+  scale_x_discrete() +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_wrap(
+    ~cell_type, 
+    ncol = 3, 
+    # scales = "free_y"
+    )
+
+daf_slopes_cont <- avg_pH_slopes %>%
+  filter(substrate == "DAF" & treatment == "untreated") %>%
+  mutate(pH = as.numeric(pH)) %>%
+  group_by(genotype, replicate, pH, cell_type)
+
+ph_cont <- ggplot(daf_slopes_cont,
+       aes(x = pH,
+           y = mean_slope)) +
+  geom_point(aes(colour = genotype),
+             size = 1,
+             alpha = 0.25,
+             shape = 16) +
+  stat_smooth(geom = "line",
+              aes(colour = genotype,
+                  group = interaction(replicate, genotype)),
+              span = 1.25,
+              size = 0.2,
+              alpha = 0.25,
+              se = F) +
+  geom_smooth(aes(colour = genotype),
+              span = 1.25,
+              size = 0.5,
+              alpha = 1,
+              se = F) +
+  scale_colour_manual(values = c("#d25952", "#275d95")) +
+  expand_limits(y = 0) +
+  theme_leo() +
+  facet_wrap(
+    ~cell_type, 
+    ncol = 3, 
+    scales = "free_y"
+    )
+
+pdf("DAF_pH.pdf", width = twocol, height = onecol * 1.75)
+activity_grid /
+slopes /
+ph_cont
+dev.off()
+```
+
+
 ## DAF pH 5
 
 ```{r}
@@ -2688,6 +3006,10 @@ anim_save("Full_IF_1_animation.gif")
 
 ```{r}
 
+growth_estimates <- read_csv(paste0(datapath, "PhD/Cell cultures/2021_timelines/2021_timeline_counts.csv"),
+                             col_types = "Dccnnnnnc") %>%
+  select(-comment)
+
 growth_files <-
   list.files(
     path = "/home/leonard/Dropbox/2021-01_inductions/",
@@ -2706,6 +3028,7 @@ read_plus <- function(flnm) {
     mutate(filename = basename(flnm)) %>%
     separate(filename, into = c("date", "replicate", "dpi", "treatment"), sep = "_") %>%
     mutate(
+      date = ymd(as_date(date)),
       replicate = str_remove(replicate, fixed("R")),
       dpi = as.numeric(str_remove(dpi, fixed("d"))),
       treatment = str_remove(treatment, fixed(".txt"))
@@ -2716,33 +3039,21 @@ read_plus <- function(flnm) {
 growth_data <- map(growth_files, read_plus) %>%
   bind_rows() %>%
   mutate(
-    n = str_length(code),
+    code = str_to_lower(code),
     nTEs_alive = str_count(code, "k"),
     nTEs_dead = str_count(code, "l"),
     TEs_alive = str_count(code, "i"),
-    TEs_dead = str_count(code, "o"),
+    TEs_dead = str_count(code, "o")
+  ) %>%
+  add_row(growth_estimates) %>%
+  mutate(
+    n = nTEs_alive + nTEs_dead + TEs_alive + TEs_dead,
     nTE_viab = nTEs_alive / (nTEs_alive + nTEs_dead),
     TE_prop = (TEs_alive + TEs_dead) / n,
-    TE_viab = TEs_alive / (TEs_alive + TEs_dead)
+    TE_viab = TEs_alive / (TEs_alive + TEs_dead),
+    TE_viab = case_when(is.nan(TE_viab) ~ 1,
+                        TRUE ~ TE_viab)
   )
-
-## extrapolate gradient
-# extra_data <- tibble(
-#   dpi = rep.int(seq(from = 0, to = 21, by = 0.1), 4),
-#   treatment = rep_len(c("ctrl", "ind"), length(dpi)),
-#   replicate = rep_len(c("1", "1", "2", "2"), length(dpi))
-#   )
-# 
-# growth_data <-growth_data %>%
-#   full_join(extra_data) %>%
-#   filter(treatment == "ind") %>%
-#   group_by(replicate) %>%
-#   mutate(
-#     # n = n()
-#     # across(where(is.numeric), ~ zoo::na.approx(.x))
-#     TE_viab_approx = zoo::na.approx(TE_viab, na.rm = FALSE),
-#     nTE_viab_approx = zoo::na.approx(TE_viab, na.rm = FALSE)
-#     )
 
 growth_avg <- growth_data %>%
   group_by(treatment, dpi) %>%
@@ -2765,14 +3076,17 @@ growth <- ggplot(growth_data %>% filter(treatment == "ind")) +
     height = Inf,
     alpha = 0.75
   ) +
-  geom_line(
+  geom_smooth(
     aes(
     x = dpi,
     y = TE_prop,
     group = replicate
     ),
     size = 0.2,
-    alpha = 0.5
+    alpha = 0.5,
+    se = F,
+    colour = "black",
+    span = 1
   ) +
   geom_point(aes(
     x = dpi,
@@ -2783,12 +3097,15 @@ growth <- ggplot(growth_data %>% filter(treatment == "ind")) +
   shape = 21,
   stroke = 0.2
   ) +
-  geom_line(
+  geom_smooth(
     data = growth_avg  %>% filter(treatment == "ind"),
-    (aes(
+    aes(
       x = dpi,
       y = TE_prop
-    ))
+    ),
+    se = F,
+    colour = "black",
+    span = 1
   ) +
   scale_fill_gradientn(colours = pal_ostwald_cont, trans = "reverse", name = "Viability", limits = c(1, 0)) +
   scale_x_continuous(limits = c(2.5, 14.5), expand = expansion(add = 0)) +
@@ -2799,10 +3116,59 @@ growth <- ggplot(growth_data %>% filter(treatment == "ind")) +
   theme_leo() +
   theme(legend.position = "bottom")
 
-# pdf("TE_growth.pdf", width = onecol, height = onecol)
-growth
-# dev.off()
+growth_long <- growth_data %>%
+  filter(treatment == "ind") %>%
+  pivot_longer(cols = c(TE_viab, TE_prop, nTE_viab),
+               names_to = "variable",
+               values_to = "value")
+
+growth_facet <- ggplot(growth_long,
+                       aes(x = dpi,
+                           y = value)) +
+  annotate("rect",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = 3,
+           xmax = 7,
+           fill = "grey90") +
+  geom_point(alpha = 0.5,
+             shape = 16,
+             size = 0.5) +
+  geom_smooth(se = F,
+              colour = "#275d95",
+              span = 0.5,
+              size = 0.2) +
+  theme_leo() +
+  facet_wrap(~variable, ncol = 3)
+
+pdf("TE_growth.pdf", width = onecol, height = onecol * 0.5)
+# growth
+growth_facet
+dev.off()
 ```
+#### Sigmoind fit
+```{r}
+    
+# dpi = 1:53
+# value = c(0,0,0,0,0,0,0,0,0,0,0,0,0,0.1,0.18,0.18,0.18,0.33,0.33,0.33,0.33,0.41,
+#   0.41,0.41,0.41,0.41,0.41,0.5,0.5,0.5,0.5,0.68,0.58,0.58,0.68,0.83,0.83,0.83,
+#   0.74,0.74,0.74,0.83,0.83,0.9,0.9,0.9,1,1,1,1,1,1,1)
+    
+# fitting code
+fit <- nls(value ~ SSlogis(dpi, Asym, xmid, scal),
+                data = filter(growth_long, variable == "TE_viab")
+)
+  
+plot(fit)
+
+library(drc)
+fm <- drm(value ~ dpi, data = filter(growth_long, variable == "TE_viab"), fct = G.3())
+
+plot(fm)
+summary(fm)
+
+```
+
 
 # Raman microspectroscopy
 
@@ -2885,8 +3251,8 @@ lig_peak <- rmn_lac_corrected %>%
   ) %>%
   select(-wavenumber, -corrected.intensity) %>%
   unique() %>%
-  group_by(genotype, cell_type) %>%
-  mutate(peak_pos_ref = peak_pos[replicate == 5 & TE == 1])
+  group_by(cell_type) %>%
+  mutate(peak_pos_ref = peak_pos[genotype == "WT" & replicate == 5 & TE == 1])
 
 rmn_lac_aligned <- rmn_lac_corrected %>%
   left_join(lig_peak) %>%
@@ -2922,37 +3288,35 @@ rmn_lac_sum <- rmn_lac_scaled %>%
   summarise(
     "unscaled_lignin" =
       (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
-        corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+        corrected.intensity[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "broad_lignin" =
       corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] +
-        corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1] +
-        corrected.intensity[abs(wavenumber - 1656) == min(abs(wavenumber - 1656))][1] +
+        corrected.intensity[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1] +
+        corrected.intensity[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1] +
         corrected.intensity[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
     "total_lignin" = (scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
-      scaled[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
-    "P_rel" = scaled_lig[abs(wavenumber - 990) == min(abs(wavenumber - 990))][1],
+      scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
+    "P_rel" = scaled_lig[abs(wavenumber - 993) == min(abs(wavenumber - 993))][1],
     "G_rel" = scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
     "G_tot" = scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
-    "GOH_rel" = scaled_lig[abs(wavenumber - 1656) == min(abs(wavenumber - 1656))][1],
+    "GOH_rel" = scaled_lig[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1],
     "GCHO_rel" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
     "GCHO_tot" = scaled[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
-    "S_rel" = scaled_lig[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
-    "S_tot" = scaled[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "S_rel" = scaled_lig[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
+    "S_tot" = scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "cellulose" =
       scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1] +
-        scaled[abs(wavenumber - 375) == min(abs(wavenumber - 375))][1] +
+        scaled[abs(wavenumber - 378) == min(abs(wavenumber - 378))][1] +
         scaled[abs(wavenumber - 1120) == min(abs(wavenumber - 1120))][1],
-    "cellu_cryst" = scaled[abs(wavenumber - 375) == min(abs(wavenumber - 375))][1] /
+    "cellu_cryst" = scaled[abs(wavenumber - 378) == min(abs(wavenumber - 378))][1] /
       scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1],
     "lig.cellu" = total_lignin / cellulose,
-    "G.cellu" = scaled_cellu[abs(wavenumber - 990) == min(abs(wavenumber - 990))][1],
-    "P.cellu" = scaled_cellu[abs(wavenumber - 990) == min(abs(wavenumber - 990))][1],
-    "S.G" = scaled_lig[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1] /
-      scaled_lig[abs(wavenumber - 1276) == min(abs(wavenumber - 1276))][1],
-    "GOH.G" = scaled_lig[abs(wavenumber - 1656) == min(abs(wavenumber - 1656))][1] /
+    "S.G" = scaled_lig[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1] /
+      scaled_lig[abs(wavenumber - 1273) == min(abs(wavenumber - 1273))][1],
+    "GOH.G" = scaled_lig[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1] /
       scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
     "GCHO.GOH" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1] /
-      scaled_lig[abs(wavenumber - 1656) == min(abs(wavenumber - 1656))][1],
+      scaled_lig[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1],
     "O4_van_rel" = scaled_lig[abs(wavenumber - 1303) == min(abs(wavenumber - 1303))][1],
     "other_van_rel" = scaled_lig[abs(wavenumber - 785) == min(abs(wavenumber - 785))][1],
     "O4_syr_rel" = scaled_lig[abs(wavenumber - 1297) == min(abs(wavenumber - 1297))][1],
@@ -2966,7 +3330,7 @@ rmn_lac_sum <- rmn_lac_scaled %>%
 
 ```{r}
 rmn_lac_test <- ggplot(
-  rmn_lac_scaled %>% filter(genotype == "WT" & cell_type == "MX"),
+  rmn_lac_scaled, 
   aes(
     x = wavenumber,
     y = scaled_cellu
@@ -2978,8 +3342,8 @@ rmn_lac_test <- ggplot(
   ) +
   # scale_y_continuous(limits = c(-0.001, 0.003)) +
   geom_vline(
-    xintercept = c(1656, 1600, 1330, 1120, 1095, 990, 855, 375),
-    size = 0.2
+    xintercept = c(1658, 1625, 1600, 1334, 1273, 1120, 1095, 993, 378),
+    size = 0.1
   ) +
   # annotate("text",
   #          label = c("1660", "1600", "1330", "1120", "1095", "1001", "375"),
@@ -2992,7 +3356,7 @@ rmn_lac_test <- ggplot(
     group = interaction(cell_type, replicate, TE),
     colour = cell_type
   ),
-  alpha = 0.25,
+  alpha = 0.5,
   size = 0.1
   ) +
   # geom_ribbon(data = rmn_lac_avg,
@@ -3002,14 +3366,14 @@ rmn_lac_test <- ggplot(
   #               ymax = roll_mean + roll_sd),
   #           colour = NA,
   #           alpha = 0.25) +
-  geom_line(
-    data = rmn_lac_avg %>% filter(genotype == "WT" & cell_type == "MX"),
-    aes(
-      colour = cell_type,
-      y = roll_scaled_cellu
-    ),
-    size = 0.2
-  ) +
+  # geom_line(
+  #   data = rmn_lac_avg %>% filter(genotype == "WT" & cell_type == "MX"),
+  #   aes(
+  #     colour = cell_type,
+  #     y = roll_scaled_cellu
+  #   ),
+  #   size = 0.2
+  # ) +
   labs(
     x = expression(paste("Wavenumber [", cm^-1, "]")),
     y = "Scaled scattering intensity"
@@ -3022,12 +3386,12 @@ rmn_lac_test <- ggplot(
     legend.title = element_blank()
   ) +
   guides(colour = guide_legend(override.aes = list(alpha = 1, size = 1))) +
-  facet_wrap(~genotype, ncol = 1)
+  facet_grid(genotype~cell_type)
 
-plotly::ggplotly(rmn_lac_test)
-# pdf("rmn_lac.pdf", height = onecol * 0.5, width = onecol * 1.5)
-# rmn_lac_test
-# dev.off()
+# plotly::ggplotly(rmn_lac_test)
+pdf("rmn_lac.pdf", height = twocol, width = twocol)
+rmn_lac_test
+dev.off()
 ```
 
 ## Lignin composition
@@ -3042,9 +3406,6 @@ violin_data <- rmn_lac_sum %>%
     AUC,
     "Cellulose cryst." = cellu_cryst,
     "Benzaldehydes" = Benz_rel,
-    # "P/cellulose" = P.cellu,
-    # "G-units" = G_rel,
-    # "Lignin/cellulose" = lig.cellu,
     "G-CHO/G-OH" = GCHO.GOH
   ) %>%
   filter(cell_type != "LP") %>%
@@ -3189,10 +3550,121 @@ pdf("lig_violin_complete.pdf", width = twocol, height = twocol)
 lig_violin
 dev.off()
 ```
+### Find specificity
+```{r}
+
+raman_regressions <- violin_data %>%
+  group_by(variable, cell_type) %>%
+  mutate(value = scale(value, scale = TRUE, center = TRUE)) %>%
+  group_by(genotype, replicate, cell_type, variable) %>%
+  mutate(cell = row_number()) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  # select(-AUC) %>%
+  pivot_longer(cols = -c(1:6), names_to = "variable", values_to ="value") %>%
+  nest(data = -c(variable, cell_type)) %>%
+  group_by(variable, cell_type) %>%
+  mutate(
+    model = map(data, ~lm(value ~ `Total lignin`, data = .x)),
+    model_glance = map(model, glance),
+    predicted = map(model, predict),
+    residuals = map(model, residuals),
+    adj.r.squared = unlist(map(model_glance, ~ .x[["adj.r.squared"]]))) %>%
+  unnest(data, predicted, residuals) 
+
+raman_regression_avg <- raman_regressions %>%
+  group_by(genotype, cell_type, variable) %>%
+  summarise(value = mean(value),
+            predicted = mean(predicted),
+            divergence = value - predicted,
+            value_label = case_when(divergence > 0 ~ value + 1,
+                                    TRUE ~ value -1),
+            `Total lignin` = mean(`Total lignin`),
+            adj.r.squared = mean(adj.r.squared))
+
+resid_plot <- ggplot(raman_regressions) +
+  geom_point(aes(
+    x = `Total lignin`,
+    y = value,
+    alpha = abs(residuals),
+    colour = abs(residuals),
+    group = interaction(genotype, replicate, cell)
+  ),
+  shape = 16,
+  size = 0.75
+  ) +
+  geom_line(aes(
+    x = `Total lignin`,
+    y = predicted
+  )) +
+  geom_point(
+    data = raman_regression_avg,
+    aes(
+      x = `Total lignin`,
+      y = value,
+      fill = genotype
+    ),
+    shape = 21,
+    stroke = 0.2
+  ) +
+  geom_text(
+    data = raman_regression_avg %>% filter(genotype == "WT"),
+    aes(
+      x = 2,
+      y = 5,
+      label = paste("R² = ", round(adj.r.squared, digits = 2))
+    ),
+    family = "Helvetica",
+    size = ggtext_size,
+    hjust = 1,
+    vjust = 1
+  ) +
+  geom_label_repel(
+    data = raman_regression_avg %>% filter(abs(divergence) > 0.5),
+    aes(
+      x = `Total lignin`,
+      y = value,
+      label = genotype
+    ),
+    family = "Helvetica",
+    fontface = "bold",
+    size = ggtext_size,
+    min.segment.length = 0,
+    segment.size = 0.2,
+    nudge_x = -1,
+    nudge_y = 1,
+    label.size = NA,
+    label.padding = 0,
+    fill = rgb(1, 1, 1, 0.85)
+    # direction = "y"
+  ) +
+  theme_leo() +
+  theme(legend.position = "bottom",
+        axis.title.y = element_blank(),
+        strip.placement = "outside",
+        strip.text = element_text(hjust = 0.5, face = "plain"),
+        legend.title = element_blank()) +
+  scale_alpha_continuous(range = c(0.25, 0.75), guide = "none") +
+  # scale_fill_brewer(palette = "Set2") +
+  scale_colour_distiller(palette = "Greys", direction = 1, guide = "none") +
+  # coord_fixed(ratio = 1,
+  #             xlim = c(-2, 2),
+  #             ylim = c(-2, 2)) +
+  facet_grid(variable ~ cell_type, switch = "y")
+
+pdf("lig_comp_residuals.pdf", width = onecol, height = onecol * 1.6)
+resid_plot
+dev.off()
+
+# plotly::ggplotly(resid_plot)
+
+```
+
 
 ### Single plots
 
 ```{r}
+
+# scatter plots
 scatter_data <- rmn_lac_sum %>%
   select(
     "Total lignin" = total_lignin,
