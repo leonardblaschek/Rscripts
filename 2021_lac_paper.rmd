@@ -123,10 +123,10 @@ onecol <- 9 / 2.54
 
 #### machine dependent paths ####
 ## office
-datapath <- "/data/"
+# datapath <- "/data/"
 
 ## laptop
-# datapath <- "/home/leonard/Documents/Uni/"
+datapath <- "/home/leonard/Documents/Uni/"
 ```
 
 # Phenotyping
@@ -3146,26 +3146,42 @@ pdf("TE_growth.pdf", width = onecol, height = onecol * 0.5)
 growth_facet
 dev.off()
 ```
-#### Sigmoind fit
+
+#### Sigmoid fit
+
 ```{r}
-    
-# dpi = 1:53
-# value = c(0,0,0,0,0,0,0,0,0,0,0,0,0,0.1,0.18,0.18,0.18,0.33,0.33,0.33,0.33,0.41,
-#   0.41,0.41,0.41,0.41,0.41,0.5,0.5,0.5,0.5,0.68,0.58,0.58,0.68,0.83,0.83,0.83,
-#   0.74,0.74,0.74,0.83,0.83,0.9,0.9,0.9,1,1,1,1,1,1,1)
-    
-# fitting code
-fit <- nls(value ~ SSlogis(dpi, Asym, xmid, scal),
-                data = filter(growth_long, variable == "TE_viab")
-)
-  
-plot(fit)
+growth_sigmoid <- growth_long %>%
+  select(replicate, dpi, variable, value) %>%
+  group_by(variable) %>%
+  nest(data = c(replicate, dpi, value)) %>%
+  mutate(
+    model = map(data, ~ drc::drm(value ~ dpi, data = .x, fct = drc::G.3())),
+    predicted = map(model, predict)
+  ) %>%
+  unnest(c(data, predicted))
 
-library(drc)
-fm <- drm(value ~ dpi, data = filter(growth_long, variable == "TE_viab"), fct = G.3())
+growth_facet <- ggplot(growth_sigmoid,
+                       aes(x = dpi,
+                           y = value)) +
+  annotate("rect",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = 3,
+           xmax = 7,
+           fill = "grey90") +
+  geom_point(alpha = 0.5,
+             shape = 16,
+             size = 0.5) +
+  geom_line(aes(y = predicted),
+              colour = "#275d95",
+              size = 0.2) +
+  theme_leo() +
+  facet_wrap(~variable, ncol = 3)
 
-plot(fm)
-summary(fm)
+pdf("TE_growth_sigmoid.pdf", width = onecol, height = onecol * 0.5)
+# growth
+growth_facet
+dev.off()
 
 ```
 
@@ -3550,7 +3566,9 @@ pdf("lig_violin_complete.pdf", width = twocol, height = twocol)
 lig_violin
 dev.off()
 ```
+
 ### Find specificity
+
 ```{r}
 
 raman_regressions <- violin_data %>%
