@@ -2302,15 +2302,19 @@ lm_bounds <- tribble(
   "PYGL", "6", 90, 200,
   "PYGL", "7", 30, 90,
   "DAF", "4", 70, 140,
-  "DAF", "5", 90, 200,
+  "DAF", "5", 80, 160,
   "DAF", "6", 90, 200,
   "DAF", "7", 90, 200
 )
 
+# remove points that moved outside the field-of-view due to section movement
 sample_rm <- tribble(
-  ~substrate, ~genotype, ~pH, ~replicate, ~cell_type,
-  "DAF", "Q", "6", "7", "PX"
-)
+  ~substrate, ~genotype, ~replicate, ~pH, ~treatment, ~cell_type, ~time,
+  "DAF", "Q", "7", "6", "untreated", "PX", seq(0, 500, 10),
+  "DAF", "WT", "8", "5", "autoclaved", c("IF", "CML", "LP", "MX", "PX", "XF", "PH", "BG"), seq(280, 500, 10)
+) %>%
+  unnest(time) %>%
+  unnest(cell_type)
 
 pH_data <- read_csv(paste0(
   datapath,
@@ -3228,7 +3232,7 @@ growth_long <- growth_data %>%
 growth_sigmoid <- growth_long %>%
   select(replicate, dpi, variable, value) %>%
   full_join(growth_fine) %>%
-  # filter(dpi < 10 & variable != "nTE_viab") %>%
+  filter(variable != "nTE_viab") %>%
   group_by(variable) %>%
   nest(data = c(replicate, dpi, value)) %>%
   mutate(
@@ -3239,8 +3243,8 @@ growth_sigmoid <- growth_long %>%
   unnest(tidy_drc) %>%
   pivot_wider(names_from = term, values_from = estimate) %>%
   mutate(
-    # data = map2(data, b, ~ mutate(.x, b_drc = round(.y, digits = 1))),
-    data = map2(data, b, ~ mutate(.x, b_drc = 1)), # set b to 1 to avoid singular gradients (no idea why)
+    data = map2(data, b, ~ mutate(.x, b_drc = round(.y, digits = 1))),
+    # data = map2(data, b, ~ mutate(.x, b_drc = 1)), # set b to 1 to avoid singular gradients (no idea why)
     data = map2(data, d, ~ mutate(.x, d_drc = round(.y, digits = 1))),
     data = map2(data, e, ~ mutate(.x, e_drc = round(.y, digits = 1))),
     model_nls = map(data, ~ nls(
