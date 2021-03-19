@@ -3342,6 +3342,101 @@ dev.off()
 
 ```
 
+## Pilots
+
+```{r}
+lm_bounds <- tribble(
+  ~substrate, ~pH, ~lm_start, ~lm_stop,
+  "DAF", "4", 40, 160,
+  "DAF", "5", 40, 160,
+  "DAF", "6", 40, 160,
+  "DAF", "7", 40, 160,
+  "PYGL", "4", 40, 400,
+  "PYGL", "5", 40, 400,
+  "PYGL", "6", 40, 400,
+  "PYGL", "7", 40, 400,
+  "SGZ", "4", 40, 400,
+  "SGZ", "5", 40, 400,
+  "SGZ", "6", 40, 400,
+  "SGZ", "7", 40, 400,
+  "ABTS", "4", 40, 160,
+  "ABTS", "5", 40, 160,
+  "ABTS", "6", 200, 400,
+  "ABTS", "7", 200, 400
+)
+
+abs_max <- tibble(
+  substrate = c("DAF", "PYGL", "SGZ", "ABTS"),
+  abs_max = c(610, 450, 525, 420),
+  abs_min = c(450, 600, 600, 480)
+  )
+
+plate <- tibble(
+  row = rep(LETTERS[1:4], length.out = 48, each = 12),
+  column = rep(1:12, length.out = 48, each = 1),
+  sample = c(
+    rep(c(
+      rep(c("TE", "nTE", "ctrl"),
+      length.out = 12, each = 4
+      )
+    ),
+    length.out = 48
+    )
+  ),
+  substrate = ordered(rep(c("DAF", "PYGL", "SGZ", "ABTS"), each = 12),
+                      levels = c("DAF", "PYGL", "SGZ", "ABTS")),
+  pH = rep(rep(c(4:7), length.out = 12), length.out = 48),
+  replicate = 4,
+  day = 21
+) %>%
+  unite("Well", row, column, sep = "")
+
+pilot1 <- read_csv(
+  paste0(datapath, "PhD/Laccase_activity/2021-03_TE_activity/2021-03-17_pilot.csv")
+  ) %>%
+  left_join(plate) %>%
+  left_join(abs_max) %>%
+  pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>% 
+  mutate(
+    wavelength = as.numeric(wavelength),
+    absorbance = measurement / 0.52, # experimental path length in the plate
+    time = `Cycle #` * 20) %>% # 20 minutes between measurements
+  group_by(sample, substrate, pH, replicate, day) %>%
+  mutate(density = absorbance[wavelength == 600 & `Cycle #` == 1],
+         adjusted_absorbance = case_when(sample == "ctrl" ~ absorbance,
+                                         TRUE ~ absorbance / density),
+         zeroed_absorbance = adjusted_absorbance - adjusted_absorbance[`Cycle #` == 2]) %>% 
+  select(-`Cycle #`, -`Time (s)`)
+  
+pilot1_peaks <- pilot1 %>%
+  group_by(sample, substrate, pH, replicate, day, time) %>%
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
+  summarise(
+    corrected_absorbance = corrected_absorbance[wavelength == abs_max],
+    absorbance = absorbance[wavelength == abs_max],
+    measurement = measurement[wavelength == abs_max])
+
+ggplot(pilot1_peaks,
+       aes(x = time,
+           y = corrected_absorbance,
+           colour = sample)) +
+  geom_line() +
+  scale_x_continuous(limits = c(0, 400)) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_grid(pH ~ substrate, scale = "free_y")
+ 
+
+# plotly::ggplotly(ggplot(filter(pilot1, sample == "nTE" & substrate == "DAF" & pH == 5),
+#        aes(x = wavelength,
+#            y = adjusted_absorbance,
+#            colour = time,
+#            group = time)) +
+#   geom_line(size = 0.1))
+
+```
+
+
 
 # Raman microspectroscopy
 
@@ -3615,7 +3710,7 @@ violin_data <- rmn_lac_sum %>%
 violin_data_avg <- violin_data %>%
   group_by(genotype, cell_type, replicate, variable, instance) %>%
   summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
-  
+
 
 rmn_n <- rmn_lac_sum %>%
   group_by(genotype, replicate, cell_type) %>%
@@ -3644,6 +3739,18 @@ letters <- letter_groups(violin_data,
     value + 0.025,
     TRUE ~ value
   ))
+
+letters_avg <- letter_groups(violin_data_avg,
+  value,
+  genotype,
+  "tukey",
+  variable,
+  cell_type,
+  print_position = "above"
+) %>%
+  select(-value) %>%
+  left_join(select(letters, -Letters), by = c("variable", "cell_type", "genotype"))
+  
 
 lig_violin <- ggplot(
   violin_data,
@@ -3701,7 +3808,7 @@ lig_violin <- ggplot(
     size = 1.5
   ) +
   geom_text(
-    data = letters,
+    data = letters_avg,
     aes(label = Letters),
     size = ggtext_size,
     family = "Helvetica"
