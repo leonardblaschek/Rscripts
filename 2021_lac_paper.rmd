@@ -3232,7 +3232,7 @@ growth_long <- growth_data %>%
 growth_sigmoid <- growth_long %>%
   select(replicate, dpi, variable, value) %>%
   full_join(growth_fine) %>%
-  filter(variable != "nTE_viab") %>%
+  # filter(variable != "nTE_viab") %>%
   group_by(variable) %>%
   nest(data = c(replicate, dpi, value)) %>%
   mutate(
@@ -3243,8 +3243,8 @@ growth_sigmoid <- growth_long %>%
   unnest(tidy_drc) %>%
   pivot_wider(names_from = term, values_from = estimate) %>%
   mutate(
-    data = map2(data, b, ~ mutate(.x, b_drc = round(.y, digits = 1))),
-    # data = map2(data, b, ~ mutate(.x, b_drc = 1)), # set b to 1 to avoid singular gradients (no idea why)
+    # data = map2(data, b, ~ mutate(.x, b_drc = round(.y, digits = 1))),
+    data = map2(data, b, ~ mutate(.x, b_drc = 1)), # set b to 1 to avoid singular gradients (no idea why)
     data = map2(data, d, ~ mutate(.x, d_drc = round(.y, digits = 1))),
     data = map2(data, e, ~ mutate(.x, e_drc = round(.y, digits = 1))),
     model_nls = map(data, ~ nls(
@@ -3347,27 +3347,31 @@ dev.off()
 ```{r}
 lm_bounds <- tribble(
   ~substrate, ~pH, ~lm_start, ~lm_stop,
-  "DAF", "4", 40, 160,
-  "DAF", "5", 40, 160,
-  "DAF", "6", 40, 160,
-  "DAF", "7", 40, 160,
-  "PYGL", "4", 40, 400,
-  "PYGL", "5", 40, 400,
-  "PYGL", "6", 40, 400,
-  "PYGL", "7", 40, 400,
-  "SGZ", "4", 40, 400,
-  "SGZ", "5", 40, 400,
-  "SGZ", "6", 40, 400,
-  "SGZ", "7", 40, 400,
-  "ABTS", "4", 40, 160,
-  "ABTS", "5", 40, 160,
-  "ABTS", "6", 200, 400,
-  "ABTS", "7", 200, 400
+  "ABTS", 4, 40, 160,
+  "ABTS", 5, 40, 160,
+  "ABTS", 6, 200, 400,
+  "ABTS", 7, 200, 400,
+  "DAF", 4, 40, 160,
+  "DAF", 5, 40, 160,
+  "DAF", 6, 40, 160,
+  "DAF", 7, 40, 160,
+  "MBTH", 4, 100, 400,
+  "MBTH", 5, 100, 400,
+  "MBTH", 6, 100, 400,
+  "MBTH", 7, 100, 400,
+  "PYGL", 4, 100, 400,
+  "PYGL", 5, 100, 400,
+  "PYGL", 6, 100, 400,
+  "PYGL", 7, 100, 400,
+  "SGZ", 4, 40, 400,
+  "SGZ", 5, 40, 400,
+  "SGZ", 6, 40, 400,
+  "SGZ", 7, 40, 400,
 )
 
 abs_max <- tibble(
   substrate = c("DAF", "PYGL", "SGZ", "ABTS"),
-  abs_max = c(610, 450, 525, 420),
+  abs_max = c(610, 360, 525, 420),
   abs_min = c(450, 600, 600, 480)
   )
 
@@ -3396,6 +3400,7 @@ pilot1 <- read_csv(
   ) %>%
   left_join(plate) %>%
   left_join(abs_max) %>%
+  left_join(lm_bounds) %>% 
   pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>% 
   mutate(
     wavelength = as.numeric(wavelength),
@@ -3409,7 +3414,7 @@ pilot1 <- read_csv(
   select(-`Cycle #`, -`Time (s)`)
   
 pilot1_peaks <- pilot1 %>%
-  group_by(sample, substrate, pH, replicate, day, time) %>%
+  group_by(sample, substrate, pH, replicate, day, time, lm_start, lm_stop, Well) %>%
   mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
   summarise(
     corrected_absorbance = corrected_absorbance[wavelength == abs_max],
@@ -3424,7 +3429,35 @@ ggplot(pilot1_peaks,
   scale_x_continuous(limits = c(0, 400)) +
   theme_leo() +
   theme(legend.position = "bottom") +
-  facet_grid(pH ~ substrate, scale = "free_y")
+  facet_grid(pH ~ substrate, scale = "free")
+
+pilot1_nested <- pilot1_peaks %>%
+  filter(time >= lm_start & time <= lm_stop) %>%
+  select(-absorbance, -measurement) %>%
+  nest(data = c(time, corrected_absorbance)) %>%
+  mutate(
+    fit = map(data, ~ lm(corrected_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "time") %>%
+  mutate(column = as.numeric(str_remove(Well, "[:alpha:]")),
+         row = ordered(str_extract(Well, "[:alpha:]"),
+                       levels = c("A", "B", "C", "D")))
+
+ggplot(
+  pilot1_nested,
+  aes(x = column, y = row, fill = estimate)) +
+  geom_tile() +
+  # scale_x_discrete(limits = rev(levels(pilot1_nested$dilution))) +
+  scale_y_discrete(limits = rev(levels(pilot1_nested$row))) +
+  # scale_fill_gradientn(colours = rev(pal_ostwald_cont)) +
+  scale_fill_viridis_c() +
+  geom_label(aes(label = round(estimate, digits = 4))) +
+  theme_leo() 
  
 
 # plotly::ggplotly(ggplot(filter(pilot1, sample == "nTE" & substrate == "DAF" & pH == 5),
@@ -3435,6 +3468,629 @@ ggplot(pilot1_peaks,
 #   geom_line(size = 0.1))
 
 ```
+
+### Calibration
+
+```{r}
+# load data ####
+lm_bounds <- tribble(
+  ~substrate, ~pH, ~lm_start, ~lm_stop,
+  "DAF", 4, 40, 160,
+  "DAF", 5, 40, 160,
+  "DAF", 6, 40, 160,
+  "DAF", 7, 40, 160,
+  "PYGL", 4, 100, 400,
+  "PYGL", 5, 100, 400,
+  "PYGL", 6, 100, 400,
+  "PYGL", 7, 100, 400,
+  "SGZ", 4, 40, 400,
+  "SGZ", 5, 40, 400,
+  "SGZ", 6, 40, 400,
+  "SGZ", 7, 40, 400,
+  "ABTS", 4, 40, 160,
+  "ABTS", 5, 40, 160,
+  "ABTS", 6, 200, 400,
+  "ABTS", 7, 200, 400
+)
+
+abs_max <- tibble(
+  substrate = c("DAF", "PYGL", "SGZ", "ABTS"),
+  abs_max = c(610, 450, 525, 420),
+  abs_min = c(450, 600, 600, 480)
+)
+
+plate <- tibble(
+  row = rep(LETTERS[1:3], length.out = 18, each = 6),
+  column = rep(1:6, length.out = 18, each = 1),
+  dilution = rep(c(1, 0.5, 0.25, 0.125, 0.0625, 0.03125), length.out = 18),
+  technical = rep(c(1:3), each = 6, length.out = 18),
+  sample = "nTE",
+  substrate = ordered(c("PYGL"), levels = c("DAF", "PYGL", "SGZ", "ABTS")),
+  pH = 6,
+  replicate = 4,
+  day = 21
+) %>%
+  unite("Well", row, column, sep = "")
+
+calibration <- read_csv(
+  paste0(datapath, "PhD/Laccase_activity/2021-03_TE_activity/2021-03-22_OD_calibration.csv")
+) %>%
+  left_join(plate) %>%
+  left_join(abs_max) %>%
+  left_join(lm_bounds) %>%
+  pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>%
+  mutate(
+    wavelength = as.numeric(wavelength),
+    absorbance = measurement / 0.52, # experimental path length in the plate
+    time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
+  ) %>% 
+  group_by(sample, substrate, pH, replicate, dilution, technical, day) %>%
+  mutate(
+    density = absorbance[wavelength == 600 & `Cycle #` == 1],
+    adjusted_absorbance = case_when(
+      sample == "ctrl" ~ absorbance,
+      TRUE ~ absorbance # do not adjust for density
+      # TRUE ~ absorbance / density # adjust for density
+    ),
+    zeroed_absorbance = adjusted_absorbance - adjusted_absorbance[`Cycle #` == 3]
+  ) %>%
+  select(-`Cycle #`, -`Time (s)`)
+
+# validate OD600 for cell density ####
+calibration_density <- calibration %>%
+  summarise(density = mean(density))
+
+cal_r2 <- round(
+  summary(
+    lm(density ~ dilution, data = calibration_density)
+    )$adj.r.squared, 
+  digits = 2)
+
+ggplot(calibration_density,
+       aes(x = dilution,
+           y = density)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  annotate("text",
+           label = paste("R² =", cal_r2),
+           x = 0.1,
+           y = 1.4) +
+  theme_leo()
+
+# plot absorbance over time ####
+calibration_peaks <- calibration %>%
+  group_by(
+    sample, substrate, pH, replicate, dilution, technical, day, time, lm_start, lm_stop, density
+    ) %>%
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
+  summarise(
+    corrected_absorbance = corrected_absorbance[wavelength == abs_max],
+    absorbance = absorbance[wavelength == abs_max],
+    measurement = measurement[wavelength == abs_max])
+
+ggplot(calibration_peaks,
+       aes(x = time,
+           y = corrected_absorbance,
+           colour = sample)) +
+  geom_line(aes(group = technical)) +
+  scale_x_continuous(limits = c(0, 400)) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_wrap(~ dilution)
+
+# calculate slopes of linear phase ####
+calibration_nested <- calibration_peaks %>%
+  filter(time >= lm_start & time <= lm_stop) %>%
+  select(-absorbance, -measurement) %>%
+  nest(data = c(time, corrected_absorbance)) %>%
+  mutate(
+    fit = map(data, ~ lm(corrected_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "time") %>%
+  mutate(dilution = as.character(dilution))
+
+ggplot(
+  calibration_nested,
+  aes(x = density, y = estimate)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(y = "PYGL oxidation rate") +
+  expand_limits(y = 0) +
+  theme_leo() +
+  facet_wrap(~substrate)
+
+```
+### Calibration II
+```{r}
+
+lm_bounds <- tribble(
+  ~substrate, ~pH, ~lm_start, ~lm_stop,
+  "DAF", 4, 40, 160,
+  "DAF", 5, 40, 160,
+  "DAF", 6, 40, 160,
+  "DAF", 7, 40, 160,
+  "PYGL", 4, 100, 400,
+  "PYGL", 5, 100, 400,
+  "PYGL", 6, 100, 400,
+  "PYGL", 7, 100, 400,
+  "SGZ", 4, 40, 400,
+  "SGZ", 5, 40, 400,
+  "SGZ", 6, 40, 400,
+  "SGZ", 7, 40, 400,
+  "ABTS", 4, 40, 160,
+  "ABTS", 5, 40, 160,
+  "ABTS", 6, 200, 400,
+  "ABTS", 7, 200, 400
+)
+
+abs_max <- tibble(
+  substrate = c("DAF", "PYGL", "SGZ", "ABTS"),
+  abs_max = c(610, 360, 525, 420),
+  abs_min = c(450, 600, 600, 480)
+)
+
+plate <- tibble(
+  row = rep(LETTERS[1:6], length.out = 48, each = 8),
+  column = rep(1:8, length.out = 48, each = 1),
+  concentration = rep(c(10, 5, 2.5), each = 8, length.out = 48),
+  dilution = rep(c(1, 0.5, 0.25, 0.125, 0.0625, 0.03125, 0.015625, 0), length.out = 48),
+  sample = "nTE",
+  substrate = ordered(rep(c("PYGL", "ABTS"), each = 24, length.out = 48), levels = c("DAF", "PYGL", "SGZ", "ABTS")),
+  pH = rep(c(6, 4), each = 24, length.out = 48),
+  replicate = 4,
+  day = 21
+) %>%
+  unite("Well", row, column, sep = "")
+
+calibration <- read_csv(
+  paste0(datapath, "PhD/Laccase_activity/2021-03_TE_activity/2021-03-23_OD_calibration.csv")
+) %>%
+  left_join(plate) %>%
+  left_join(abs_max) %>%
+  left_join(lm_bounds) %>%
+  pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>%
+  mutate(
+    wavelength = as.numeric(wavelength),
+    absorbance = measurement / 0.52, # experimental path length in the plate
+    time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
+  ) %>% 
+  group_by(sample, substrate, pH, replicate, dilution, concentration, day) %>%
+  mutate(
+    density = absorbance[wavelength == 600 & `Cycle #` == 1],
+    adjusted_absorbance = case_when(
+      sample == "ctrl" ~ absorbance,
+      TRUE ~ absorbance # do not adjust for density
+      # TRUE ~ absorbance / density # adjust for density
+    ),
+    zeroed_absorbance = adjusted_absorbance - adjusted_absorbance[`Cycle #` == 3]
+  ) %>%
+  select(-`Cycle #`, -`Time (s)`)
+
+# validate OD600 for cell density ####
+calibration_density <- calibration %>%
+  summarise(density = mean(density))
+
+cal_r2 <- round(
+  summary(
+    lm(density ~ dilution, data = calibration_density)
+    )$adj.r.squared, 
+  digits = 2)
+
+ggplot(calibration_density,
+       aes(x = dilution,
+           y = density)) +
+  geom_point(aes(colour = pH)) +
+  geom_smooth(method = "lm") +
+  annotate("text",
+           label = paste("R² =", cal_r2),
+           x = 0.1,
+           y = 1.4) +
+  theme_leo()
+
+# check which wavelength to use for PYGL ####
+calibration_wide <- calibration %>%
+  select(-measurement, -absorbance, -adjusted_absorbance) %>%
+  filter(wavelength %in% c(300, 360, 450)) %>%
+  pivot_wider(names_from = wavelength, values_from = zeroed_absorbance)
+
+ggplot(filter(calibration_wide, substrate == "PYGL"),
+       aes(x = `450`, y = `360`)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+# plot absorbance over time ####
+calibration_peaks <- calibration %>%
+  group_by(
+    sample, substrate, pH, replicate, dilution, concentration, day, time, lm_start, lm_stop, density
+    ) %>%
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
+  summarise(
+    corrected_absorbance = corrected_absorbance[wavelength == abs_max],
+    absorbance = absorbance[wavelength == abs_max],
+    measurement = measurement[wavelength == abs_max])
+
+ggplot(calibration_peaks,
+       aes(x = time,
+           y = corrected_absorbance,
+           colour = concentration)) +
+  geom_line(aes(group = concentration)) +
+  scale_x_continuous(limits = c(0, 400)) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_grid(substrate ~ dilution)
+
+# calculate slopes of linear phase ####
+calibration_nested <- calibration_peaks %>%
+  filter(time >= lm_start & time <= lm_stop) %>%
+  select(-absorbance, -measurement) %>%
+  nest(data = c(time, corrected_absorbance)) %>%
+  mutate(
+    fit = map(data, ~ lm(corrected_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "time") %>%
+  mutate(dilution = as.factor(dilution))
+
+ggplot(
+  calibration_nested,
+  aes(x = density, y = estimate, colour = concentration)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(y = "Oxidation rate") +
+  expand_limits(y = 0) +
+  theme_leo() +
+  facet_wrap(~ substrate, scales = "free_y")
+
+ggplot(
+  calibration_nested,
+  aes(x = dilution, y = interaction(concentration, substrate), fill = estimate)) +
+  geom_tile() +
+  scale_x_discrete(limits = rev(levels(calibration_nested$dilution))) +
+  # scale_fill_gradientn(colours = rev(pal_ostwald_cont)) +
+  scale_fill_viridis_c() +
+  geom_label(aes(label = round(estimate, digits = 4))) +
+  theme_leo() 
+
+```
+
+### Calibration III
+
+```{r}
+lm_bounds <- tribble(
+  ~substrate, ~pH, ~lm_start, ~lm_stop,
+  "ABTS", 4, 40, 160,
+  "ABTS", 5, 40, 160,
+  "ABTS", 6, 200, 400,
+  "ABTS", 7, 200, 400,
+  "DAF", 4, 40, 160,
+  "DAF", 5, 40, 160,
+  "DAF", 6, 40, 160,
+  "DAF", 7, 40, 160,
+  "MBTH", 4, 100, 400,
+  "MBTH", 5, 100, 400,
+  "MBTH", 6, 100, 400,
+  "MBTH", 7, 100, 400,
+  "PYGL", 4, 100, 400,
+  "PYGL", 5, 100, 400,
+  "PYGL", 6, 100, 400,
+  "PYGL", 7, 100, 400,
+  "SGZ", 4, 40, 400,
+  "SGZ", 5, 40, 400,
+  "SGZ", 6, 40, 400,
+  "SGZ", 7, 40, 400,
+)
+
+abs_max <- tibble(
+  substrate = c("ABTS", "DAF", "MBTH", "PYGL", "SGZ"),
+  abs_max = c(420, 610, 505, 360, 525),
+  abs_min = c(480, 450, 700, 600, 600)
+)
+
+plate <- tibble(
+  row = rep(LETTERS[1:5], length.out = 40, each = 8),
+  column = rep(1:8, length.out = 40, each = 1),
+  concentration = rep(c(5, 0.07, 5, 0.1, 6), each = 8, length.out = 40),
+  dilution = rep(c(1, 0.5, 0.25, 0.125, 0.0625, 0.03125, 0.015625, 0), length.out = 40),
+  sample = "TE",
+  substrate = ordered(rep(c("ABTS", "DAF", "PYGL", "SGZ", "MBTH"), each = 8, length.out = 40), 
+                      levels = c("ABTS", "DAF", "PYGL", "SGZ", "MBTH")),
+  pH = rep(c(4, 5, 6, 5, 5), each = 8, length.out = 40),
+  replicate = 4,
+  day = 21
+) %>%
+  unite("Well", row, column, sep = "")
+
+calibration <- read_csv(
+  paste0(datapath, "PhD/Laccase_activity/2021-03_TE_activity/2021-03-24_OD_calibration.csv")
+) %>%
+  left_join(plate) %>%
+  left_join(abs_max) %>%
+  left_join(lm_bounds) %>%
+  pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>%
+  mutate(
+    substrate = ordered(substrate, levels = c("ABTS", "DAF", "PYGL", "SGZ", "MBTH")),
+    wavelength = as.numeric(wavelength),
+    absorbance = measurement / 0.52, # experimental path length in the plate
+    time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
+  ) %>% 
+  group_by(sample, substrate, pH, replicate, dilution, day) %>%
+  mutate(
+    density = absorbance[wavelength == 600 & `Cycle #` == 1],
+    adjusted_absorbance = case_when(
+      sample == "ctrl" ~ absorbance,
+      TRUE ~ absorbance # do not adjust for density
+      # TRUE ~ absorbance / density # adjust for density
+    ),
+    zeroed_absorbance = adjusted_absorbance - adjusted_absorbance[`Cycle #` == 3]
+  ) %>%
+  select(-`Cycle #`, -`Time (s)`)
+
+# validate OD600 for cell density ####
+calibration_density <- calibration %>%
+  summarise(density = mean(density))
+
+cal_r2 <- round(
+  summary(
+    lm(density ~ dilution, data = calibration_density)
+    )$adj.r.squared, 
+  digits = 2)
+
+ggplot(calibration_density,
+       aes(x = dilution,
+           y = density)) +
+  geom_point(aes(colour = pH)) +
+  geom_smooth(method = "lm") +
+  annotate("text",
+           label = paste("R² =", cal_r2),
+           x = 0.1,
+           y = 1.4) +
+  theme_leo()
+
+# check which wavelength to use for PYGL ####
+calibration_wide <- calibration %>%
+  select(-measurement, -absorbance, -adjusted_absorbance) %>%
+  filter(wavelength %in% c(300, 360, 450)) %>%
+  pivot_wider(names_from = wavelength, values_from = zeroed_absorbance)
+
+ggplot(filter(calibration_wide, substrate == "PYGL"),
+       aes(x = `450`, y = `360`)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+# plot absorbance over time ####
+calibration_peaks <- calibration %>%
+  group_by(
+    sample, substrate, pH, replicate, dilution, day, time, lm_start, lm_stop, density
+    ) %>%
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
+  summarise(
+    corrected_absorbance = corrected_absorbance[wavelength == abs_max],
+    absorbance = absorbance[wavelength == abs_max],
+    measurement = measurement[wavelength == abs_max])
+
+ggplot(calibration_peaks,
+       aes(x = time,
+           y = corrected_absorbance)) +
+  geom_line() +
+  scale_x_continuous(limits = c(0, 400)) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_grid(substrate ~ dilution)
+
+# calculate slopes of linear phase ####
+calibration_nested <- calibration_peaks %>%
+  filter(time >= lm_start & time <= lm_stop) %>%
+  select(-absorbance, -measurement) %>%
+  nest(data = c(time, corrected_absorbance)) %>%
+  mutate(
+    fit = map(data, ~ lm(corrected_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "time") %>%
+  mutate(dilution = as.factor(dilution))
+
+ggplot(
+  calibration_nested,
+  aes(x = density, y = estimate)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(y = "Oxidation rate") +
+  expand_limits(y = 0) +
+  theme_leo() +
+  facet_wrap(~ substrate, scales = "free_y")
+
+ggplot(
+  calibration_nested,
+  aes(x = dilution, y = substrate, fill = estimate)) +
+  geom_tile() +
+  scale_x_discrete(limits = rev(levels(calibration_nested$dilution))) +
+  scale_y_discrete(limits = rev(levels(calibration_nested$substrate))) +
+  # scale_fill_gradientn(colours = rev(pal_ostwald_cont)) +
+  scale_fill_viridis_c() +
+  geom_label(aes(label = round(estimate, digits = 4))) +
+  theme_leo() 
+
+```
+
+### Calibration IV
+
+```{r}
+lm_bounds <- tribble(
+  ~substrate, ~pH, ~lm_start, ~lm_stop,
+  "ABTS", 4, 40, 160,
+  "ABTS", 5, 40, 160,
+  "ABTS", 6, 200, 400,
+  "ABTS", 7, 200, 400,
+  "DAF", 4, 40, 160,
+  "DAF", 5, 40, 160,
+  "DAF", 6, 40, 160,
+  "DAF", 7, 40, 160,
+  "MBTH", 4, 100, 400,
+  "MBTH", 5, 100, 400,
+  "MBTH", 6, 100, 400,
+  "MBTH", 7, 100, 400,
+  "PYGL", 4, 100, 400,
+  "PYGL", 5, 100, 400,
+  "PYGL", 6, 100, 400,
+  "PYGL", 7, 100, 400,
+  "SGZ", 4, 40, 400,
+  "SGZ", 5, 40, 400,
+  "SGZ", 6, 40, 400,
+  "SGZ", 7, 40, 400,
+)
+
+abs_max <- tibble(
+  substrate = c("ABTS", "DAF", "MBTH", "PYGL", "SGZ"),
+  abs_max = c(420, 610, 505, 450, 525),
+  abs_min = c(480, 450, 700, 600, 600)
+)
+
+plate <- tibble(
+  row = rep(LETTERS[1:6], length.out = 48, each = 8),
+  column = rep(1:8, length.out = 48, each = 1),
+  concentration = rep(c(5, 0.5, 0.05), each = 16, length.out = 48),
+  dilution = rep(c(1, 0.5, 0.25, 0.125, 0.0625, 0.03125, 0.015625, 0), length.out = 48),
+  sample = rep(c("TE", "nTE"), each = 8, length.out = 48),
+  substrate = ordered("PYGL", 
+                      levels = c("ABTS", "DAF", "PYGL", "SGZ", "MBTH")),
+  pH = 6,
+  replicate = 4,
+  day = 21
+) %>%
+  unite("Well", row, column, sep = "")
+
+calibration <- read_csv(
+  paste0(datapath, "PhD/Laccase_activity/2021-03_TE_activity/2021-03-25_OD_calibration.csv")
+) %>%
+  left_join(plate) %>%
+  left_join(abs_max) %>%
+  left_join(lm_bounds) %>%
+  pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>%
+  mutate(
+    substrate = ordered(substrate, levels = c("ABTS", "DAF", "PYGL", "SGZ", "MBTH")),
+    wavelength = as.numeric(wavelength),
+    absorbance = measurement / 0.52, # experimental path length in the plate
+    time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
+  ) %>% 
+  group_by(sample, substrate, pH, replicate, dilution, concentration, day) %>%
+  mutate(
+    density = absorbance[wavelength == 600 & `Cycle #` == 1],
+    adjusted_absorbance = case_when(
+      sample == "ctrl" ~ absorbance,
+      TRUE ~ absorbance # do not adjust for density
+      # TRUE ~ absorbance / density # adjust for density
+    ),
+    zeroed_absorbance = adjusted_absorbance - adjusted_absorbance[`Cycle #` == 3]
+  ) %>%
+  select(-`Cycle #`, -`Time (s)`)
+
+# validate OD600 for cell density ####
+calibration_density <- calibration %>%
+  summarise(density = mean(density))
+
+cal_r2 <- round(
+  summary(
+    lm(density ~ dilution, data = calibration_density)
+    )$adj.r.squared, 
+  digits = 2)
+
+ggplot(calibration_density,
+       aes(x = dilution,
+           y = density)) +
+  geom_point(aes(colour = sample)) +
+  geom_smooth(aes(colour = sample),
+              method = "lm") +
+  annotate("text",
+           label = paste("R² =", cal_r2),
+           x = 0.1,
+           y = 1.4) +
+  theme_leo()
+
+# check which wavelength to use for PYGL ####
+calibration_wide <- calibration %>%
+  select(-measurement, -absorbance, -adjusted_absorbance) %>%
+  filter(wavelength %in% c(300, 360, 450)) %>%
+  pivot_wider(names_from = wavelength, values_from = zeroed_absorbance)
+
+ggplot(filter(calibration_wide, substrate == "PYGL"),
+       aes(x = `450`, y = `360`, colour = concentration)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+# plot absorbance over time ####
+calibration_peaks <- calibration %>%
+  group_by(
+    sample, substrate, pH, replicate, dilution, concentration, day, time, lm_start, lm_stop, density
+    ) %>%
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
+  summarise(
+    corrected_absorbance = corrected_absorbance[wavelength == abs_max],
+    absorbance = absorbance[wavelength == abs_max],
+    measurement = measurement[wavelength == abs_max])
+
+ggplot(calibration_peaks,
+       aes(x = time,
+           y = corrected_absorbance,
+           colour = sample)) +
+  geom_line() +
+  scale_x_continuous(limits = c(0, 400)) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_grid(concentration ~ dilution)
+
+# calculate slopes of linear phase ####
+calibration_nested <- calibration_peaks %>%
+  filter(time >= lm_start & time <= lm_stop) %>%
+  select(-absorbance, -measurement) %>%
+  nest(data = c(time, corrected_absorbance)) %>%
+  mutate(
+    fit = map(data, ~ lm(corrected_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "time") %>%
+  mutate(dilution = as.factor(dilution))
+
+ggplot(
+  calibration_nested,
+  aes(x = density, y = estimate)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  labs(y = "Oxidation rate") +
+  expand_limits(y = 0) +
+  theme_leo() +
+  facet_grid(sample ~ concentration, scales = "free_y")
+
+ggplot(
+  calibration_nested,
+  aes(x = dilution, y = interaction(sample, concentration), fill = estimate)) +
+  geom_tile() +
+  scale_x_discrete(limits = rev(levels(calibration_nested$dilution))) +
+  # scale_y_discrete(limits = rev(levels(calibration_nested$substrate))) +
+  # scale_fill_gradientn(colours = rev(pal_ostwald_cont)) +
+  scale_fill_viridis_c() +
+  geom_label(aes(label = round(estimate, digits = 4))) +
+  theme_leo() 
+
+```
+
+
 
 
 
