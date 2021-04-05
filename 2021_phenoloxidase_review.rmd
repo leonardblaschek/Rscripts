@@ -1,0 +1,742 @@
+---
+title: "Phenoloxidase review"
+author: "Leonard Blaschek"
+date: "4/1/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggthemes)
+library(showtext)
+library(ggbeeswarm)
+library(patchwork)
+library(broom)
+library(ggdendro)
+
+#### import Helvetica Neue ####
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 6,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.125,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        size = 6,
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        size = 6,
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.title = element_text(
+        colour = "black",
+        size = 6
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = 6),
+      legend.key.height = unit(4, "mm"),
+      plot.title = element_text(
+        size = 6,
+        hjust = 0
+      ),
+      complete = TRUE
+    )
+}
+
+equal_breaks <- function(n = 3, s = 0.05, ...) {
+  function(value) {
+    # rescaling
+    d <- s * diff(range(value)) / (1 + 2 * s)
+    round(seq(0, max(value) - d, length = n), digits = 2)
+  }
+}
+
+my_breaks <- function(value) {
+  if (
+    max(value) < 0.005) {
+    seq(0, 0.004, length.out = 3)
+  } else if (
+    max(value) < 0.05) {
+    seq(0, 0.02, length.out = 3)
+  } else if (
+    max(value) < 2) {
+    seq(0, 1, length.out = 3)
+  } else {
+    seq(0, 100, length.out = 3)
+  }
+}
+
+my_limits <- function(value) {
+  if (
+    max(value) < 0.005) {
+    c(0, 0.0045)
+  } else if (
+    max(value) < 0.05) {
+    c(0, 0.025)
+  } else if (
+    max(value) < 2) {
+    c(-0.25, 1.1)
+  } else {
+    c(-10, 120)
+  }
+}
+
+mode <- function(codes){
+  which.max(tabulate(codes))
+}
+
+morgenstemning <- c(
+  "#000000ff",
+  "#051d2eff",
+  "#18355fff",
+  "#6f2b74ff",
+  "#c21b70ff",
+  "#f48139ff",
+  "#fae400ff",
+  "#fefe93ff"
+)
+
+ggtext_size <- 6 / (14 / 5)
+twocol <- 18 / 2.54
+onehalfcol <- 14 / 2.54
+onecol <- 9 / 2.54
+```
+
+## Phenoloxidase evolution
+
+```{r}
+PO <- read.csv("/home/leonard/Dropbox/2018_PO_review/gene_families.csv") %>%
+  select(1:7) %>% 
+  rename("PRX" = "POX") %>% 
+  pivot_longer(c("PPO", "LAC", "PRX"), names_to = "variable", values_to = "value") %>%
+  mutate(variable = ordered(variable, levels = c("PPO", "LAC", "PRX")))
+
+PO_lm <- PO %>%
+  group_by(variable) %>%
+  filter(genome < 800) %>%
+  do(lin_reg = lm(value ~ genome, data = .)) %>%
+  mutate(coefs = list(tidy(lin_reg))) %>%
+  unnest(coefs) %>%
+  filter(term == "genome")
+  
+
+po_plot <- ggplot(data = PO, aes(x = genome, y = value)) +
+  geom_point(aes(size = time, fill = variable), colour = "black", shape = 21, stroke = 0.1, alpha = 0.75) +
+  scale_size_area(max_size = 10, name = "Divergence [mya]") +
+  scale_x_continuous(limits = c(0, 800)) +
+  scale_fill_few(guide = "none") +
+  scale_colour_few( name = "") +
+  geom_smooth(aes(colour = variable), method = "lm", se = FALSE, linetype = 2) +
+  guides(colour = guide_legend(order = 0),
+         size = guide_legend(order = 1)) +
+  labs(x = "Genome size [Mb]",
+       y = "Number of paralogs") +
+  theme_base() +
+  theme(text = element_text(family = "Helvetica"),
+        legend.position = c(0.3, 0.8),
+        legend.box = "horizontal",
+        plot.background = element_blank())
+
+
+pdf("gene_fams.pdf", width = 6, height = 6)
+po_plot
+dev.off()
+```
+
+## Localisation
+
+```{r}
+expression <- read.csv("/home/leonard/Dropbox/2018_PO_review/figures_PO-review/expression_fig/expression.csv") %>%
+  mutate(PO = ordered(PO, levels = c("PPO", "LAC", "PRX")))
+
+expression_avg <- expression %>%
+  group_by(PO) %>%
+  mutate(total = sum(count, na.rm = TRUE)) %>%
+  group_by(PO, compartment, method) %>%
+  mutate(relative = count/total)
+
+expression_count <- expression %>%
+  uncount(weights = count) %>%
+  group_by(PO, compartment) %>%
+  arrange(method) %>%
+  mutate(number = row_number())
+
+ex_plot <- ggplot(expression_count, aes(x = compartment, y = number, fill = PO)) +
+  geom_jitter(data = filter(expression_count, method == "pred"),
+              aes(x = compartment, y = number, fill = PO),
+              alpha = 0) +
+  annotate("rect",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = c(0.5, 2.5, 4.5),
+           xmax = c(1.5, 3.5, 5.5),
+           fill = "grey95",
+           colour = NA) +
+  geom_jitter(data = filter(expression_count, method == "pred"), aes(x = compartment, y = number, fill = PO),
+              width = 0.2,
+              shape = 21,
+              alpha = 0.5,
+              size = 0.5,
+              stroke = 0.1) +
+  geom_jitter(data = filter(expression_count, method == "exp"), aes(x = compartment, y = number, fill = PO),
+              width = 0.2,
+              shape = 21,
+              alpha = 0.75,
+              size = 1,
+              stroke = 0.2) +
+  labs(y = "Reported protein localisations") +
+  theme_leo() +
+  theme(axis.title.y = element_blank()) +
+  scale_fill_few() +
+  facet_wrap(~ PO, nrow = 1) +
+  coord_flip()
+
+pdf("expression_plot.pdf", height = onecol / 3, width = onecol)
+ex_plot
+dev.off()
+```
+
+
+
+## Enzymne kinetics
+
+### import data
+
+```{r}
+lac_data <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Data/lac_data.csv") %>%
+  select(1, 2, 8, 10:24) %>%
+  pivot_longer(-c("Kingdom", "Species", "Temperature.optimum", "PI"),
+    names_to = "variable", values_to = "value"
+  ) %>%
+  separate(variable, c("var", "substrate"), extra = "merge", remove = TRUE) %>%
+  mutate(
+    value = as.numeric(value),
+    Temperature.optimum = as.numeric(Temperature.optimum),
+    Kingdom = ordered(Kingdom, levels = c("Fungi", "Prokaryota", "Plantae"))
+  ) %>%
+  filter(substrate %in% c("ABTS", "DMP", "SGZ"))
+```
+
+### Km figure
+
+```{r}
+lac.fig.km <- ggplot(
+  data = filter(lac_data, var == "Km"),
+  aes(x = Kingdom, y = value, fill = Kingdom)
+) +
+  geom_quasirandom(
+    aes(colour = Kingdom),
+    dodge.width = 0.6,
+    shape = 16,
+    alpha = 0.75,
+    size = 1
+  ) +
+  geom_violin(
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.5,
+    width = 0.4,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+  ) +
+  scale_y_log10(limits = c(0.5, 10000)) +
+  labs(y = "Km [µM]") +
+  scale_colour_brewer(palette = "Set1") +
+  theme_leo() +
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  facet_wrap(~substrate)
+```
+
+### pH figure
+
+```{r}
+lac.fig.ph <- ggplot(data = filter(lac_data, var == "pH"), aes(x = Kingdom, y = value, fill = Kingdom)) +
+  geom_quasirandom(
+    aes(colour = Kingdom),
+    dodge.width = 0.6,
+    shape = 16,
+    alpha = 0.75,
+    size = 1
+  ) +
+  geom_violin(
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.5,
+    width = 0.4,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+  ) +
+  labs(y = "pH optimum") +
+  scale_colour_brewer(palette = "Set1") +
+  scale_y_continuous(limits = c(0, 10), breaks = c(0, 3, 6, 9)) +
+  theme_leo() +
+  theme(strip.text = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  facet_wrap(~substrate)
+```
+
+### temp figure
+
+```{r}
+lac.fig.temp <- ggplot(data = lac_data, aes(x = Kingdom, y = Temperature.optimum, fill = Kingdom)) +
+  geom_quasirandom(
+    aes(colour = Kingdom),
+    dodge.width = 0.6,
+    shape = 16,
+    alpha = 0.75,
+    size = 1
+  ) +
+  geom_violin(
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.5,
+    width = 0.4,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+  ) +
+  annotate("text",
+           x = c(1, 2, 3),
+           y = c(5, 15, 25),
+           label = c("Fungi", "Prokaryota", "Plantae"),
+           family = "Helvetica",
+           size = ggtext_size
+  ) +
+  annotate("segment",
+           x = c(1, 2, 3),
+           xend = c(1, 2, 3),
+           y = c(22, 27, 37),
+           yend = c(8, 18, 28),
+           colour = "black",
+           size = 0.2
+  ) +
+  labs(y = "Temperature optimum [°C]") +
+  scale_colour_brewer(palette = "Set1") +
+  scale_y_continuous(limits = c(0, 95)) +
+  theme_leo() +
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank())
+```
+
+### pI figure
+
+```{r}
+lac.fig.pi <- ggplot(data = lac_data, aes(x = Kingdom, y = PI, fill = Kingdom)) +
+  geom_quasirandom(
+    aes(colour = Kingdom),
+    dodge.width = 0.6,
+    shape = 16,
+    alpha = 0.75,
+    size = 1
+  ) +
+  geom_violin(
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.5,
+    width = 0.4,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+  ) +
+  labs(y = "Isoelectric point") +
+  scale_colour_brewer(palette = "Set1") +
+  scale_y_continuous(limits = c(0, 10.5), breaks = c(0, 3, 6, 9)) +
+  theme_leo() +
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank())
+```
+
+### arrange panels
+
+```{r}
+pdf("lac_fig.pdf", width = onecol, height = onecol * 0.75)
+lac.fig.temp + lac.fig.km + lac.fig.pi + lac.fig.ph +
+  plot_layout(widths = c(1 , 2.5))
+dev.off()
+```
+
+## Homology models
+
+### CASTp
+
+```{r}
+# load model quality 
+model_dope <- read_table("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/model_quality/normalized_DOPE.txt",
+                         col_names = c("model", "DOPE")) %>%
+  bind_rows(read_table("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-04_described_laccases/model_quality/normalized_DOPE.txt",
+                         col_names = c("model", "DOPE"))) %>% 
+  mutate(model = str_remove(model, fixed(".pdb"))) %>% 
+  separate(model, into = c("paralog", "model"))
+
+# CASTp job codes
+CASTp_codes <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/job_codes.csv",
+                        col_names = c("model", "code")) %>%
+  mutate(model = str_remove(basename(model), fixed(".pdb")),
+         code = str_remove(basename(code), fixed(".zip"))
+         ) %>%
+  separate(model, into = c("paralog", "model"))
+
+# equivalent residues forming the pocket (manually taken from alignment)
+pocket_residues <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/pocket_residues.csv") %>%
+  pivot_longer(-paralog, names_to = "6klg", values_to = "ID") %>%
+  separate(ID, into = c("aa", "position")) %>%
+  mutate(position = as.numeric(position))
+
+# load .poc files from CASTp
+poc_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/extracted/",
+    pattern = ".poc$",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_poc <- function(flnm) {
+  read_table(flnm, 
+             col_names = c(
+              "type",
+              "atom_no",
+              "atom",
+              "aa",
+              "chain",
+              "position",
+              "x",
+              "y",
+              "z",
+              "who_knows",
+              "pocket",
+              "pocket_type")
+             ) %>%
+    mutate(
+      code = str_remove(basename(flnm), fixed(".poc"))
+    ) 
+}
+
+CASTp_poc <- map(poc_files, read_poc) %>%
+  bind_rows() %>%
+  left_join(CASTp_codes) %>%
+  left_join(pocket_residues) 
+
+# identify correct pocket
+CASTp_poc_id <- CASTp_poc %>%
+  filter(!is.na(`6klg`)) %>%
+  group_by(paralog, model, `6klg`) %>%
+  summarise(pocket = mode(pocket)) %>%
+  group_by(paralog, model) %>%
+  summarise(consensus_pocket = mode(pocket))
+
+# load .pocInfo files from CASTp
+pocInfo_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/extracted/",
+    pattern = ".pocInfo",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_pocInfo <- function(flnm) {
+  read_tsv(flnm) %>%
+    mutate(
+      code = str_remove(basename(flnm), fixed(".pocInfo"))
+    ) 
+}
+
+pocInfo <- map(pocInfo_files, read_pocInfo) %>%
+  bind_rows()
+
+zmlac3_pocInfo <- read_tsv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/ZmLAC3/j_6065d2c555ed5.pocInfo") %>%
+  mutate(paralog = "ZmLAC3",
+         model = "6klg",
+         consensus_pocket = 1) %>%
+  filter(ID == consensus_pocket)
+
+# load .mouthInfo files from CASTp
+mouthInfo_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/extracted/",
+    pattern = ".mouthInfo",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_mouthInfo <- function(flnm) {
+  read_tsv(flnm) %>%
+    mutate(
+      code = str_remove(basename(flnm), fixed(".mouthInfo"))
+    ) 
+}
+
+mouthInfo <- map(mouthInfo_files, read_mouthInfo) %>%
+  bind_rows() %>%
+  select(Molecule, ID, "mouth_area_sa" = Area_sa)
+
+zmlac3_mouthInfo <- read_tsv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/ZmLAC3/j_6065d2c555ed5.mouthInfo") %>%
+  mutate(paralog = "ZmLAC3",
+         model = "6klg",
+         consensus_pocket = 1) %>%
+  filter(ID == consensus_pocket) %>%
+  rename("mouth_area_sa" = Area_sa)
+
+pocket_data <- pocInfo %>%
+  left_join(mouthInfo) %>% 
+  left_join(CASTp_codes) %>%
+  left_join(CASTp_poc_id) %>%
+  left_join(model_dope) %>%
+  filter(ID == consensus_pocket) %>%
+  filter(!(str_detect(model, "IL"))) # remove low_quality initial models
+
+ggplot(pocket_data,
+       aes(x = paralog,
+           y = Vol_sa)) +
+  geom_hline(data = zmlac3_pocInfo,
+             aes(yintercept = Vol_sa)) +
+  geom_quasirandom(aes(colour = DOPE)) +
+  geom_violin(draw_quantiles = 0.5,
+              alpha = 0.25) +
+  scale_colour_gradientn(colours = rev(morgenstemning)) +
+  theme_leo() +
+  theme(legend.position = "right") +
+  coord_flip()
+
+ggplot(pocket_data,
+       aes(x = paralog,
+           y = mouth_area_sa)) +
+  geom_hline(data = zmlac3_mouthInfo,
+             aes(yintercept = mouth_area_sa)) +
+  geom_quasirandom(aes(colour = DOPE)) +
+  geom_violin(draw_quantiles = 0.5,
+              alpha = 0.25) +
+  scale_colour_gradientn(colours = rev(morgenstemning)) +
+  theme_leo() +
+  theme(legend.position = "right") +
+  coord_flip()
+```
+
+### DEPTH
+
+```{r}
+# load model quality 
+model_dope <- read_table("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/model_quality/normalized_DOPE.txt",
+                         col_names = c("model", "DOPE")) %>%
+  bind_rows(read_table("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-04_described_laccases/model_quality/normalized_DOPE.txt",
+                         col_names = c("model", "DOPE"))) %>% 
+  mutate(model = str_remove(model, fixed(".pdb"))) %>% 
+  separate(model, into = c("paralog", "model"))
+
+# T1 coordinating histidines (manually taken from alignment)
+coord_his <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/pocket_residues.csv") %>%
+  pivot_longer(-paralog, names_to = "6klg", values_to = "ID") %>%
+  filter(`6klg` %in% c("HIS_451", "HIS_519")) %>% 
+  separate(ID, into = c("aa", "position")) %>%
+  mutate(position = as.numeric(position))
+
+# load atom.depth files from DEPTH
+depth_files <-
+  list.files(
+    path = c("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/DEPTH/",
+             "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-04_described_laccases/DEPTH/"),
+    pattern = "atom.depth",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_depth <- function(flnm) {
+  read_tsv(flnm) %>%
+    mutate(
+      model = str_remove(basename(flnm), fixed(".pdb-atom.depth"))
+    ) %>% 
+    separate(model, into = c("paralog", "model"))
+}
+
+zmlac3_depth <- read_depth("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/DEPTH/ZmLAC3/6klg.pdb-atom.depth") %>% 
+  mutate(paralog = "ZmLAC3",
+         model = "6klg")
+
+depth <- map(depth_files, read_depth) %>%
+  bind_rows() %>%
+  bind_rows(zmlac3_depth) %>% 
+  left_join(coord_his) %>%
+  left_join(model_dope)
+
+his_depth <- depth %>% 
+  bind_rows(zmlac3_depth) %>% 
+  separate(residue, into = c("chain", "residue")) %>% 
+  filter(!(str_detect(model, "IL"))) %>% # remove low_quality initial models
+  filter(residue == position & `atom-type` == "NE2")
+
+zmlac3_depth <- his_depth %>% 
+  filter(paralog == "ZmLAC3")
+
+his_depth <- his_depth %>% 
+  filter(paralog != "ZmLAC3")
+
+ggplot(his_depth,
+       aes(x = reorder(paralog, -`mean(depth)`),
+           y = `mean(depth)`)) +
+  geom_hline(data = zmlac3_depth,
+             aes(yintercept = `mean(depth)`)) +
+  geom_quasirandom(aes(colour = DOPE)) +
+  geom_violin(draw_quantiles = 0.5,
+              alpha = 0.25) +
+  scale_colour_gradientn(colours = rev(morgenstemning)) +
+  theme_leo() +
+  theme(legend.position = "right",
+        plot.margin = unit(c(5, 1, 1, 1), "mm")) +
+  facet_wrap(~ `6klg`,
+             ncol = 2) +
+  geom_curve(data = zmlac3_depth,
+             aes(xend = 22.75,
+                 yend = `mean(depth)`,
+                 x = 23.5,
+                 y = `mean(depth)` + 1),
+             curvature = 0.4,
+             size = 0.2,
+             arrow = arrow(length = unit(0.01, "npc"))) +
+  geom_text(data = zmlac3_depth,
+             aes(x = 23.5,
+                 y = `mean(depth)` + 1),
+            label = "ZmLAC3",
+            hjust = 0,
+            family = "Helvetica",
+            size = ggtext_size) +
+  coord_flip(clip = "off", xlim = c(1, 22))
+```
+
+
+### Assemble figure
+
+```{r}
+model_data <- his_depth %>% 
+  select(paralog, model, `6klg`, `mean(depth)`, DOPE) %>%
+  mutate(paralog = recode(paralog, "LcLAC" = "ADE/LAC")) %>% 
+  pivot_wider(names_from = `6klg`, values_from = `mean(depth)`) %>% 
+  left_join(pocket_data %>%  select(paralog, model, Vol_sa, mouth_area_sa)) %>%
+  pivot_longer(c(HIS_451, HIS_519, Vol_sa, mouth_area_sa), names_to = "parameter", values_to = "value")
+
+ref_data <- zmlac3_depth %>%
+  select(paralog, model, `6klg`, `mean(depth)`) %>%
+  pivot_wider(names_from = `6klg`, values_from = `mean(depth)`) %>% 
+  left_join(zmlac3_pocInfo %>%  select(paralog, model, Vol_sa)) %>%
+  left_join(zmlac3_mouthInfo %>%  select(paralog, model, mouth_area_sa)) %>%
+  pivot_longer(c(HIS_451, HIS_519, Vol_sa, mouth_area_sa), names_to = "parameter", values_to = "value")
+
+axis_titles <- c(HIS_451 = "Depth of His 451 [Å]",
+                 HIS_519 = "Depth of His 519 [Å]",
+                 Vol_sa = "Binding pocket volume [Å<sup>3</sup>]",
+                 mouth_area_sa = "Binding pocket mouth [Å<sup>2</sup>]")
+
+clust_data <- model_data %>% 
+  group_by(paralog, parameter) %>% 
+  summarise(value = median(value)) %>%
+  pivot_wider(names_from = parameter, values_from = value) %>%
+  column_to_rownames(var = "paralog")
+
+clust <- reorder(hclust(dist(clust_data), method = "average"), -clust_data$HIS_451, agglo.FUN = "mean")
+gg_clust <- dendro_data(as.dendrogram(clust))
+
+dendrogram <- ggplot(gg_clust$segments) + 
+  geom_segment(aes(x = x, y = y, xend = xend, yend = yend),
+               lineend = "square",
+               size = 0.2) +
+  scale_y_reverse() +
+  scale_x_continuous(expand = c(0.026, 0.025)) +
+  coord_flip() +
+  theme_void()
+
+model_data <- model_data %>% 
+  mutate(paralog = ordered(paralog, levels = gg_clust[["labels"]][["label"]]))
+
+violins <- ggplot(model_data,
+       aes(x = paralog,
+           y = value)) +
+  geom_hline(data = ref_data,
+             aes(yintercept = value),
+             size = 0.2,
+             linetype = 2) +
+  geom_quasirandom(aes(colour = DOPE),
+                   shape = 16,
+                   alpha = 0.75,
+                   size = 1) +
+  geom_violin(draw_quantiles = 0.5,
+              alpha = 0.25,
+              colour = "black",
+              size = 0.2) +
+  geom_curve(data = ref_data %>% filter(parameter == "HIS_451"),
+             aes(xend = 22.75,
+                 yend = value + 0.1,
+                 x = 23.5,
+                 y = value + 1.25),
+             curvature = 0.4,
+             size = 0.2,
+             arrow = arrow(length = unit(0.03, "npc"))) +
+  geom_text(data = ref_data %>% filter(parameter == "HIS_451"),
+             aes(x = 23.5,
+                 y = value + 1.35),
+            label = "ZmLAC3",
+            hjust = 0,
+            family = "Helvetica",
+            size = ggtext_size) +
+  scale_colour_gradientn(colours = rev(morgenstemning)) +
+  labs(colour = "Model quality\n(DOPE Z-score)") +
+  theme_leo() +
+  theme(legend.position = c(0.83, 1.025),
+        legend.direction = "horizontal",
+        legend.key.height = unit(2, "mm"),
+        plot.margin = unit(c(7.5, 1, 1, 1), "mm"),
+        axis.title = element_blank(),
+        strip.placement = "outside",
+        strip.text = ggtext::element_markdown(hjust = 0.5, face = "plain", margin = unit(c(1, 1, 1, 1), "mm"))) +
+  coord_flip(clip = "off", xlim = c(1, 22)) +
+  facet_wrap(~ parameter,
+             ncol = 4,
+             scales = "free_x",
+             strip.position = "bottom",
+             labeller = as_labeller(axis_titles))
+
+pdf("homology_model_fig.pdf", height = onecol * 1.5, width = twocol)
+dendrogram + violins +
+  plot_layout(widths = c(1, 5))
+dev.off()
+```
+
+
