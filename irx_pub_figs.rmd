@@ -27,7 +27,6 @@ library(effects)
 library(grid)
 library(png)
 library(magick)
-library(agricolae)
 library(ggthemes)
 library(showtext)
 library(zoo)
@@ -1145,7 +1144,7 @@ rmn_p <- rmn_violin("P_rel") +
 rmn_benz <- rmn_violin("Benz_rel") +
   labs(
     x = "",
-    y = expression(paste(Relative ~ Benzald.))
+    y = expression(paste(Relative ~ benzald.))
   )
 
 rmn_gcho_term.gcho_tot <- rmn_violin("GCHO_term.GCHO_tot") +
@@ -1180,9 +1179,9 @@ bottom <- plot_grid(
   rmn_area,
   rmn_lig,
   rmn_s.g,
+  rmn_benz,
   rmn_goh,
   rmn_gcho,
-  rmn_benz,
   labels = c("C", "D", "E", "F", "G", "H"),
   vjust = 1,
   nrow = 2,
@@ -1941,8 +1940,8 @@ pop_bin <- pop_irx %>%
   summarise(Distance = mean(Distance)) %>%
   group_by(genotype) %>%
   mutate(median_dist = median(Distance, na.rm = TRUE),
-            cell_type = case_when(Distance > median_dist  ~ "Early SV",
-                               TRUE ~ "Recent SV"))
+            cell_type = case_when(Distance > median_dist  ~ "Old SV",
+                               TRUE ~ "Young SV"))
 
 rmn_pop_data <- rmn_pop_sum %>%
   left_join(pop_irx) %>%
@@ -1994,6 +1993,7 @@ pop_n <-model_data_pop %>%
   group_by(genotype, cell_type) %>%
   summarise(n = n())
 
+ write_csv(pop_n, "poplar_n.csv")
 ```
 
 ### Shape overview
@@ -2058,6 +2058,7 @@ rmn_lignin_dist <- model_data_pop %>%
   pivot_longer(-c(genotype, replicate, technical, Distance, TE), 
                names_to = "variable", 
                values_to = "value") %>%
+  mutate(variable = ordered(variable, levels = c("Lignin/Cellulose", "S/G", "G-CHO/G-CHOH"))) %>%
   anti_join(read_csv("/home/leonard/Dropbox/2020_IRX manuscript/pop_g_layers.csv",
                      col_types = "cccc"))
 
@@ -2317,7 +2318,7 @@ wt_data_pop <- model_data_pop %>%
   ) %>%
   ungroup() %>%
   mutate(
-    cell_type = ordered(cell_type, levels = c("PV", "Early SV", "Recent SV"))
+    cell_type = ordered(cell_type, levels = c("PV", "Old SV", "Young SV"))
   ) %>%
   anti_join(read_csv("/home/leonard/Dropbox/2020_IRX manuscript/pop_g_layers.csv",
                      col_types = "cccc"))
@@ -2330,7 +2331,7 @@ rmn_violin <- function(x) {
     print_position = "below",
     print_adjust = 0.5
   ) %>%
-    mutate(cell_type = ordered(cell_type, levels = c("PV", "Early SV", "Recent SV")))
+    mutate(cell_type = ordered(cell_type, levels = c("PV", "Old SV", "Young SV")))
 
   ggplot(
     data = wt_data_pop %>% filter(variable == x),
@@ -2434,7 +2435,7 @@ rmn_p <- rmn_violin("P_rel") +
 rmn_benz <- rmn_violin("Benz_rel") +
   labs(
     x = "",
-    y = expression(paste(Relative ~ Benz[CHO]))
+    y = "Relative benzald."
   )
 
 rmn_gcho_term.gcho_tot <- rmn_violin("GCHO_term.GCHO_tot") +
@@ -2472,9 +2473,9 @@ bottom <- plot_grid(
   # rmn_cellu,
   rmn_lig,
   rmn_s.g,
+  rmn_benz,
   rmn_goh,
   rmn_gcho,
-  rmn_p,
   # rmn_gcho.goh,
   # rmn_gcho_term.gcho_tot,
   labels = c("C", "D", "E", "F", "G", "H"),
@@ -3274,6 +3275,18 @@ stiffness_complete <- stiffness_fah1 %>%
   bind_rows(stiffness_cad) %>%
   select(-AUC, -N.max.stress) %>%
   pivot_longer(cols = c(modulus, max.stress), names_to = "variable", values_to = "value")
+
+fold_change <- stiffness_complete %>%
+  group_by(genotype, variable) %>%
+  summarise(value = median(value)) %>%
+  group_by(variable) %>%
+  mutate(value = value / value[genotype == "WT"])
+
+fold_change_flex <- bending_pre %>%
+  group_by(genotype, variable) %>%
+  summarise(value = median(value)) %>%
+  group_by(variable) %>%
+  mutate(value = value / value[genotype == "WT"])
 ```
 
 #### Figures
@@ -3707,9 +3720,15 @@ area_medium <- ggplot(
   ) +
   facet_wrap(~genotype)
 
-pdf("area_facet.pdf", width = onecol, height = onecol * 0.25)
+pdf("area_facet.pdf", width = onecol, height = onecol)
 area_medium
 dev.off()
+
+fold_change <- rosettes %>%
+  group_by(genotype, medium) %>%
+  summarise(area = median(area)) %>%
+  group_by(genotype) %>%
+  mutate(area = area / area[medium == "Water"])
   
 ```
 
@@ -3825,6 +3844,12 @@ transpiration_medium <- ggplot(
 pdf("transpiration_facet.pdf", width = onecol, height = onecol * 0.25)
 transpiration_medium
 dev.off()
+
+fold_change <- transpiration_avg %>%
+  group_by(genotype, medium) %>%
+  summarise(mean_transp = median(mean_transp)) %>%
+  group_by(genotype) %>%
+  mutate(mean_transp = mean_transp / mean_transp[medium == "Water"])
 
 ```
 
@@ -4608,16 +4633,40 @@ rmn_irx_long <- rmn_irx %>%
     cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX"))
   )
 
+# compare only within cell types 
+# rmn_irx_letters <- letter_groups(
+#   rmn_irx_long,
+#   value,
+#   genotype,
+#   "tukey",
+#   cell.type,
+#   variable,
+#   print_position = "above",
+#   print_adjust = 1
+# ) %>%
+#   mutate(value = case_when(variable == "Area [µm²]" & cell.type %in% c("PX", "SMX") ~
+#            value + 20,
+#            variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type %in% c("PX", "SMX") ~
+#              value + 0.5,
+#            variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type == "PMX" ~
+#              value + 0.2,
+#            variable == "Term~'/'~tot~bold(G)[CHO]" & cell.type %in% c("PMX", "SMX") ~
+#              value + 2,
+#          TRUE ~ value))
+
+# compare within and between cell types
 rmn_irx_letters <- letter_groups(
-  rmn_irx_long,
+  rmn_irx_long %>% unite("ID", genotype, cell.type),
   value,
-  genotype,
+  ID,
   "tukey",
-  cell.type,
+  # cell.type,
   variable,
   print_position = "above",
   print_adjust = 1
 ) %>%
+  separate(ID, into = c("genotype", "cell.type"), sep = "_") %>%
+  mutate(cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX"))) %>%
   mutate(value = case_when(variable == "Area [µm²]" & cell.type %in% c("PX", "SMX") ~
            value + 20,
            variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type %in% c("PX", "SMX") ~
@@ -4828,9 +4877,10 @@ rmn_irx_long <- model_data_pop %>%
         "C4H"
       )
     ),
-    cell_type = ordered(cell_type, levels = c("PV", "Early SV", "Recent SV"))
+    cell_type = ordered(cell_type, levels = c("PV", "Old SV", "Young SV"))
   )
 
+# compare only within cell types
 rmn_irx_letters <- letter_groups(
   rmn_irx_long,
   value,
@@ -4841,15 +4891,20 @@ rmn_irx_letters <- letter_groups(
   print_position = "above",
   print_adjust = 1
 ) 
-  # mutate(value = case_when(variable == "Area [µm²]" & cell.type %in% c("PX", "SMX") ~
-  #          value + 20,
-  #          variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type %in% c("PX", "SMX") ~
-  #            value + 0.5,
-  #          variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type == "PMX" ~
-  #            value + 0.2,
-  #          variable == "Term~'/'~tot~bold(G)[CHO]" & cell.type %in% c("PMX", "SMX") ~
-  #            value + 2,
-  #        TRUE ~ value))
+
+# compare within and across cell types
+# rmn_irx_letters <- letter_groups(
+#   rmn_irx_long %>% unite("ID", genotype, cell_type),
+#   value,
+#   ID,
+#   "tukey",
+#   # cell_type,
+#   variable,
+#   print_position = "above",
+#   print_adjust = 1
+# ) %>%
+#   separate(ID, into = c("genotype", "cell_type"), sep = "_") %>%
+#   mutate(cell_type = ordered(cell_type, levels = c("PV", "Old SV", "Young SV")))
 
 rmn_irx_lig <- ggplot(
   filter(rmn_irx_long, !variable %in%
@@ -5958,13 +6013,25 @@ s_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/stiffness_s.csv")) %>%
     genotype = ordered(genotype, levels = c("WT", "fah1", "cad4xcad5"))
   )
 
-heights <- read_csv(paste0(datapath, "Master/Summer project 16/phenotyping/phenotyping.csv")) %>%
+heights <- read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
   select(genotype, height) %>%
   filter(genotype %in% c("col-0", "fah1", "cad4xcad5")) %>%
   mutate(
     genotype = recode(genotype, "col-0" = "WT"),
     genotype = ordered(genotype, levels = c("WT", "fah1", "cad4xcad5"))
   )
+
+heights_fold <- heights %>%
+  group_by(genotype) %>% 
+  summarise(height = median(height)) %>%
+  ungroup() %>%
+  mutate(height_fold = height / height[genotype == "WT"])
+
+widths_fold <- s_data %>%
+  group_by(genotype) %>% 
+  summarise(d.microscope = median(d.microscope)) %>%
+  ungroup() %>%
+  mutate(d.microscope_fold = d.microscope / d.microscope[genotype == "WT"])
 
 letters <- letter_groups(s_data,
   d.microscope,
@@ -6177,8 +6244,8 @@ transpiration <- read_csv(
   pivot_longer(-c(medium, time), names_to = "plant", values_to = "transp_rate") %>%
   mutate(
     genotype = unlist(str_extract_all(plant, "[:alpha:]+")),
-    genotype = ordered(recode(genotype, "CAD" = "cad4x5"),
-      levels = c("WT", "cad4x5")
+    genotype = ordered(recode(genotype, "CAD" = "<i>cad4</i>x<i>5</i>"),
+      levels = c("WT", "<i>cad4</i>x<i>5</i>")
     ),
     replicate = unlist(str_extract_all(plant, "[:digit:]+")),
     medium = ordered(medium,
@@ -6196,8 +6263,8 @@ conditions <- read_csv(
   fill(everything()) %>%
   group_by(genotype) %>%
   mutate(
-    genotype = ordered(recode(genotype, "CAD" = "cad4x5"),
-      levels = c("WT", "cad4x5")
+    genotype = ordered(recode(genotype, "CAD" = "<i>cad4</i>x<i>5</i>"),
+      levels = c("WT", "<i>cad4</i>x<i>5</i>")
     ),
     time = row_number()
   ) %>%
@@ -6213,17 +6280,18 @@ transp <- ggplot(
     colour = genotype
   )
 ) +
-  geom_line(aes(group = interaction(medium, replicate)),
+  geom_line(aes(group = interaction(medium, replicate, genotype)),
     size = 0.1,
     alpha = 0.25
   ) +
   # geom_line(aes(y = mean_transp)) +
   geom_smooth(aes(
-    group = medium,
-    # fill = medium
+    group = interaction(medium, genotype),
+    fill = genotype
   ),
   size = 0.2,
-  se = T
+  se = T,
+  alpha = 0.25
   ) +
   labs(
     y = "Evapotranspiration [mg min<sup>-1</sup>]",
@@ -6233,9 +6301,11 @@ transp <- ggplot(
   theme_leo() +
   theme(
     legend.position = "bottom",
+    legend.text = ggtext::element_textbox(),
     legend.title = element_blank(),
     axis.title.y = ggtext::element_textbox_simple(
       orientation = "left-rotated",
+      maxwidth = unit(0.5, "npc"),
       halign = 0.5,
       vjust = 0
     ),
@@ -6245,14 +6315,14 @@ transp <- ggplot(
   scale_colour_brewer(palette = "Set2") +
   # scale_fill_brewer(palette = "Set2") +
   scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
+  scale_fill_manual(values = pal_ostwald_disc[c(1,3)]) +
   # scale_colour_grey(start = 0.9, end = 0.1) +
-  guides(colour = "none",
-         linetype = guide_legend(override.aes = list(colour = "black",
+  guides(linetype = guide_legend(override.aes = list(colour = "black",
                                                      fill = "white",
-                                                     size = 0.4))) +
-  facet_wrap(~genotype,
-    ncol = 2
-  )
+                                                     size = 0.4))) 
+  # facet_wrap(~genotype,
+  #   ncol = 2
+  # )
 
 hum <- ggplot(conditions %>% filter(name == "humidity"),
                 aes(x = time,
@@ -6267,11 +6337,12 @@ hum <- ggplot(conditions %>% filter(name == "humidity"),
         axis.ticks.x = element_blank(),
         axis.title.y = ggtext::element_textbox_simple(
           orientation = "left-rotated",
+          maxwidth = unit(0.25, "npc"),
           halign = 0.5,
           vjust = 0
           )) +
-  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
-  facet_wrap(~genotype, ncol = 2)
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) 
+  # facet_wrap(~genotype, ncol = 2)
 
 ill <- ggplot(conditions %>% filter(name == "illumination"),
                 aes(x = time,
@@ -6290,8 +6361,8 @@ ill <- ggplot(conditions %>% filter(name == "illumination"),
           vjust = 0
           ),
         strip.text = element_blank()) +
-  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
-  facet_wrap(~genotype, ncol = 2)
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) 
+  # facet_wrap(~genotype, ncol = 2)
 
 temp <- ggplot(conditions %>% filter(name == "temperature"),
                 aes(x = time,
@@ -6310,11 +6381,11 @@ temp <- ggplot(conditions %>% filter(name == "temperature"),
           vjust = 0
           ),
         strip.text = element_blank()) +
-  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
-  facet_wrap(~genotype, ncol = 2)
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) 
+  # facet_wrap(~genotype, ncol = 2)
 
 
-pdf("transpiration_supplement.pdf", width = twocol, height = onecol * 0.9)
+pdf("transpiration_supplement.pdf", width = onecol, height = onecol)
 hum / ill / temp / transp + plot_layout(heights = c(0.5, 0.5, 0.5 , 1))
 dev.off()
 
