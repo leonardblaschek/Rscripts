@@ -23,13 +23,13 @@ citecolor: blue
 knitr::opts_chunk$set(echo = TRUE)
 library(baseline)
 library(interactions)
-library(effects)
+# library(effects)
 library(grid)
 library(png)
 library(magick)
 library(ggthemes)
 library(showtext)
-library(zoo)
+# library(zoo)
 library(cowplot)
 library(kableExtra)
 library(tidyverse)
@@ -967,14 +967,15 @@ rmn_adj <- rmn_sum_long %>%
   filter(variable %in% c("n_v", "n_f", "n_p")) %>%
   mutate(variable = ordered(as.factor(variable), levels = c("n_p", "n_f", "n_v")))
 
-rmn_adj_letters <- letter_groups(rmn_adj,
+rmn_adj_letters <- letter_groups(rmn_adj %>% unite("ID", cell.type, variable, sep = "-"),
   value,
-  cell.type,
+  ID,
   "kruskal",
-  variable,
+  # variable,
   print_position = "below",
   print_adjust = 0.5
 ) %>%
+  separate(ID, into = c("cell.type", "variable"), sep = "-") %>% 
   mutate(cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX")))
 
 rmn_adj_box <- ggplot(
@@ -3757,6 +3758,19 @@ transpiration_avg <- transpiration %>%
   group_by(genotype, replicate, medium) %>%
   summarise(mean_transp = mean(transp_rate, na.rm = TRUE))
 
+#comparison across genotypes
+# letters <- letter_groups(transpiration_avg %>% unite("ID", genotype, medium),
+#   mean_transp,
+#   ID,
+#   "tukey",
+#   print_position = "below",
+#   print_adjust = 3
+# ) %>%
+#   separate(ID, into = c("genotype", "medium"), sep = "_") %>%
+#   mutate(genotype = ordered(recode(genotype, "CAD" = "<i>cad4</i>x<i>5</i>"),
+#       levels = c("WT", "<i>cad4</i>x<i>5</i>")
+#     ))
+
 letters <- letter_groups(transpiration_avg,
   mean_transp,
   medium,
@@ -5719,9 +5733,12 @@ dev.off()
 #### Curves
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-
+bending_data_supp <- bending_data_complete %>%
+  mutate(genotype = recode(genotype,
+                           "fah1" = "<i>fah1</i>",
+                           "cad4xcad5" = "<i>cad4</i>x<i>5</i>"))
 curves <- ggplot(
-  data = bending_data_complete,
+  data = bending_data_supp,
   aes(x = strain, y = stress)
 ) +
   stat_smooth(aes(group = interaction(genotype, replicate, section)),
@@ -5798,6 +5815,7 @@ curves <- ggplot(
   )) +
   coord_cartesian(ylim = c(0, 45)) +
   theme_leo() +
+  theme(strip.text = ggtext::element_markdown()) +
   xlim(0, 3) +
   labs(
     x = "Strain [%]",
@@ -5955,7 +5973,7 @@ medium_diameter_box <- ggplot(
     # width = 0.1,
     # colour = NA,
     alpha = 0.75,
-    size = 1.5,
+    size = 1,
     stroke = 0.2
   ) +
   # geom_boxplot(
@@ -6003,6 +6021,71 @@ medium_diameter_box <- ggplot(
   )
 ```
 
+#### Coniferaldehyde position
+
+```{r}
+position <- read_csv(paste0(datapath, "PhD/IRX/Bending/coniferaldehyde_position.csv")) %>%
+  mutate(total = internal + terminal,
+         ratio = terminal / total * 100,
+         genotype = ordered(genotype, levels = c("WT", "fah1", "cad4xcad5")))
+
+letters <- letter_groups(position,
+                         ratio,
+                         genotype,
+                         "tukey",
+                         print_position = "below")
+
+position_violin <- ggplot(
+  position,
+  aes(x = genotype, y = ratio)
+) +
+  geom_quasirandom(
+    aes(fill = genotype),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2
+  ) +
+  stat_summary(geom = "crossbar", 
+               fun = "mean",
+               fatten = 1,
+               size = 0.2,
+               width = 0.3) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica",
+    position = position_dodge(width = 0.6)
+  ) +
+  scale_fill_manual(values = c(
+    pal_ostwald_disc[1],
+    pal_ostwald_disc[3],
+    pal_ostwald_disc[3]
+  )) +
+  expand_limits(y = 0) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05)),
+                     breaks = c(0, 20, 40)) +
+  scale_x_discrete(labels = c(
+    "WT",
+    expression(italic("fah1")),
+    expression(paste(italic("cad4"), "x", italic("cad5")))
+  )) +
+  labs(y = "Terminal G<sub>CHO</sub> [%]") +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none",
+    axis.title.y = ggtext::element_textbox_simple(orientation = "left-rotated",
+                                                  halign = 0.5),
+    axis.title.x = element_blank()
+  )
+```
+
+
 #### Composition influence
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
@@ -6010,15 +6093,17 @@ s_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/stiffness_s.csv")) %>%
   bind_rows(read_csv(paste0(datapath, "PhD/IRX/Bending/cad_diameters.csv"))) %>%
   tidyr::fill(everything()) %>%
   mutate(
-    genotype = ordered(genotype, levels = c("WT", "fah1", "cad4xcad5"))
+    genotype = recode(genotype, "cad4xcad5" = "cad4x5"),
+    genotype = ordered(genotype, levels = c("WT", "fah1", "cad4x5"))
   )
 
 heights <- read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
   select(genotype, height) %>%
-  filter(genotype %in% c("col-0", "fah1", "cad4xcad5")) %>%
+  mutate(genotype = recode(genotype, "cad4xcad5" = "cad4x5")) %>% 
+  filter(genotype %in% c("col-0", "fah1", "cad4x5")) %>%
   mutate(
     genotype = recode(genotype, "col-0" = "WT"),
-    genotype = ordered(genotype, levels = c("WT", "fah1", "cad4xcad5"))
+    genotype = ordered(genotype, levels = c("WT", "fah1", "cad4x5"))
   )
 
 heights_fold <- heights %>%
@@ -6056,7 +6141,7 @@ mutant_diameter_box <- ggplot(
     # width = 0.1,
     # colour = NA,
     alpha = 0.75,
-    size = 1.5,
+    size = 1,
     stroke = 0.2
   ) +
   # geom_boxplot(
@@ -6093,7 +6178,7 @@ mutant_diameter_box <- ggplot(
   scale_x_discrete(labels = c(
     "WT",
     expression(italic("fah1")),
-    expression(paste(italic("cad4"), "x", italic("cad5")))
+    expression(paste(italic("cad4"), "x", italic("5")))
   )) +
   # scale_fill_manual(values = pal_flame_disc) +
   scale_fill_manual(values = c(
@@ -6134,7 +6219,7 @@ mutant_height_box <- ggplot(
     # width = 0.1,
     # colour = NA,
     alpha = 0.75,
-    size = 1.5,
+    size = 1,
     stroke = 0.2
   ) +
   # geom_boxplot(
@@ -6172,7 +6257,7 @@ mutant_height_box <- ggplot(
   scale_x_discrete(labels = c(
     "WT",
     expression(italic("fah1")),
-    expression(paste(italic("cad4"), "x", italic("cad5")))
+    expression(paste(italic("cad4"), "x", italic("5")))
   )) +
   # scale_fill_manual(values = pal_flame_disc) +
   scale_fill_manual(values = c(
@@ -6225,7 +6310,7 @@ right <- plot_grid(medium_diameter_box,
 
 patch <- 
   curves_media |
-  (medium_strength / medium_diameter_box) |
+  (medium_strength / medium_diameter_box / position_violin) |
   curves | 
   (violin_strength / mutant_diameter_box / mutant_height_box)
 

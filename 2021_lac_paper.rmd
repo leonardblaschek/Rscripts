@@ -21,9 +21,9 @@ library(lubridate)
 library(patchwork)
 library(showtext)
 library(slider)
-# library(systemfonts)
 library(tidyverse)
 library(tukeygrps)
+library(vroom)
 
 ## import Helvetica ####
 font_add(
@@ -4088,6 +4088,223 @@ ggplot(
   geom_label(aes(label = round(estimate, digits = 4))) +
   theme_leo() 
 
+```
+## Load plate layouts
+
+```{r}
+plate_files <-
+  list.files(
+    path = paste0(datapath, "PhD/Laccase_activity/2021-04_TE_activity/csv_files/plates/"),
+    pattern = "*.csv",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_csv(flnm) %>%
+    mutate(
+      filename = basename(flnm)
+    ) %>%
+    separate(filename, into = c("date", "started"), sep = "_") %>%
+    mutate(
+      Well = paste0(row, column),
+      started = str_remove(started, fixed(".csv")),
+      date = ymd(date)
+    ) %>% 
+    select(-row, -column)
+}
+
+TE_plates <- map(plate_files, read_plus) %>%
+  bind_rows()
+```
+
+
+## Load absorbance data
+
+```{r}
+spec_files <-
+  list.files(
+    path = paste0(datapath, "PhD/Laccase_activity/2021-04_TE_activity/csv_files/absorbance/"),
+    pattern = "*.csv",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+# read_plus <- function(flnm) {
+#   read_csv(flnm) %>%
+#     mutate(
+#       filename = basename(flnm)
+#     ) %>%
+#     separate(filename, into = c("author", "assay", "date", "time"), sep = "_") %>%
+#     select(-author, -assay) %>%
+#     mutate(
+#       time = str_remove(time, fixed(".csv")),
+#       date = ymd_hms(paste(date, time, sep = "_")),
+#       started = case_when(hour(date) < 14 ~ "morning", 
+#                           TRUE ~ "evening")
+#     ) %>% 
+#     select(-time)
+# }
+
+read_vroom <- function(flnm) {
+  vroom(flnm) %>%
+    mutate(
+      filename = basename(flnm)
+    ) %>%
+    separate(filename, into = c("author", "assay", "date", "time"), sep = "_") %>%
+    select(-author, -assay) %>%
+    mutate(
+      time = str_remove(time, fixed(".csv")),
+      date = ymd(date),
+      started = ymd_hms(paste(date, time, sep = "_")),
+      started = case_when(hour(started) < 14 ~ "morning", 
+                          TRUE ~ "evening")
+    ) %>% 
+    select(-time)
+}
+
+# bench::mark(
+#   TE_spec <- map(spec_files, read_plus) %>% bind_rows(),
+#   TE_spec <- map(spec_files, read_vroom) %>% bind_rows()
+# )
+
+TE_spec <- map(spec_files, read_vroom) %>%
+  bind_rows() %>% 
+  pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>%
+  left_join(TE_plates, by = c("date", "started", "Well")) %>% 
+  drop_na()
+
+TE_data <- TE_spec %>% 
+  mutate(
+    wavelength = as.numeric(wavelength),
+    absorbance = measurement / 0.52, # experimental path length in the plate
+    time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
+  ) %>% 
+  group_by(substrate, pH, replicate, day) %>%
+  group_by(sample, substrate, pH, replicate, day) %>%
+  mutate(
+    density = mean(absorbance[wavelength == 600 & `Cycle #` %in% c(1, 2)]),
+    adjusted_absorbance = case_when(
+      sample == "neg. ctrl." ~ absorbance,
+      # TRUE ~ absorbance # do not adjust for density
+      TRUE ~ absorbance / density # adjust for density
+    ),
+    zeroed_absorbance = adjusted_absorbance - adjusted_absorbance[`Cycle #` == 3]
+  ) %>%
+  select(-`Cycle #`, -`Time (s)`)
+```
+
+## Plot end-point spectra
+
+```{r}
+plotly::ggplotly(
+  ggplot(TE_data %>% filter(time == 390),
+       aes(x = wavelength,
+           y = zeroed_absorbance,
+           linetype = sample,
+           colour = pH)) +
+  geom_line(aes(group = interaction(sample, pH)),
+            size = 0.2) +
+  # scale_x_continuous(limits = c(0, 400)) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_grid(substrate ~ day,
+             scales = "free_y")
+  )
+```
+
+
+## Plot absorbance over time
+
+```{r}
+lm_bounds <- tribble(
+  ~substrate, ~pH, ~lm_start, ~lm_stop,
+  "ABTS", 4, 40, 160,
+  "ABTS", 5, 40, 160,
+  "ABTS", 6, 100, 400,
+  "ABTS", 7, 100, 400,
+  "DAF", 4, 40, 200,
+  "DAF", 5, 40, 200,
+  "DAF", 6, 100, 300,
+  "DAF", 7, 100, 300,
+  "MBTH", 4, 100, 300,
+  "MBTH", 5, 100, 300,
+  "MBTH", 6, 100, 300,
+  "MBTH", 7, 40, 160,
+  "PYGL", 4, 100, 400,
+  "PYGL", 5, 100, 400,
+  "PYGL", 6, 100, 400,
+  "PYGL", 7, 100, 400,
+  "SGZ", 4, 100, 300,
+  "SGZ", 5, 100, 300,
+  "SGZ", 6, 100, 300,
+  "SGZ", 7, 100, 300,
+)
+
+abs_max <- tibble(
+  substrate = c("ABTS", "DAF", "MBTH", "PYGL", "SGZ"),
+  abs_max = c(420, 710, 505, 450, 525),
+  # abs_min = c(480, 800, 700, 600, 600)
+  abs_min = 1000
+)
+
+kinetics <- TE_data %>%
+  left_join(abs_max) %>%
+  left_join(lm_bounds) %>% 
+  group_by(
+    sample, substrate, pH, replicate, day, time, lm_start, lm_stop, density
+    ) %>%
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
+  summarise(
+    corrected_absorbance = corrected_absorbance[wavelength == abs_max],
+    adjusted_absorbance = adjusted_absorbance[wavelength == abs_max],
+    absorbance = absorbance[wavelength == abs_max])
+
+pdf("TE_kinetics.pdf", height = twocol, width = twocol)
+ggplot(kinetics %>% filter(sample != "neg. ctrl."),
+       aes(x = time,
+           y = corrected_absorbance,
+           colour = pH,
+           linetype = sample)) +
+  # geom_line(aes(group = interaction(sample, pH))) +
+  geom_smooth(aes(group = interaction(sample, pH)),
+              size = 0.2) +
+  # scale_x_continuous(limits = c(0, 400)) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_grid(substrate ~ day,
+             scales = "free_y")
+dev.off()
+```
+## Plot linear phase slope
+
+```{r}
+kinetics_nested <- kinetics %>%
+  filter(time >= lm_start & time <= lm_stop) %>%
+  select(-absorbance, -adjusted_absorbance) %>%
+  nest(data = c(time, corrected_absorbance)) %>%
+  mutate(
+    fit = map(data, ~ lm(corrected_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "time") %>%
+  group_by(substrate, pH) %>%
+  mutate(scaled_estimate = estimate / max(estimate),
+         scaled_estimate = case_when(scaled_estimate < 0 ~ 0,
+                                     TRUE ~ scaled_estimate))
+
+ggplot(kinetics_nested %>% filter(sample != "neg. ctrl."),
+       aes(x = day,
+           y = scaled_estimate,
+           colour = sample)) +
+  geom_line(size = 0.2) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_grid(pH ~ substrate)
 ```
 
 

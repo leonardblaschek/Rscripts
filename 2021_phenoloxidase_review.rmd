@@ -14,6 +14,7 @@ library(ggbeeswarm)
 library(patchwork)
 library(broom)
 library(ggdendro)
+library(vegan)
 
 #### import Helvetica Neue ####
 font_add(
@@ -200,13 +201,15 @@ ex_plot <- ggplot(expression_count, aes(x = compartment, y = number, fill = PO))
            xmax = c(1.5, 3.5, 5.5),
            fill = "grey95",
            colour = NA) +
-  geom_jitter(data = filter(expression_count, method == "pred"), aes(x = compartment, y = number, fill = PO),
+  geom_jitter(data = filter(expression_count, method == "pred"), 
+              aes(x = compartment, y = number, fill = PO),
               width = 0.2,
               shape = 21,
               alpha = 0.5,
               size = 0.5,
               stroke = 0.1) +
-  geom_jitter(data = filter(expression_count, method == "exp"), aes(x = compartment, y = number, fill = PO),
+  geom_jitter(data = filter(expression_count, method == "exp"), 
+              aes(x = compartment, y = number, fill = PO),
               width = 0.2,
               shape = 21,
               alpha = 0.75,
@@ -651,14 +654,16 @@ model_data <- his_depth %>%
   mutate(paralog = recode(paralog, "LcLAC" = "ADE/LAC")) %>% 
   pivot_wider(names_from = `6klg`, values_from = `mean(depth)`) %>% 
   left_join(pocket_data %>%  select(paralog, model, Vol_sa, mouth_area_sa)) %>%
-  pivot_longer(c(HIS_451, HIS_519, Vol_sa, mouth_area_sa), names_to = "parameter", values_to = "value")
+  pivot_longer(c(HIS_451, HIS_519, Vol_sa, mouth_area_sa), 
+               names_to = "parameter", values_to = "value")
 
 ref_data <- zmlac3_depth %>%
   select(paralog, model, `6klg`, `mean(depth)`) %>%
   pivot_wider(names_from = `6klg`, values_from = `mean(depth)`) %>% 
   left_join(zmlac3_pocInfo %>%  select(paralog, model, Vol_sa)) %>%
   left_join(zmlac3_mouthInfo %>%  select(paralog, model, mouth_area_sa)) %>%
-  pivot_longer(c(HIS_451, HIS_519, Vol_sa, mouth_area_sa), names_to = "parameter", values_to = "value")
+  pivot_longer(c(HIS_451, HIS_519, Vol_sa, mouth_area_sa), 
+               names_to = "parameter", values_to = "value")
 
 axis_titles <- c(HIS_451 = "Depth of His 451 [Å]",
                  HIS_519 = "Depth of His 519 [Å]",
@@ -671,7 +676,10 @@ clust_data <- model_data %>%
   pivot_wider(names_from = parameter, values_from = value) %>%
   column_to_rownames(var = "paralog")
 
-clust <- reorder(hclust(dist(clust_data), method = "average"), -clust_data$HIS_451, agglo.FUN = "mean")
+clust <- reorder(
+  hclust(dist(clust_data), method = "average"), 
+  -clust_data$HIS_451, agglo.FUN = "mean")
+
 gg_clust <- dendro_data(as.dendrogram(clust))
 
 dendrogram <- ggplot(gg_clust$segments) + 
@@ -716,16 +724,32 @@ violins <- ggplot(model_data,
             hjust = 0,
             family = "Helvetica",
             size = ggtext_size) +
+  geom_text(data = tibble(parameter = c("Vol_sa", "Vol_sa")),
+            x = 24,
+            y = c(70, 400),
+            label = c("better", "worse"),
+            hjust = 0,
+            family = "Helvetica",
+            size = ggtext_size) +
+  geom_segment(data = tibble(parameter = c("Vol_sa", "Vol_sa")),
+             aes(xend = 24,
+                 yend = c(170, 380),
+                 x = 24,
+                 y = 240),
+             size = 0.2,
+             arrow = arrow(length = unit(0.03, "npc"))) +
   scale_colour_gradientn(colours = rev(morgenstemning)) +
   labs(colour = "Model quality\n(DOPE Z-score)") +
   theme_leo() +
   theme(legend.position = c(0.83, 1.025),
         legend.direction = "horizontal",
         legend.key.height = unit(2, "mm"),
+        legend.title = element_text(vjust = 1),
         plot.margin = unit(c(7.5, 1, 1, 1), "mm"),
         axis.title = element_blank(),
         strip.placement = "outside",
-        strip.text = ggtext::element_markdown(hjust = 0.5, face = "plain", margin = unit(c(1, 1, 1, 1), "mm"))) +
+        strip.text = ggtext::element_markdown(hjust = 0.5, face = "plain", 
+                                              margin = unit(c(1, 1, 1, 1), "mm"))) +
   coord_flip(clip = "off", xlim = c(1, 22)) +
   facet_wrap(~ parameter,
              ncol = 4,
