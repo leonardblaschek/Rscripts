@@ -4095,7 +4095,7 @@ ggplot(
 plate_files <-
   list.files(
     path = paste0(datapath, "PhD/Laccase_activity/2021-04_TE_activity/csv_files/plates/"),
-    pattern = "*.csv",
+    pattern = "*.csv$",
     recursive = FALSE,
     full.names = TRUE
   )
@@ -4125,7 +4125,7 @@ TE_plates <- map(plate_files, read_plus) %>%
 spec_files <-
   list.files(
     path = paste0(datapath, "PhD/Laccase_activity/2021-04_TE_activity/csv_files/absorbance/"),
-    pattern = "*.csv",
+    pattern = "*.csv$",
     recursive = FALSE,
     full.names = TRUE
   )
@@ -4168,8 +4168,8 @@ read_vroom <- function(flnm) {
 #   TE_spec <- map(spec_files, read_vroom) %>% bind_rows()
 # )
 
-TE_spec <- map(spec_files, read_vroom) %>%
-  bind_rows() %>% 
+TE_spec <- map_dfr(spec_files, read_vroom) %>%
+  # bind_rows() %>% 
   pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>%
   left_join(TE_plates, by = c("date", "started", "Well")) %>% 
   drop_na()
@@ -4180,8 +4180,7 @@ TE_data <- TE_spec %>%
     absorbance = measurement / 0.52, # experimental path length in the plate
     time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
   ) %>% 
-  group_by(substrate, pH, replicate, day) %>%
-  group_by(sample, substrate, pH, replicate, day) %>%
+  group_by(date, sample, substrate, pH, replicate, day) %>%
   mutate(
     density = mean(absorbance[wavelength == 600 & `Cycle #` %in% c(1, 2)]),
     adjusted_absorbance = case_when(
@@ -4244,15 +4243,15 @@ lm_bounds <- tribble(
 abs_max <- tibble(
   substrate = c("ABTS", "DAF", "MBTH", "PYGL", "SGZ"),
   abs_max = c(420, 710, 505, 450, 525),
-  # abs_min = c(480, 800, 700, 600, 600)
-  abs_min = 1000
+  abs_min = c(480, 515, 700, 600, 600)
+  # abs_min = 1000
 )
 
 kinetics <- TE_data %>%
   left_join(abs_max) %>%
   left_join(lm_bounds) %>% 
   group_by(
-    sample, substrate, pH, replicate, day, time, lm_start, lm_stop, density
+    date, sample, substrate, pH, replicate, day, time, lm_start, lm_stop, density
     ) %>%
   mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
   summarise(
@@ -4292,24 +4291,44 @@ kinetics_nested <- kinetics %>%
   select(-model) %>%
   unnest(tidied) %>%
   filter(term == "time") %>%
-  group_by(substrate, pH) %>%
+  group_by(substrate, pH, replicate) %>%
   mutate(scaled_estimate = estimate / max(estimate),
          scaled_estimate = case_when(scaled_estimate < 0 ~ 0,
                                      TRUE ~ scaled_estimate))
 
-ggplot(kinetics_nested %>% filter(sample != "neg. ctrl."),
+kinetic_max <- kinetics_nested %>% 
+  filter(day > 3) %>% 
+  group_by(pH, sample, substrate, day) %>% 
+  summarise(scaled_estimate = mean(scaled_estimate)) %>% 
+  group_by(pH, sample, substrate) %>% 
+  mutate(
+    max_estimate = max(scaled_estimate)
+  ) %>% 
+  filter(scaled_estimate == max_estimate)
+
+slope_grid <- ggplot(kinetics_nested %>% filter(sample != "neg. ctrl."),
        aes(x = day,
            y = scaled_estimate,
            colour = sample)) +
-  geom_line(size = 0.2) +
+  geom_vline(data = kinetic_max,
+             aes(xintercept = day,
+                 colour = sample),
+             size = 0.2,
+             linetype = 2) +
+  geom_line(aes(group = interaction(replicate, sample)),
+            size = 0.2,
+            alpha = 0.5) +
+  geom_smooth(size = 0.4,
+              se = FALSE) +
+  scale_colour_manual(values = c("grey75", pal_ostwald_disc[1])) +
   theme_leo() +
   theme(legend.position = "bottom") +
   facet_grid(pH ~ substrate)
+
+pdf("TE_activity_slopes.pdf", width = onecol, height = onecol)
+slope_grid
+dev.off()
 ```
-
-
-
-
 
 # Raman microspectroscopy
 
