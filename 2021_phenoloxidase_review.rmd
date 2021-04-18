@@ -14,6 +14,9 @@ library(ggbeeswarm)
 library(patchwork)
 library(broom)
 library(ggdendro)
+library(dendextend)
+library(treeio)
+library(ggtree)
 library(vegan)
 
 #### import Helvetica Neue ####
@@ -1050,5 +1053,22 @@ dendrogram + violins +
   plot_layout(widths = c(1, 5))
 dev.off()
 ```
+
+## Phylogeny
+
+### read tree files
+
+```{r}
+
+model_tree <- read.mrbayes("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Phylogeny/2021-04-18_modelled_paralogs/output/infile.nex.con.tre")
+
+ggtree(model_tree, branch.length='none') +
+  geom_nodelab(aes(label = round(as.numeric(prob), 2)),
+               hjust = 0,
+               nudge_x = 0.01) +
+  geom_tiplab()
+
+```
+
 
 
