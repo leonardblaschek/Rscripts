@@ -1032,7 +1032,7 @@ rmn_adj_box <- ggplot(
     colour = "black",
     size = 0.2
   ) +
-  scale_x_discrete(labels = c("Parenchyma", "Fibres", "Vessels")) +
+  scale_x_discrete(labels = c("Parenchyma", "Fibres", "TEs")) +
   scale_fill_manual(values = pal_flame_disc) +
   labs(
     x = "Neighbouring cell type",

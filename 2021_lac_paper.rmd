@@ -2011,16 +2011,16 @@ activity_grid <- ggplot(
     xmax = lm_stop,
     fill = "grey95"
   ) +
-  geom_line(aes(group = interaction(genotype, replicate, point, date, treatment)),
-    alpha = 0.1,
-    size = 0.2
-  ) +
+  # geom_line(aes(group = interaction(genotype, replicate, point, date, treatment)),
+  #   alpha = 0.1,
+  #   size = 0.2
+  # ) +
   geom_smooth(
-    data = filter(data_dab, time >= lm_start & time <= lm_stop),
+    aes(group = interaction(genotype, replicate, date, treatment)),
     size = 0.2,
     se = F,
-    method = "lm",
-    fullrange = T
+    # method = "lm",
+    # fullrange = T
   ) +
   labs(
     x = "Time [min]",
@@ -2140,11 +2140,11 @@ slopes <- ggplot(
   ) +
   facet_wrap(~cell_type, nrow = 1)
 
-# pdf("DAB_pH5.pdf", width = twocol, height = onecol * 0.35)
-# raw_absorbance /
-#   activity_grid /
+pdf("DAB_pH5.pdf", width = twocol, height = onecol * 1.75)
+raw_absorbance /
+  activity_grid /
 slopes
-# dev.off()
+dev.off()
 
 # pdf("DAB_pH5_diagnostics.pdf", width = onecol, height = onecol)
 slope_dist
@@ -2395,13 +2395,6 @@ activity_grid <- ggplot(
     linetype = treatment
   )
 ) +
-  # annotate("rect",
-  #   ymin = -Inf,
-  #   ymax = Inf,
-  #   xmin = lm_start,
-  #   xmax = lm_stop,
-  #   fill = "grey95"
-  # ) +
   geom_rect(
     data = lm_bounds %>% filter(substrate == "PYGL"),
     aes(
@@ -2511,17 +2504,21 @@ ph_cont <- ggplot(pygl_slopes_cont,
     yintercept = 0,
     size = 0.2
   ) +
-  geom_point(aes(colour = genotype),
-             size = 1,
-             alpha = 0.25,
-             shape = 16) +
-  stat_smooth(geom = "line",
-              aes(colour = genotype,
-                  group = interaction(replicate, genotype)),
-              span = 1.25,
-              size = 0.2,
-              alpha = 0.25,
-              se = F) +
+  geom_line(aes(colour = genotype,
+                group = interaction(replicate, genotype)),
+            size = 0.2,
+            alpha = 0.25) +
+  # geom_point(aes(colour = genotype),
+  #            size = 1,
+  #            alpha = 0.25,
+  #            shape = 16) +
+  # stat_smooth(geom = "line",
+  #             aes(colour = genotype,
+  #                 group = interaction(replicate, genotype)),
+  #             span = 1.25,
+  #             size = 0.2,
+  #             alpha = 0.25,
+  #             se = F) +
   geom_smooth(aes(colour = genotype),
               span = 1.25,
               size = 0.5,
@@ -2663,17 +2660,21 @@ daf_slopes_cont <- avg_pH_slopes %>%
 ph_cont <- ggplot(daf_slopes_cont,
        aes(x = pH,
            y = mean_estimate)) +
-  geom_point(aes(colour = genotype),
-             size = 1,
-             alpha = 0.25,
-             shape = 16) +
-  stat_smooth(geom = "line",
-              aes(colour = genotype,
-                  group = interaction(replicate, genotype)),
-              span = 1.25,
-              size = 0.2,
-              alpha = 0.25,
-              se = F) +
+  # geom_point(aes(colour = genotype),
+  #            size = 1,
+  #            alpha = 0.25,
+  #            shape = 16) +
+  # stat_smooth(geom = "line",
+  #             aes(colour = genotype,
+  #                 group = interaction(replicate, genotype)),
+  #             span = 1.25,
+  #             size = 0.2,
+  #             alpha = 0.25,
+  #             se = F) +
+  geom_line(aes(colour = genotype,
+                group = interaction(replicate, genotype)),
+            size = 0.2,
+            alpha = 0.25) +
   geom_smooth(aes(colour = genotype),
               span = 1.25,
               size = 0.5,
@@ -2706,8 +2707,8 @@ dev.off()
 
 ```{r}
 # start and stop of the time-window for linear regressions
-lm_start <- 100
-lm_stop <- 300
+lm_start <- 40
+lm_stop <- 160
 
 
 data_daf <- read_csv(paste0(
@@ -2859,16 +2860,16 @@ activity_grid <- ggplot(
     xmax = lm_stop,
     fill = "grey95"
   ) +
-  geom_line(aes(group = interaction(genotype, replicate, point, date, treatment)),
-    alpha = 0.1,
-    size = 0.2
-  ) +
+  # geom_line(aes(group = interaction(genotype, replicate, point, date, treatment)),
+  #   alpha = 0.1,
+  #   size = 0.2
+  # ) +
   geom_smooth(
-    data = filter(data_daf, time >= lm_start & time <= lm_stop),
+    aes(group = interaction(genotype, replicate, date, treatment)),
     size = 0.2,
     se = F,
-    method = "lm",
-    fullrange = T
+    # method = "loess",
+    # fullrange = T
   ) +
   labs(
     x = "Time [min]",
@@ -2877,7 +2878,7 @@ activity_grid <- ggplot(
   theme_leo() +
   # theme(legend.position = "bottom") +
   coord_cartesian(xlim = c(0, 400)) +
-  facet_grid(~cell_type)
+  facet_grid(~ cell_type)
 
 raw_absorbance <- ggplot(
   data_daf,
@@ -2988,18 +2989,18 @@ slopes <- ggplot(
   ) +
   facet_wrap(~cell_type, ncol = 5)
 
-# pdf("DAF_pH5.pdf", width = twocol, height = onecol * 0.35)
-# raw_absorbance /
-#   activity_grid /
+pdf("DAF_pH5.pdf", width = twocol, height = onecol * 1.75)
+raw_absorbance /
+  activity_grid /
 slopes
-# dev.off()
+dev.off()
 
 # pdf("DAF_pH5_diagnostics.pdf", width = onecol, height = onecol)
-slope_dist
+# slope_dist
 # dev.off()
 
 # pdf("bulk_DAF.pdf", width = 0.5 * onecol, height = 0.5 * onecol)
-bulk_bars
+# bulk_bars
 # dev.off()
 ```
 
@@ -4114,8 +4115,7 @@ read_plus <- function(flnm) {
     select(-row, -column)
 }
 
-TE_plates <- map(plate_files, read_plus) %>%
-  bind_rows()
+TE_plates <- map_dfr(plate_files, read_plus)
 ```
 
 
@@ -4129,22 +4129,6 @@ spec_files <-
     recursive = FALSE,
     full.names = TRUE
   )
-
-# read_plus <- function(flnm) {
-#   read_csv(flnm) %>%
-#     mutate(
-#       filename = basename(flnm)
-#     ) %>%
-#     separate(filename, into = c("author", "assay", "date", "time"), sep = "_") %>%
-#     select(-author, -assay) %>%
-#     mutate(
-#       time = str_remove(time, fixed(".csv")),
-#       date = ymd_hms(paste(date, time, sep = "_")),
-#       started = case_when(hour(date) < 14 ~ "morning", 
-#                           TRUE ~ "evening")
-#     ) %>% 
-#     select(-time)
-# }
 
 read_vroom <- function(flnm) {
   vroom(flnm) %>%
@@ -4163,13 +4147,7 @@ read_vroom <- function(flnm) {
     select(-time)
 }
 
-# bench::mark(
-#   TE_spec <- map(spec_files, read_plus) %>% bind_rows(),
-#   TE_spec <- map(spec_files, read_vroom) %>% bind_rows()
-# )
-
 TE_spec <- map_dfr(spec_files, read_vroom) %>%
-  # bind_rows() %>% 
   pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>%
   left_join(TE_plates, by = c("date", "started", "Well")) %>% 
   drop_na()
@@ -4233,11 +4211,11 @@ lm_bounds <- tribble(
   "PYGL", 4, 100, 400,
   "PYGL", 5, 100, 400,
   "PYGL", 6, 100, 400,
-  "PYGL", 7, 100, 400,
-  "SGZ", 4, 100, 300,
-  "SGZ", 5, 100, 300,
-  "SGZ", 6, 100, 300,
-  "SGZ", 7, 100, 300,
+  "PYGL", 7, 100, 300,
+  "SGZ", 4, 200, 400,
+  "SGZ", 5, 200, 400,
+  "SGZ", 6, 200, 400,
+  "SGZ", 7, 200, 400,
 )
 
 abs_max <- tibble(
@@ -4275,6 +4253,7 @@ ggplot(kinetics %>% filter(sample != "neg. ctrl."),
              scales = "free_y")
 dev.off()
 ```
+
 ## Plot linear phase slope
 
 ```{r}
