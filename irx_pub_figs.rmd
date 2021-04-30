@@ -4868,20 +4868,20 @@ rmn_irx_long <- model_data_pop %>%
       "Benz_rel",
       "S.G"
     ),
-    labels = c("Adj. vessels",
-               "Area [µm²]",
+    labels = c("Adj.~TEs",
+               "'Area [µm²]'",
                "Cellulose",
                "Circularity",
                "Convexity",
                "bold(G)",
                "bold(G)[CHOH]",
                "Total~bold(G)[CHO]",
-               "Terminal~bold(G)[CHO]",
-               "Perimeter [µm]",
+               "Term.~bold(G)[CHO]",
+               "'Perim. [µm]'",
                "Lignin",
                "bold(S)",
                "bold(P)",
-               "Benzaldehydes",
+               "Benzald.",
                "bold(S)~'/'~bold(G)"
                )),
     genotype = ordered(genotype,
@@ -4920,13 +4920,143 @@ rmn_irx_letters <- letter_groups(
 #   separate(ID, into = c("genotype", "cell_type"), sep = "_") %>%
 #   mutate(cell_type = ordered(cell_type, levels = c("PV", "Old SV", "Young SV")))
 
-rmn_irx_lig <- ggplot(
-  filter(rmn_irx_long, !variable %in%
-           c("Adj. vessels",
-             "Area [µm²]",
-             "Circularity",
-             "Convexity",
-             "Perimeter [µm]")),
+# rmn_irx_lig <- ggplot(
+#   filter(rmn_irx_long, !variable %in%
+#            c("Adj. vessels",
+#              "Area [µm²]",
+#              "Circularity",
+#              "Convexity",
+#              "Perimeter [µm]")),
+#   aes(
+#     x = genotype,
+#     y = value
+#   )
+# ) +
+#   geom_quasirandom(
+#     aes(fill = cell_type),
+#     shape = 21,
+#     # width = 0.1,
+#     # colour = NA,
+#     alpha = 0.75,
+#     size = 1,
+#     stroke = 0.25
+#   ) +
+#   geom_boxplot(
+#     fill = "white",
+#     alpha = 0.5,
+#     width = 0.6,
+#     outlier.alpha = 0,
+#     lwd = 0.25,
+#     fatten = 1,
+#     width = 0.25
+#   ) +
+#   geom_text(
+#     data = filter(rmn_irx_letters, 
+#                   !variable %in%
+#            c("Adj. vessels",
+#              "Area [µm²]",
+#              "Circularity",
+#              "Convexity",
+#              "Perimeter [µm]")),
+#     aes(label = Letters),
+#     size = 6 / (14 / 5),
+#     family = "Helvetica"
+#   ) +
+#   scale_fill_manual(values = pal_flame_disc) +
+#   scale_x_discrete(
+#     labels = c(
+#       "WT",
+#       expression(paste(italic("CCR1"), "-RNAi")),
+#       expression(paste(italic("C4H"), "-RNAi"))
+#     )
+#   ) +
+#   theme_leo() +
+#   theme(
+#     axis.text.x = element_text(
+#       angle = 90,
+#       hjust = 1
+#     ),
+#     axis.title = element_blank()
+#   ) +
+#   facet_grid(variable ~ cell_type,
+#     scales = "free_y",
+#     labeller = labeller(variable = label_parsed, cell_type = label_value)
+#   )
+# 
+# rmn_irx_morph <- ggplot(
+#   filter(rmn_irx_long, variable %in%
+#            c("Adj. vessels",
+#              "Area [µm²]",
+#              "Circularity",
+#              "Convexity",
+#              "Perimeter [µm]")),
+#   aes(
+#     x = genotype,
+#     y = value
+#   )
+# ) +
+#   geom_quasirandom(
+#     aes(fill = cell_type),
+#     shape = 21,
+#     # width = 0.1,
+#     # colour = NA,
+#     alpha = 0.75,
+#     size = 1,
+#     stroke = 0.25
+#   ) +
+#   geom_boxplot(
+#     fill = "white",
+#     alpha = 0.5,
+#     width = 0.6,
+#     outlier.alpha = 0,
+#     lwd = 0.25,
+#     fatten = 1,
+#     width = 0.25
+#   ) +
+#   geom_text(
+#     data = filter(rmn_irx_letters, 
+#                   variable %in%
+#            c("Adj. vessels",
+#              "Area [µm²]",
+#              "Circularity",
+#              "Convexity",
+#              "Perimeter [µm]")),
+#     aes(label = Letters),
+#     size = 6 / (14 / 5),
+#     family = "Helvetica"
+#   ) +
+#   scale_fill_manual(values = pal_flame_disc) +
+#   scale_x_discrete(
+#     labels = c(
+#       "WT",
+#       expression(paste(italic("CCR1"), "-RNAi")),
+#       expression(paste(italic("C4H"), "-RNAi"))
+#     )
+#   ) +
+#   theme_leo() +
+#   theme(
+#     axis.text.x = element_text(
+#       angle = 90,
+#       hjust = 1
+#     ),
+#     axis.title = element_blank()
+#   ) +
+#   facet_grid(variable ~ cell_type,
+#     scales = "free_y",
+#     # labeller = label_parsed
+#   )
+# 
+# pdf("IRX_FigureS1a_pop.pdf", width = onecol * 1.5, height = onecol * 1.5)
+# rmn_irx_morph
+# dev.off()
+# 
+# pdf("IRX_FigureS1b_pop.pdf", width = onecol * 1.5, height = twocol)
+# rmn_irx_lig
+# dev.off()
+
+# combined figure
+pop_S1 <- ggplot(
+  rmn_irx_long,
   aes(
     x = genotype,
     y = value
@@ -4951,13 +5081,7 @@ rmn_irx_lig <- ggplot(
     width = 0.25
   ) +
   geom_text(
-    data = filter(rmn_irx_letters, 
-                  !variable %in%
-           c("Adj. vessels",
-             "Area [µm²]",
-             "Circularity",
-             "Convexity",
-             "Perimeter [µm]")),
+    data = rmn_irx_letters,
     aes(label = Letters),
     size = 6 / (14 / 5),
     family = "Helvetica"
@@ -4973,8 +5097,8 @@ rmn_irx_lig <- ggplot(
   theme_leo() +
   theme(
     axis.text.x = element_text(
-      angle = 90,
-      hjust = 1
+      # angle = 90,
+      # hjust = 1
     ),
     axis.title = element_blank()
   ) +
@@ -4983,75 +5107,8 @@ rmn_irx_lig <- ggplot(
     labeller = labeller(variable = label_parsed, cell_type = label_value)
   )
 
-rmn_irx_morph <- ggplot(
-  filter(rmn_irx_long, variable %in%
-           c("Adj. vessels",
-             "Area [µm²]",
-             "Circularity",
-             "Convexity",
-             "Perimeter [µm]")),
-  aes(
-    x = genotype,
-    y = value
-  )
-) +
-  geom_quasirandom(
-    aes(fill = cell_type),
-    shape = 21,
-    # width = 0.1,
-    # colour = NA,
-    alpha = 0.75,
-    size = 1,
-    stroke = 0.25
-  ) +
-  geom_boxplot(
-    fill = "white",
-    alpha = 0.5,
-    width = 0.6,
-    outlier.alpha = 0,
-    lwd = 0.25,
-    fatten = 1,
-    width = 0.25
-  ) +
-  geom_text(
-    data = filter(rmn_irx_letters, 
-                  variable %in%
-           c("Adj. vessels",
-             "Area [µm²]",
-             "Circularity",
-             "Convexity",
-             "Perimeter [µm]")),
-    aes(label = Letters),
-    size = 6 / (14 / 5),
-    family = "Helvetica"
-  ) +
-  scale_fill_manual(values = pal_flame_disc) +
-  scale_x_discrete(
-    labels = c(
-      "WT",
-      expression(paste(italic("CCR1"), "-RNAi")),
-      expression(paste(italic("C4H"), "-RNAi"))
-    )
-  ) +
-  theme_leo() +
-  theme(
-    axis.text.x = element_text(
-      angle = 90,
-      hjust = 1
-    ),
-    axis.title = element_blank()
-  ) +
-  facet_grid(variable ~ cell_type,
-    scales = "free_y",
-    # labeller = label_parsed
-  )
-
-pdf("IRX_FigureS1a_pop.pdf", width = onecol * 1.5, height = onecol * 1.5)
-rmn_irx_morph
-dev.off()
-
-pdf("IRX_FigureS1b_pop.pdf", width = onecol * 1.5, height = twocol)
-rmn_irx_lig
+pdf("IRX_FigureS1_pop.pdf", width = onecol * 1.5, height = twocol)
+pop_S1
 dev.off()
 ```
 
@@ -6074,7 +6131,7 @@ position_violin <- ggplot(
     expression(italic("fah1")),
     expression(paste(italic("cad4"), "x", italic("cad5")))
   )) +
-  labs(y = "Terminal G<sub>CHO</sub> [%]") +
+  labs(y = "Terminal <b>G</b><sub>CHO</sub> [%]") +
   theme_leo() +
   theme(
     text = element_text(family = "Helvetica"),
@@ -6475,4 +6532,26 @@ hum / ill / temp / transp + plot_layout(heights = c(0.5, 0.5, 0.5 , 1))
 dev.off()
 
 ```
+
+#### Combined figure
+
+```{r}
+
+bending_grid <- 
+  curves_media | 
+  (medium_strength / medium_diameter_box / position_violin) |
+  curves | 
+  (violin_strength / mutant_diameter_box / mutant_height_box)
+
+
+evapo_grid <- hum / ill / temp / transp + plot_layout(heights = c(0.5, 0.5, 0.5 , 1))
+
+pdf("bending_evapo_supplement.pdf", width = twocol, height = twocol)
+bending_grid / evapo_grid + 
+  plot_annotation(tag_levels = 'A') & 
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
+dev.off()
+
+```
+
 

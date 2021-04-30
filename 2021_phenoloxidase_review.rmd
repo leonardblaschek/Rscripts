@@ -146,7 +146,7 @@ onecol <- 9 / 2.54
 ### Phenoloxidase evolution
 
 ```{r}
-PO <- read.csv("/home/leonard/Dropbox/2018_PO_review/gene_families.csv") %>%
+PO <- read.csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Data/gene_families.csv") %>%
   select(1:7) %>%
   rename("PRX" = "POX") %>%
   pivot_longer(c("PPO", "LAC", "PRX"), names_to = "variable", values_to = "value") %>%
@@ -1256,6 +1256,7 @@ phylogeny_species <- read_delim("/home/leonard/Dropbox/2018_PO_review/2020_rewri
     paralog = paste0(short_species, "LAC", paralog),
     paralog = case_when(
       str_detect(paralog, "ZmLAC") ~ "ZmLAC3",
+      str_detect(species, "Chlamy") ~ "Chlamyd.",
       TRUE ~ str_replace(paralog, "LACNA", "")
     ),
     species_colour = case_when(
@@ -1313,7 +1314,7 @@ phylo_plot <- ggtree(phylogeny, branch.length = "none", layout = "circular") %<+
     subset = (species %in% c(
       "Arabidopsis thaliana",
       "Zea mays",
-      # "Chlamydomonas reinhardtii",
+      "Chlamydomonas reinhardtii",
       "Miscanthus sinensis"
     )),
     label = paralog
@@ -1666,10 +1667,6 @@ phylo_plot <- ggtree(phylogeny, layout = "circular") %<+%
     plot.margin = unit(c(0, 0, 0, 0), "mm")
   )
 
-pdf("lac_phylogeny_supp.pdf", width = twocol * 3, height = twocol * 3)
-phylo_plot
-dev.off()
-
 #log likelihood
 
 run1 <- read_tsv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Phylogeny/2020-04-14_mrbayes/flat_prior/removed_X/no_Beagle/infile.nex.run1nB.p",
@@ -1692,8 +1689,14 @@ convergence <- ggplot(likelihoods, aes(x = Gen, y = LnL, colour = run)) +
   theme(legend.position = c(0.18, 0.925),
         legend.direction = "horizontal")
 
-pdf("log_likelihood.pdf", width = onecol, height = onecol * 0.5)
-convergence
+# pdf("log_likelihood.pdf", width = onecol, height = onecol * 0.5)
+# convergence
+# dev.off()
+
+pdf("lac_phylogeny_supp.pdf", width = twocol * 3, height = twocol * 3)
+phylo_plot + inset_element(convergence, 0.7, 0.025, 0.975, 0.1) +
+  plot_annotation(tag_levels = 'A') &
+  theme(plot.tag = element_text(size = 20, face = "bold", family = "Helvetica"))
 dev.off()
 ```
 
