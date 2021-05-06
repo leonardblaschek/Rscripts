@@ -4241,7 +4241,7 @@ kinetics <- TE_data %>%
     adjusted_absorbance = adjusted_absorbance[wavelength == abs_max],
     absorbance = absorbance[wavelength == abs_max])
 
-pdf("TE_kinetics.pdf", height = twocol * 2, width = twocol * 2)
+pdf("TE_kinetics.pdf", height = twocol, width = twocol)
 ggplot(kinetics %>% filter(sample == "TE"),
        aes(x = time,
            y = corrected_absorbance,
@@ -4261,6 +4261,65 @@ ggplot(kinetics %>% filter(sample == "TE"),
   # scale_x_continuous(limits = c(0, 400)) +
   theme_leo() +
   theme(legend.position = "bottom") +
+  facet_grid(substrate ~ day,
+             scales = "free_y")
+dev.off()
+
+pdf("TE_kinetics_ABTS_4.pdf", height = onecol * 0.5, width = twocol)
+ggplot(kinetics %>% filter(sample == "TE" & pH == 4 & substrate == "ABTS"),
+       aes(x = time,
+           y = corrected_absorbance,
+           colour = pH,
+           linetype = sample)) +
+  # geom_line(aes(group = interaction(sample, pH))) +
+  stat_smooth(geom = "line",
+              aes(group = interaction(replicate, pH)),
+              alpha = 0.5,
+              size = 0.2,
+              se = F) +
+  geom_smooth(data = filter(kinetics, 
+                            sample == "TE" &
+                              pH == 4 &
+                              substrate == "ABTS" &
+                              time %in% c(lm_start:lm_stop)),
+              aes(group = interaction(replicate, pH)),
+              method = "lm",
+              size = 0.5,
+              se = F) +
+  labs(y = "Corrected absorbance",
+       x = "Time [min]") +
+  scale_x_continuous(limits = c(0, 400), breaks = c(100, 300)) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  facet_grid(substrate ~ day,
+             scales = "free_y")
+dev.off()
+
+pdf("TE_kinetics_4.pdf", height = onecol * 1.5, width = twocol)
+ggplot(kinetics %>% filter(sample == "TE" & pH == 4),
+       aes(x = time,
+           y = corrected_absorbance,
+           colour = pH,
+           linetype = sample)) +
+  # geom_line(aes(group = interaction(sample, pH))) +
+  stat_smooth(geom = "line",
+              aes(group = interaction(replicate, pH)),
+              alpha = 0.5,
+              size = 0.2,
+              se = F) +
+  geom_smooth(data = filter(kinetics, 
+                            sample == "TE" &
+                              pH == 4 &
+                              time %in% c(lm_start:lm_stop)),
+              aes(group = interaction(replicate, pH)),
+              method = "lm",
+              size = 0.5,
+              se = F) +
+  labs(y = "Corrected absorbance",
+       x = "Time [min]") +
+  scale_x_continuous(limits = c(0, 400), breaks = c(100, 300)) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
   facet_grid(substrate ~ day,
              scales = "free_y")
 dev.off()
@@ -4488,12 +4547,12 @@ slope_grid <- ggplot(kinetics_nested %>% filter(sample != "neg. ctrl."),
            colour = substrate,
            linetype = sample,
            alpha = pH)) +
-  geom_vline(data = kinetic_max %>% filter(sample != "neg. ctrl."),
-             aes(xintercept = day),
-             size = 0.2,
-             linetype = 2) +
-  geom_line(aes(group = interaction(replicate, sample)),
-            size = 0.2) +
+  # geom_vline(data = kinetic_max %>% filter(sample != "neg. ctrl."),
+  #            aes(xintercept = day),
+  #            size = 0.2,
+  #            linetype = 2) +
+  # geom_line(aes(group = interaction(replicate, sample)),
+  #           size = 0.2) +
   stat_smooth(geom = "line",
               size = 0.4,
               se = FALSE) +
@@ -4652,8 +4711,7 @@ read_plus <- function(flnm) {
     nest()
 }
 
-rmn_lac <- map(rmn_files, read_plus) %>%
-  bind_rows()
+rmn_lac <- map_dfr(rmn_files, read_plus)
 
 #### baseline correction ####
 rmn_als <- function(x) {
