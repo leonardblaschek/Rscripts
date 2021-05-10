@@ -389,6 +389,7 @@ height
 ```
 
 ### Height
+
 ```{r message=FALSE}
 # pcv_data <- fromJSON("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/front/output/2020-05-11_lab_segmentation/results.json")
 # heights <- as.tibble(pcv_data$entities$observations$height$value) %>%
@@ -2155,7 +2156,6 @@ bulk_bars
 # dev.off()
 ```
 
-
 ## pH pilot
 
 ```{r}
@@ -2365,7 +2365,6 @@ avg_pH_slopes <- nested_pH_data %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
   summarise(mean_estimate = mean(estimate))
 ```
-
 
 ### PYGL
 
@@ -2680,28 +2679,25 @@ ph_cont <- ggplot(daf_slopes_cont,
               size = 0.5,
               alpha = 1,
               se = F) +
+  labs(y = "DAF oxidation rate") +
   scale_colour_manual(values = c("#d25952", "#275d95")) +
   expand_limits(y = 0) +
   theme_leo() +
+  theme(legend.position = c(0.075, 0.9),
+        legend.title = element_blank(),
+        legend.direction = "horizontal") +
   facet_wrap(
     ~cell_type, 
     ncol = 4, 
     # scales = "free_y"
     )
 
-pdf("DAF_pH.pdf", width = twocol, height = onecol * 1.75)
-activity_grid /
-slopes /
-ph_cont
-dev.off()
-
-# svglite::svglite("DAF_pH.svg", width = twocol, height = onecol * 1.75)
+pdf("DAF_pH.pdf", width = twocol, height = onecol * 0.5)
 # activity_grid /
 # slopes /
-# ph_cont
-# dev.off()
+ph_cont
+dev.off()
 ```
-
 
 ## DAF pH 5
 
@@ -2989,9 +2985,9 @@ slopes <- ggplot(
   ) +
   facet_wrap(~cell_type, ncol = 5)
 
-pdf("DAF_pH5.pdf", width = twocol, height = onecol * 1.75)
-raw_absorbance /
-  activity_grid /
+pdf("DAF_pH5.pdf", width = twocol, height = onecol * 0.5)
+# raw_absorbance /
+  # activity_grid /
 slopes
 dev.off()
 
@@ -3005,7 +3001,6 @@ dev.off()
 ```
 
 ### Animations
-
 
 ```{r}
 # gganimate conflicts with showtext, so to generate the animation with the custom theme, comment out showtext, the font_add lines and the "Helvetica" lines in the setup.
@@ -3606,7 +3601,9 @@ ggplot(
   facet_wrap(~substrate)
 
 ```
+
 ### Calibration II
+
 ```{r}
 
 lm_bounds <- tribble(
@@ -4119,7 +4116,6 @@ read_plus <- function(flnm) {
 TE_plates <- map_dfr(plate_files, read_plus)
 ```
 
-
 ## Load absorbance data
 
 ```{r}
@@ -4193,7 +4189,6 @@ plotly::ggplotly(
              scales = "free_y")
   )
 ```
-
 
 ## Plot absorbance over time
 
@@ -4375,10 +4370,17 @@ slope_grid <- ggplot(kinetics_nested %>% filter(sample == "TE"),
            y = scaled_estimate,
            colour = substrate,
            alpha = pH)) +
-  geom_vline(data = kinetic_max %>% filter(sample == "TE"),
-             aes(xintercept = day),
-             size = 0.2,
-             linetype = 2) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = 3,
+    xmax = 7,
+    fill = "grey90"
+  ) +
+  # geom_vline(data = kinetic_max %>% filter(sample == "TE"),
+  #            aes(xintercept = day),
+  #            size = 0.2,
+  #            linetype = 2) +
   geom_line(aes(group = interaction(replicate, sample)),
             size = 0.2) +
   stat_smooth(geom = "line",
@@ -4406,6 +4408,13 @@ pH_facet <- ggplot(kinetics_nested %>% filter(sample == "TE"),
            y = scaled_estimate,
            colour = substrate,
            alpha = pH)) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = 3,
+    xmax = 7,
+    fill = "grey90"
+  ) +
   # geom_vline(data = kinetic_max,
   #            aes(xintercept = day,
   #                colour = sample),
@@ -4447,6 +4456,13 @@ substrate_facet <- ggplot(kinetics_nested %>% filter(sample == "TE"),
            y = substrate_scaled,
            colour = substrate,
            alpha = pH)) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = 3,
+    xmax = 7,
+    fill = "grey90"
+  ) +
   # geom_vline(data = kinetic_max,
   #            aes(xintercept = day,
   #                colour = sample),
@@ -4905,6 +4921,7 @@ violin_data <- rmn_lac_sum %>%
     AUC,
     "Cellulose cryst." = cellu_cryst,
     "Benzaldehydes" = Benz_rel,
+    "G-CHOH" = GOH_rel,
     "G-CHO/G-OH" = GCHO.GOH
   ) %>%
   filter(cell_type != "LP") %>%
@@ -5172,7 +5189,6 @@ dev.off()
 
 ```
 
-
 ### Single plots
 
 ```{r}
@@ -5188,6 +5204,7 @@ scatter_data <- rmn_lac_sum %>%
     "Benzaldehydes" = Benz_rel,
     # "P/cellulose" = P.cellu,
     # "G-units" = G_rel,
+    "G-CHOH" = GOH_rel,
     # "Lignin/cellulose" = lig.cellu,
     "G-CHO/G-OH" = GCHO.GOH
   ) %>%
@@ -5273,13 +5290,15 @@ lig_violin <- function(var, ct) {
     )
 }
 pdf("single_plots.pdf", width = onecol * 1.5, height = onecol)
+lig_violin("Total lignin", "IF") +
+lig_violin("G-CHOH", "IF") +
 lig_violin("Total lignin", "XF") +
-lig_violin("G-CHO/G-OH", "XF") +
+lig_violin("G-CHOH", "XF") +
 lig_violin("Total lignin", "MX") +
-lig_violin("S/G", "MX")
+lig_violin("G-CHOH", "MX") +
+  plot_layout(ncol = 2)
 dev.off()
 ```
-
 
 ## Raman PCA
 
@@ -5588,4 +5607,3 @@ pdf("celltype_PCAs.pdf", width = onecol * 1.5, height = onecol)
 cell_type_pca("PX") + cell_type_pca("MX") + cell_type_pca("XF") + cell_type_pca("IF")
 dev.off()
 ```
-
