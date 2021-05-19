@@ -815,24 +815,24 @@ pocket <- pocket_atm %>%
 ref_pocket <- pocket %>%
   filter(paralog == "ZmLAC3")
 
-ggplot(
+plotly::ggplotly(ggplot(
   pocket,
   aes(
     x = reorder(paralog, -Volume),
     y = Volume
   )
 ) +
-  geom_quasirandom() +
+  geom_quasirandom(aes(colour = model)) +
   geom_violin(
     draw_quantiles = 0.5,
     alpha = 0.25
   ) +
-  scale_colour_gradientn(colours = rev(morgenstemning)) +
+  # scale_colour_gradientn(colours = rev(morgenstemning)) +
   theme_leo() +
   theme(
     legend.position = "right",
     plot.margin = unit(c(5, 1, 1, 1), "mm")
-  )
+  ))
 # geom_curve(data = zmlac3_depth,
 #            aes(xend = 22.75,
 #                yend = `mean(depth)`,
@@ -850,7 +850,6 @@ ggplot(
 #           size = ggtext_size) +
 # coord_flip(clip = "off", xlim = c(1, 22))
 
-test <- pocket %>% filter(paralog == "LcLAC")
 ```
 
 ### DEPTH
@@ -1049,6 +1048,12 @@ ref_data <- ref_data %>%
     "Polarity score",
     "Hydrophobicity score"
   )))
+
+best_models <- model_data %>% 
+  mutate(paralog = recode(paralog, "ADE/LAC" = "LcLAC")) %>% 
+  group_by(paralog) %>% 
+  filter(DOPE == max(DOPE)) %>% 
+  left_join(pocket)
 ```
 
 
