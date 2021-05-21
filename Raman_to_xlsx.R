@@ -97,8 +97,6 @@ Raman_spectra_avg <- Raman_spectra_scaled %>%
   mutate(wavenumber = round(wavenumber, digits = 0)) %>%
   complete(wavenumber = seq(300, 1800)) %>% 
   arrange(filename, wavenumber) %>%
-  summarise(
-    roll_scaled = slider::slide_index_dbl(scaled, wavenumber, mean, .before = 3, .after = 2),
-    roll_scaled_lig = slider::slide_index_dbl(scaled_lig, wavenumber, mean, .before = 2, .after = 2),
-    wavenumber = wavenumber
-  )
+  group_by(filename) %>% 
+  summarise(scaled_full = zoo::na.approx(scaled),
+            wavenumber = wavenumber)
