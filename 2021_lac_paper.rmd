@@ -612,7 +612,8 @@ Wiesner_data <- map_dfr(Wiesner_files, read_csv) %>%
       replicate %in% c(1:5) ~ "1",
       TRUE ~ "2"
     )
-  )
+  ) %>% 
+  filter(cell_type %in% c("IF", "XF", "PX", "MX", "PH", "BG"))
 
 if(any(Wiesner_data$first_image != "unstained")) warning("Stained and unstained values might be inverted in some images.")
 
@@ -655,28 +656,29 @@ letters <- letter_groups(Wiesner_avg,
 Wiesner_plot <- ggplot(Wiesner_data,
                        aes(x = genotype,
                            y = corrected_absorbance)) +
-  geom_quasirandom(shape = 16,
-                 alpha = 0.2,
-                 size = 1) +
+  geom_quasirandom(aes(colour = instance),
+                   shape = 16,
+                   alpha = 0.2,
+                   size = 1) +
   stat_summary(geom = "crossbar",
                fun = "median",
                size = 0.2,
                fatten = 1) +
-  geom_beeswarm(data = Wiesner_avg,
-             aes(fill = instance),
-             shape = 21,
-             size = 1.5,
-             alpha = 0.8,
-             stroke = 0.2) +
+  # geom_beeswarm(data = Wiesner_avg,
+  #            aes(fill = instance),
+  #            shape = 21,
+  #            size = 1.5,
+  #            alpha = 0.8,
+  #            stroke = 0.2) +
   geom_text(data = letters,
             aes(label = Letters),
             size = ggtext_size,
             family = "Helvetica") +
-  scale_fill_manual(values = pal_ostwald_disc[c(1,3)]) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
   theme_leo() +
-  facet_wrap(~ cell_type)
+  facet_wrap(~ cell_type, nrow = 1)
   
-pdf("lac_Wiesner.pdf", width = twocol, height = onecol)
+pdf("lac_Wiesner.pdf", width = twocol, height = onecol * 0.5)
 Wiesner_plot
 dev.off()
 ```
@@ -2908,9 +2910,9 @@ ph_cont <- ggplot(daf_slopes_cont,
     # scales = "free_y"
     )
 
-pdf("DAF_pH.pdf", width = twocol, height = onecol * 1.5)
-activity_grid /
-slopes /
+pdf("DAF_pH.pdf", width = twocol, height = onecol * 0.5)
+# activity_grid /
+# slopes /
 ph_cont
 dev.off()
 ```
@@ -3436,14 +3438,14 @@ growth_fine <- tibble(
 
 growth_long <- growth_data %>%
   filter(treatment == "ind") %>%
-  pivot_longer(cols = c(TE_viab, TE_prop, nTE_viab),
+  pivot_longer(cols = c(TE_viab, TE_prop),
                names_to = "variable",
                values_to = "value")
 
 growth_sigmoid <- growth_long %>%
   select(replicate, dpi, variable, value) %>%
   full_join(growth_fine) %>%
-  # filter(variable != "nTE_viab") %>%
+  filter(variable != "nTE_viab") %>%
   group_by(variable) %>%
   nest(data = c(replicate, dpi, value)) %>%
   mutate(
@@ -3536,7 +3538,7 @@ growth_facet <- ggplot(
   theme_leo() +
   facet_wrap(~variable, ncol = 3)
 
-pdf("TE_growth_sigmoid.pdf", width = onecol, height = onecol * 0.5)
+pdf("TE_growth_sigmoid.pdf", width = onecol * 0.8, height = onecol * 0.4)
 # growth
 growth_facet
 dev.off()
@@ -4333,9 +4335,98 @@ read_plus <- function(flnm) {
 TE_plates <- map_dfr(plate_files, read_plus)
 ```
 
+### Check individual experiments
+
+```{r}
+read_vroom <- function(flnm) {
+  vroom(flnm) %>%
+    mutate(
+      filename = basename(flnm)
+    ) %>%
+    separate(filename, into = c("author", "assay", "date", "time"), sep = "_") %>%
+    select(-author, -assay) %>%
+    mutate(
+      time = str_remove(time, fixed(".csv")),
+      date = ymd(date),
+      started = ymd_hms(paste(date, time, sep = "_")),
+      started = case_when(hour(started) < 14 ~ "morning", 
+                          TRUE ~ "evening")
+    ) %>% 
+    select(-time) %>% 
+    tidyfast::dt_pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement")
+}
+
+test_spec <- read_vroom(
+  paste0(datapath, "PhD/Laccase_activity/2021-04_TE_activity/csv_files/absorbance/LB_TE-activity_20210512_190857.csv")) %>%
+  left_join(TE_plates, by = c("date", "started", "Well")) %>% 
+  drop_na()
+
+gc()
+
+test_data <- test_spec %>%
+  mutate(
+    wavelength = as.numeric(wavelength),
+    absorbance = measurement / 0.52, # experimental path length in the plate
+    time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
+  ) %>%
+  filter(time < 390) %>% 
+  group_by(date, replicate, substrate, pH, wavelength, time) %>% 
+  mutate("blank" = absorbance[sample == "neg. ctrl."]) %>% 
+  group_by(date, sample, substrate, pH, replicate, day) %>%
+  mutate(
+    density = mean(absorbance[wavelength == 600 & `Cycle #` %in% c(1, 2)]),
+    adjusted_absorbance = case_when(
+      sample == "neg. ctrl." ~ absorbance,
+      # TRUE ~ absorbance # do not adjust for density
+      TRUE ~ (absorbance - blank) / density # adjust for density
+    ),
+    zeroed_absorbance = adjusted_absorbance - adjusted_absorbance[`Cycle #` == 3]
+  ) %>%
+  select(-`Cycle #`, -`Time (s)`)
+
+plotly::ggplotly(ggplot(test_data %>% filter(Well == "H6"),
+       aes(x = wavelength,
+           y = absorbance,
+           group = time)) +
+  geom_line(size = 0.2,
+            alpha = 0.5))
+
+```
+
+
 ### Load absorbance data
 
 ```{r}
+lm_bounds <- tribble(
+  ~substrate, ~pH, ~lm_start, ~lm_stop,
+  "ABTS", 4, 40, 160,
+  "ABTS", 5, 40, 160,
+  "ABTS", 6, 100, 400,
+  "ABTS", 7, 100, 400,
+  "DAF", 4, 40, 160,
+  "DAF", 5, 40, 160,
+  "DAF", 6, 100, 300,
+  "DAF", 7, 100, 300,
+  "MBTH", 4, 100, 300,
+  "MBTH", 5, 100, 300,
+  "MBTH", 6, 100, 300,
+  "MBTH", 7, 20, 120,
+  "PYGL", 4, 100, 400,
+  "PYGL", 5, 100, 400,
+  "PYGL", 6, 100, 400,
+  "PYGL", 7, 100, 300,
+  "SGZ", 4, 200, 400,
+  "SGZ", 5, 200, 400,
+  "SGZ", 6, 200, 400,
+  "SGZ", 7, 200, 400,
+)
+
+abs_max <- tibble(
+  substrate = c("ABTS", "DAF", "MBTH", "PYGL", "SGZ"),
+  abs_max = c(420, 690, 505, 450, 530), #DAF default: 610
+  abs_min = c(480, 570, 700, 600, 600) #DAF default: 515
+)
+
 spec_files <-
   list.files(
     path = paste0(datapath, "PhD/Laccase_activity/2021-04_TE_activity/csv_files/absorbance/"),
@@ -4359,7 +4450,8 @@ read_vroom <- function(flnm) {
                           TRUE ~ "evening")
     ) %>% 
     select(-time) %>% 
-    tidyfast::dt_pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement")
+    pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>% 
+    filter(wavelength %in% c(abs_max$abs_max, abs_max$abs_min))
 }
 
 TE_spec <- map_dfr(spec_files, read_vroom) %>%
@@ -4393,129 +4485,9 @@ rm(TE_spec)
 gc()
 ```
 
-#### Tibble to database
-
-```{r}
-library(RSQLite)
-
-TE_db <- dbConnect(
-  RSQLite::SQLite(),
-  "TE_db.sqlite"
-)
-
-dbWriteTable(
-  TE_db,
-  name   = "TE_db",
-  append = TRUE,
-  value  = TE_data
-)
-
-rm(TE_data)
-gc()
-```
-
-#### SQLite manipulation
-
-```{r}
-lm_bounds <- tribble(
-  ~substrate, ~pH, ~lm_start, ~lm_stop,
-  "ABTS", 4, 40, 160,
-  "ABTS", 5, 40, 160,
-  "ABTS", 6, 100, 400,
-  "ABTS", 7, 100, 400,
-  "DAF", 4, 40, 160,
-  "DAF", 5, 40, 160,
-  "DAF", 6, 100, 300,
-  "DAF", 7, 100, 300,
-  "MBTH", 4, 100, 300,
-  "MBTH", 5, 100, 300,
-  "MBTH", 6, 100, 300,
-  "MBTH", 7, 20, 120,
-  "PYGL", 4, 100, 400,
-  "PYGL", 5, 100, 400,
-  "PYGL", 6, 100, 400,
-  "PYGL", 7, 100, 300,
-  "SGZ", 4, 200, 400,
-  "SGZ", 5, 200, 400,
-  "SGZ", 6, 200, 400,
-  "SGZ", 7, 200, 400,
-)
-
-abs_max <- tibble(
-  substrate = c("ABTS", "DAF", "MBTH", "PYGL", "SGZ"),
-  abs_max = c(420, 610, 505, 450, 530),
-  abs_min = c(480, 515, 700, 600, 600)
-)
-
-kinetics <- tbl(TE_db, "TE_db") %>%
-  left_join(abs_max, copy = TRUE) %>%
-  left_join(lm_bounds, copy = TRUE) %>% 
-  group_by(
-    date, sample, substrate, pH, replicate, day, time, lm_start, lm_stop, density
-    ) %>%
-  summarise(
-    # corrected_absorbance = zeroed_absorbance[wavelength == abs_max] - 
-    #   zeroed_absorbance[wavelength == abs_min],
-    # adjusted_absorbance = adjusted_absorbance[wavelength == abs_max],
-    absorbance = absorbance[wavelength == abs_max]) %>% 
-  collect()
-```
-
-
-
-### Plot end-point spectra
-
-```{r}
-plotly::ggplotly(
-  ggplot(TE_data %>% filter(time == 380 & sample == "TE"),
-       aes(x = wavelength,
-           y = zeroed_absorbance,
-           linetype = sample,
-           colour = pH)) +
-  geom_line(aes(group = interaction(replicate, pH)),
-            size = 0.2) +
-  # scale_x_continuous(limits = c(0, 400)) +
-  theme_leo() +
-  theme(legend.position = "bottom") +
-  facet_grid(substrate ~ day,
-             scales = "free_y")
-  )
-```
-
 ### Plot absorbance over time
 
 ```{r}
-lm_bounds <- tribble(
-  ~substrate, ~pH, ~lm_start, ~lm_stop,
-  "ABTS", 4, 40, 160,
-  "ABTS", 5, 40, 160,
-  "ABTS", 6, 100, 400,
-  "ABTS", 7, 100, 400,
-  "DAF", 4, 40, 160,
-  "DAF", 5, 40, 160,
-  "DAF", 6, 100, 300,
-  "DAF", 7, 100, 300,
-  "MBTH", 4, 100, 300,
-  "MBTH", 5, 100, 300,
-  "MBTH", 6, 100, 300,
-  "MBTH", 7, 20, 120,
-  "PYGL", 4, 100, 400,
-  "PYGL", 5, 100, 400,
-  "PYGL", 6, 100, 400,
-  "PYGL", 7, 100, 300,
-  "SGZ", 4, 200, 400,
-  "SGZ", 5, 200, 400,
-  "SGZ", 6, 200, 400,
-  "SGZ", 7, 200, 400,
-)
-
-abs_max <- tibble(
-  substrate = c("ABTS", "DAF", "MBTH", "PYGL", "SGZ"),
-  abs_max = c(420, 610, 505, 450, 530),
-  abs_min = c(480, 515, 700, 600, 600)
-  # abs_min = 1000
-)
-
 kinetics <- TE_data %>%
   left_join(abs_max) %>%
   left_join(lm_bounds) %>% 
@@ -4618,6 +4590,7 @@ dev.off()
 # write_csv(kinetics, "kinetics.csv")
 
 kinetics_nested <- kinetics %>%
+  filter(substrate != "SGZ") %>% 
   filter(time >= lm_start & time <= lm_stop) %>%
   select(-absorbance, -adjusted_absorbance) %>%
   nest(data = c(time, corrected_absorbance)) %>%
@@ -4631,10 +4604,10 @@ kinetics_nested <- kinetics %>%
   unnest(tidied) %>%
   filter(term == "time") %>%
   mutate(pH = as.factor(pH)) %>% 
-  group_by(substrate, pH, replicate, day) %>% 
-  mutate(estimate = estimate - estimate[sample == "nTE"]) %>%
+  # group_by(substrate, pH, replicate, day) %>% # subtract nTE activity (2 lines)
+  # mutate(estimate = estimate - estimate[sample == "nTE"]) %>%
   # filter(adj.r.squared > 0.5) %>%
-  group_by(substrate, pH, replicate) %>%
+  group_by(substrate, pH, replicate, sample) %>%
   mutate(scaled_estimate = estimate / max(estimate),
          scaled_estimate = case_when(scaled_estimate < 0 ~ 0,
                                      TRUE ~ scaled_estimate)) %>% 
@@ -4660,8 +4633,7 @@ kinetic_max <- kinetics_nested %>%
 slope_grid <- ggplot(kinetics_nested %>% filter(sample == "TE"),
        aes(x = day,
            y = scaled_estimate,
-           colour = substrate,
-           alpha = pH)) +
+           colour = substrate)) +
   annotate("rect",
     ymin = -Inf,
     ymax = Inf,
@@ -4697,9 +4669,7 @@ slope_grid <- ggplot(kinetics_nested %>% filter(sample == "TE"),
 
 pH_facet <- ggplot(kinetics_nested %>% filter(sample == "TE"),
        aes(x = day,
-           y = scaled_estimate,
-           colour = substrate,
-           alpha = pH)) +
+           y = scaled_estimate)) +
   annotate("rect",
     ymin = -Inf,
     ymax = Inf,
@@ -4797,9 +4767,10 @@ AAAAAB
 AAAAAB
 CCCCC#
 "
-pdf("TE_activity_slopes_TEspec.pdf", width = onecol * 1.5, height = onecol)
-slope_grid + pH_facet + substrate_facet +
-  plot_layout(design = layout)
+pdf("TE_activity_slopes.pdf", width = onecol, height = onecol)
+slope_grid 
+# + pH_facet + substrate_facet +
+  # plot_layout(design = layout)
 dev.off()
 
 ```
@@ -5575,7 +5546,7 @@ lig_violin <- ggplot(
   )
 ) +
   ggbeeswarm::geom_quasirandom(
-    # aes(colour = instance),
+    aes(colour = instance),
     shape = 16,
     size = 1,
     # dodge.width = 0.5,
@@ -5614,14 +5585,14 @@ lig_violin <- ggplot(
     size = 0.2,
     # fatten = 1
   ) +
-  geom_point(
-    data = violin_data_avg,
-    aes(y = value,
-        colour = instance),
-    shape = 16,
-    alpha = 0.75,
-    size = 1.5
-  ) +
+  # geom_point(
+  #   data = violin_data_avg,
+  #   aes(y = value,
+  #       colour = instance),
+  #   shape = 16,
+  #   alpha = 0.75,
+  #   size = 1.5
+  # ) +
   geom_text(
     data = letters,
     aes(label = Letters),
