@@ -269,6 +269,30 @@ height
 
 ## Image based phenotyping
 
+### Calibration
+
+```{r}
+size_marker <- read_csv(paste0(datapath, "PhD/Phenotyping/2021-05_plantCV_calibration/calibration.csv")) 
+
+ggplot(size_marker,
+       aes(x = pixels,
+           y = space)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_leo()
+
+summary(lm(pixels ~ space, data = size_marker))
+
+size_marker <- size_marker %>% 
+  mutate(space_rel = space / pixels,
+         space_cm = space_rel * 5)
+
+print("The spacing of the colour card is equivalent to 1.5 cm.")
+print("Length in cm = pixels * 1.5 / space")
+print("Area in cm² = pixels² * 1.5² / space²")
+```
+
+
 ### Hue
 
 ```{r message=FALSE}
@@ -3308,7 +3332,76 @@ anim_save("Full_IF_1_animation.gif")
 
 # TE activity
 
-## Load viability and differentiation data
+## DAF spectrum
+
+```{r}
+daf_plate <- read_csv(
+  paste0(datapath, "PhD/Laccase_activity/2021-05-24_DAF_analysis/2021-05-24_DAF.csv")
+  ) %>% 
+  unite("Well", row, column, sep = "")
+
+daf_abs <- read_csv(
+  paste0(datapath, "PhD/Laccase_activity/2021-05-24_DAF_analysis/LB_TE-activity_20210524_115625.csv")
+  )
+
+daf <- left_join(daf_abs, daf_plate) %>% 
+  separate(Well, into = c("row", "column"), sep = 1) %>% 
+  pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>% 
+  mutate(
+    wavelength = as.numeric(wavelength),
+    absorbance = measurement / 0.52, # experimental path length in the plate
+    time = (`Cycle #` * 1) - 1 # 1 minute between measurements
+  )
+
+spectra <- ggplot(daf,
+                  aes(x = wavelength,
+                      y = absorbance,
+                      group = time)) +
+  geom_line() +
+  theme_leo() +
+  facet_grid(row ~ column)
+
+plotly::ggplotly(spectra)
+
+peaks <- c(290, 360, 610, 800)
+
+daf_peaks <- daf %>% 
+  filter(wavelength %in% peaks) %>% 
+  mutate(wavelength = as.character(wavelength))
+
+peak_time <- ggplot(daf_peaks,
+                    aes(x = time,
+                        y = absorbance,
+                        colour = wavelength)) +
+  geom_point() +
+  geom_smooth(aes(group = wavelength)) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_grid(row ~ column)
+
+peak_time
+
+peak_conc <- ggplot(daf_peaks %>% filter(time == 39 & concentration > 0.7),
+                    aes(x = concentration,
+                        y = absorbance,
+                        colour = wavelength)) +
+  geom_point() +
+  geom_smooth(aes(group = wavelength),
+              method = "lm", 
+              se = F,
+              linetype = 2) +
+  geom_line(aes(group = wavelength)) +
+  theme_leo() +
+  scale_x_log10() +
+  theme(legend.position = "bottom") +
+  facet_wrap(~ row, ncol = 4)
+
+peak_conc
+```
+
+## Viability
+
+### Load viability and differentiation data
 
 ```{r}
 growth_estimates <- read_csv(paste0(datapath, "PhD/Cell cultures/2021_timelines/2021_timeline_counts.csv"),
@@ -3365,7 +3458,7 @@ growth_avg <- growth_data %>%
   summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
 ```
 
-## Plot differentiation curves
+### Plot differentiation curves
 
 ```{r}
 
@@ -4384,7 +4477,7 @@ test_data <- test_spec %>%
   ) %>%
   select(-`Cycle #`, -`Time (s)`)
 
-plotly::ggplotly(ggplot(test_data %>% filter(Well == "H6"),
+plotly::ggplotly(ggplot(test_data %>% filter(Well == "F8"),
        aes(x = wavelength,
            y = absorbance,
            group = time)) +
@@ -4397,34 +4490,10 @@ plotly::ggplotly(ggplot(test_data %>% filter(Well == "H6"),
 ### Load absorbance data
 
 ```{r}
-lm_bounds <- tribble(
-  ~substrate, ~pH, ~lm_start, ~lm_stop,
-  "ABTS", 4, 40, 160,
-  "ABTS", 5, 40, 160,
-  "ABTS", 6, 100, 400,
-  "ABTS", 7, 100, 400,
-  "DAF", 4, 40, 160,
-  "DAF", 5, 40, 160,
-  "DAF", 6, 100, 300,
-  "DAF", 7, 100, 300,
-  "MBTH", 4, 100, 300,
-  "MBTH", 5, 100, 300,
-  "MBTH", 6, 100, 300,
-  "MBTH", 7, 20, 120,
-  "PYGL", 4, 100, 400,
-  "PYGL", 5, 100, 400,
-  "PYGL", 6, 100, 400,
-  "PYGL", 7, 100, 300,
-  "SGZ", 4, 200, 400,
-  "SGZ", 5, 200, 400,
-  "SGZ", 6, 200, 400,
-  "SGZ", 7, 200, 400,
-)
-
 abs_max <- tibble(
   substrate = c("ABTS", "DAF", "MBTH", "PYGL", "SGZ"),
-  abs_max = c(420, 690, 505, 450, 530), #DAF default: 610
-  abs_min = c(480, 570, 700, 600, 600) #DAF default: 515
+  abs_max = c(420, 610, 505, 450, 530), #DAF default: 610
+  abs_min = c(480, 930, 700, 600, 600) #DAF default: 515
 )
 
 spec_files <-
@@ -4488,6 +4557,30 @@ gc()
 ### Plot absorbance over time
 
 ```{r}
+lm_bounds <- tribble(
+  ~substrate, ~pH, ~lm_start, ~lm_stop,
+  "ABTS", 4, 40, 160,
+  "ABTS", 5, 40, 160,
+  "ABTS", 6, 100, 400,
+  "ABTS", 7, 100, 400,
+  "DAF", 4, 40, 160,
+  "DAF", 5, 40, 160,
+  "DAF", 6, 20, 100,
+  "DAF", 7, 100, 300,
+  "MBTH", 4, 100, 300,
+  "MBTH", 5, 100, 300,
+  "MBTH", 6, 100, 300,
+  "MBTH", 7, 20, 120,
+  "PYGL", 4, 100, 400,
+  "PYGL", 5, 100, 400,
+  "PYGL", 6, 100, 400,
+  "PYGL", 7, 100, 300,
+  "SGZ", 4, 200, 400,
+  "SGZ", 5, 200, 400,
+  "SGZ", 6, 200, 400,
+  "SGZ", 7, 200, 400,
+)
+
 kinetics <- TE_data %>%
   left_join(abs_max) %>%
   left_join(lm_bounds) %>% 
@@ -4646,7 +4739,8 @@ slope_grid <- ggplot(kinetics_nested %>% filter(sample == "TE"),
   #            size = 0.2,
   #            linetype = 2) +
   geom_line(aes(group = interaction(replicate, sample)),
-            size = 0.2) +
+            size = 0.2,
+            alpha = 0.5) +
   stat_smooth(geom = "line",
               size = 0.4,
               se = FALSE) +

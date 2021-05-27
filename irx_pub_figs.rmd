@@ -722,38 +722,6 @@ rmn_sum <- rmn_data_corrected %>%
   )
 ```
 
-
-#### Export scaled spectra
-
-```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-
-#### export spectra for excel users ####
-spectra_export.switch <- left_join(read_tsv(paste0(datapath, "PhD/IRX/PMX_which_SMX.tsv"),
-  col_types = "cccc"
-), rmn_data_corrected) %>%
-  mutate(
-    technical = str_c(technical, "switched", sep = "_"),
-    cell.type = "SMX"
-  )
-
-spectra_export <- rmn_data_corrected %>%
-  anti_join(read_tsv(paste0(datapath, "PhD/IRX/PMX_which_SMX.tsv"),
-    col_types = "cccc"
-  )) %>%
-  bind_rows(rmn_irx.switch)
-
-spectra_export_raw <- spectra_export %>%
-  select(genotype:corrected.intensity) %>%
-  pivot_wider(id_cols = c(genotype:technical), names_from = wavenumber, values_from = corrected.intensity)
-
-spectra_export_scaled <- spectra_export %>%
-  select(genotype:wavenumber, scaled) %>%
-  pivot_wider(id_cols = c(genotype:technical), names_from = wavenumber, values_from = scaled)
-
-write_excel_csv(spectra_export_raw, "Raman_spectra_raw.csv")
-write_excel_csv(spectra_export_scaled, "Raman_spectra_scaled.csv")
-```
-
 ### Load Wiesner data
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, warning = FALSE, eval = TRUE, echo = FALSE}
@@ -1827,29 +1795,6 @@ rmn_pop_test <- ggplot(
 pdf("rmn_pop.pdf", height = 3)
 rmn_pop_test
 dev.off()
-```
-
-#### Export scaled spectra
-
-```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-export_raw <- rmn_pop_scaled %>%
-  select(-c(AUC, scaled, scaled_lig)) %>%
-  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
-  pivot_wider(id_cols = c(genotype, replicate, technical, TE), 
-              names_from = wavenumber,
-              values_from = corrected.intensity) %>%
-  select(genotype, replicate, technical, TE, order(as.numeric(colnames(.))))
-
-export_scaled <- rmn_pop_scaled %>%
-  select(-c(AUC, corrected.intensity, scaled_lig)) %>%
-  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
-  pivot_wider(id_cols = c(genotype, replicate, technical, TE), 
-              names_from = wavenumber,
-              values_from = scaled) %>%
-  select(genotype, replicate, technical, TE, order(as.numeric(colnames(.))))
-
-write_excel_csv(export_raw, "soil_poplar_raw.csv")
-write_excel_csv(export_scaled, "soil_poplar_scaled.csv")
 ```
 
 ### Load shape data
@@ -3423,7 +3368,7 @@ dev.off()
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
-heights <- read_csv(paste0(datapath, "Master/Summer project 16/phenotyping/phenotyping.csv")) %>%
+heights <- read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
   select(genotype, height) %>%
   filter(genotype %in% c("col-0", "fah1", "cad4xcad5")) %>%
   mutate(genotype = recode(genotype, "col-0" = "WT")) %>%
@@ -6553,5 +6498,283 @@ bending_grid / evapo_grid +
 dev.off()
 
 ```
+
+# Export complete data
+
+```{r}
+# EDS ####
+eds_data
+# EM ####
+em_data
+# AFM ####
+afm_data <- read_csv(paste0(datapath, "PhD/IRX/AFM/afm_PX.csv")) %>%
+  tidyr::fill(everything()) %>%
+  mutate(days = as.character(days)) %>%
+  pivot_longer(cols = c(modulus, deformation, adhesion), names_to = "variable", values_to = "value") %>%
+  group_by(cell.type, days, cell, measurement, variable) %>%
+  mutate(
+    ratio = value[layer == "SCW"] / value[layer == "PCW"]) %>%
+  filter(!(variable == "adhesion" & # remove > 20-fold outlier
+    cell == "Cell 4" &
+    measurement == 6 &
+    cell.type == "PX" &
+    days == "50")) %>% 
+  ungroup() %>% 
+  pivot_wider(names_from = c("layer", "variable"), values_from = c("value", "ratio")) %>% 
+  select(1:10,
+         "ratio_modulus" = 11,
+         "ratio_deformation" = 12,
+         "ratio_adhesion" = 13,
+         -c(14:16))
+# Arabidopsis collapse model data ####
+At_model_data <- rmn_irx %>% 
+  select(
+    c(genotype:Area),
+    "Perimeter" = Perim.,
+    "Circularity" = Circ.,
+    "Adj. vessels" = n_v,
+    total_lignin:cellulose,
+    "S/G" = S.G,
+    "Benzaldehydes_rel" = Benz_rel,
+    "Wiesner" = mean.OD1,
+    "Convexity" = convexity,
+    "G-CHO_term/G-CHO_tot" = GCHO_term.GCHO_tot,
+    "G-CHO/G-CHOH" = GCHO.GOH
+  )
+# Poplar collapse model data ####
+Pt_model_data <- model_data_pop %>% 
+  select(
+    c(genotype:TE),
+    Distance,
+    "Perimeter" = Perim.,
+    "Circularity" = Circ.,
+    "Adj. vessels" = n_v,
+    total_lignin,
+    G_rel,
+    GOH_rel,
+    GCHO_rel,
+    S_rel,
+    P_rel,
+    cellulose,
+    "S/G" = S.G,
+    "Benzaldehydes_rel" = Benz_rel,
+    "Wiesner" = wiesner_avg,
+    "Convexity" = Solidity,
+    "G-CHO_term/G-CHO_tot" = GCHO_term.GCHO_tot,
+    "G-CHO/G-CHOH" = GCHO.GOH
+  )
+# Three-point bending turgor ####
+bending_turgor <- medium_data %>% 
+  pivot_wider(names_from = variable, values_from = value) %>% 
+  rename("replicate" = stem) %>% 
+  group_by(replicate, medium) %>% 
+  mutate(section = row_number()) %>% 
+  select(replicate, medium, section, stiffness) %>% 
+  left_join(medium_breaking) %>% 
+  drop_na() %>% 
+  pivot_wider(names_from = variable, values_from = value)
+# Three-point bending mutants ####
+bending_mutants <- stiffness_complete %>% 
+  pivot_wider(names_from = variable, values_from = value) %>% 
+  select(genotype, "stiffness" = modulus)
+breaking_mutants <- bending_pre %>% 
+  ungroup() %>% 
+  pivot_wider(names_from = variable, values_from = value) %>% 
+  select(genotype, break_point, strength)
+# Mutant biochemistry ####
+biochem_data
+# Drought rosette area ####
+rosettes <- read_csv(paste0(datapath, "PhD/IRX/Drought/drought_area.csv")) %>%
+  mutate(
+    image = str_remove(image, fixed(".JPG")),
+    mean_hue = (mean_hue / 255) * 360
+  ) %>%
+  separate(image, c("genotype", "medium", "replicate"), sep = "-") %>%
+  mutate(
+    medium = ordered(recode(medium,
+      "0%" = "Water",
+      "10%" = "10% PEG",
+      "20%" = "20% PEG"
+    ),
+    levels = c("Water", "10% PEG", "20% PEG")
+    ))
+# Drought evapotranspiration ####
+transpiration <- read_csv(
+  paste0(datapath, "PhD/IRX/Drought/evapotranspiration.csv")
+) %>%
+  pivot_longer(-c(medium, time), names_to = "plant", values_to = "transp_rate") %>%
+  mutate(
+    genotype = unlist(str_extract_all(plant, "[:alpha:]+")),
+    genotype = ordered(recode(genotype, "CAD" = "cad4xcad5"),
+      levels = c("WT", "cad4xcad5")
+    ),
+    replicate = unlist(str_extract_all(plant, "[:digit:]+")),
+    medium = ordered(medium,
+      levels = c("Water", "10% PEG", "20% PEG")
+    ),
+    transp_rate = transp_rate * 1000
+  ) %>% 
+  select(-plant)
+# Drought recovery ####
+recovery_data <- read_csv(paste0(datapath, "PhD/IRX/Drought/recovery.csv")) %>%
+  mutate(
+    state = ordered(state, levels = rev(c("Recovered", "Partly recovered", "Dead"))),
+    medium = ordered(medium, levels = c("Water", "10% PEG", "20% PEG")),
+    genotype = ordered(recode(genotype, "cad4x5" = "<i>cad4</i>x<i>5</i>"),
+                       levels = c("WT", "<i>cad4</i>x<i>5</i>"))
+  ) %>%
+  group_by(genotype, medium) %>%
+  mutate(sum = sum(count)) %>%
+  group_by(genotype, medium, state) %>%
+  mutate(proportion = (count / sum) * 100)
+
+writexl::write_xlsx(list(
+  "EDS data" = eds_data,
+  "EM data" = em_data,
+  "AFM data" = afm_data,
+  "Arabidopsis model data" = At_model_data,
+  "Poplar model data" = Pt_model_data,
+  "Turgor bending" = bending_turgor,
+  "Mutant stiffness" = bending_mutants,
+  "Mutant breaking" = breaking_mutants,
+  "Mutant biochemistry" = biochem_data,
+  "Drought area" = rosettes,
+  "Drought evapotranspiration" = transpiration,
+  "Drought recovery" = recovery_data
+),
+path = "Menard2021_data.xlsx",
+col_names = TRUE,
+format_headers = TRUE,
+use_zip64 = FALSE
+)
+
+```
+# Export Raman spectra
+```{r}
+# Arabidopsis Raman ####
+spectra_export.switch <- left_join(read_tsv(paste0(datapath, "PhD/IRX/PMX_which_SMX.tsv"),
+  col_types = "cccc"
+), rmn_data_corrected) %>%
+  mutate(
+    technical = str_c(technical, "switched", sep = "_"),
+    cell.type = "SMX"
+  )
+
+spectra_export <- rmn_data_corrected %>%
+  anti_join(read_tsv(paste0(datapath, "PhD/IRX/PMX_which_SMX.tsv"),
+    col_types = "cccc"
+  )) %>%
+  bind_rows(spectra_export.switch)
+
+At_spectra_filled <- spectra_export %>%
+  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
+  complete(wavenumber = seq(300, 1800)) %>%
+  arrange(genotype, cell.type, replicate, technical, wavenumber) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(raw_full = zoo::na.approx(corrected.intensity, na.rm = F),
+         scaled_full = zoo::na.approx(scaled, na.rm = F),
+         scaled_lig_full = zoo::na.approx(scaled_lig, na.rm = F))
+
+# collect raw (unscaled) spectra
+At_export_raw <- At_spectra_filled %>%
+  select(genotype, cell.type, replicate, technical, wavenumber, raw_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>% 
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical),
+    names_from = wavenumber,
+    values_from = raw_full
+  ) %>%
+  select(genotype, cell.type, replicate, technical, order(as.numeric(colnames(.))))
+
+# collect spectra normalised to AUC
+At_export_scaled <- At_spectra_filled %>%
+  select(genotype, cell.type, replicate, technical, wavenumber, scaled_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>% 
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical),
+    names_from = wavenumber,
+    values_from = scaled_full
+  ) %>%
+  select(genotype, cell.type, replicate, technical, order(as.numeric(colnames(.))))
+
+# collect spectra normalised to total lignin
+At_export_scaled_lig <- At_spectra_filled %>%
+  select(genotype, cell.type, replicate, technical, wavenumber, scaled_lig_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>% 
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical),
+    names_from = wavenumber,
+    values_from = scaled_lig_full
+  ) %>%
+  select(genotype, cell.type, replicate, technical, order(as.numeric(colnames(.))))
+
+writexl::write_xlsx(list(
+  "Raw spectra" = At_export_raw,
+  "AUC scaled spectra" = At_export_scaled,
+  "Lignin scaled spectra" = At_export_scaled_lig
+),
+path = "At_Raman_spectra.xlsx",
+col_names = TRUE,
+format_headers = TRUE,
+use_zip64 = FALSE
+)
+
+# Poplar Raman ####
+Pt_spectra_filled <- rmn_pop_scaled %>%
+  left_join(celltypes) %>% 
+  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
+  group_by(genotype, cell_type, replicate, technical, TE, repeat_of) %>% 
+  complete(wavenumber = seq(300, 1800)) %>%
+  arrange(genotype, cell_type, replicate, technical, TE, wavenumber) %>%
+  mutate(raw_full = zoo::na.approx(corrected.intensity, na.rm = F),
+         scaled_full = zoo::na.approx(scaled, na.rm = F),
+         scaled_lig_full = zoo::na.approx(scaled_lig, na.rm = F))
+
+# collect raw (unscaled) spectra
+Pt_export_raw <- Pt_spectra_filled %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, wavenumber, raw_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>% 
+  pivot_wider(
+    id_cols = c(genotype, cell_type, replicate, technical, TE, repeat_of),
+    names_from = wavenumber,
+    values_from = raw_full
+  ) %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, order(as.numeric(colnames(.))))
+
+# collect spectra normalised to AUC
+Pt_export_scaled <- Pt_spectra_filled %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, wavenumber, scaled_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>% 
+  pivot_wider(
+    id_cols = c(genotype, cell_type, replicate, technical, TE, repeat_of),
+    names_from = wavenumber,
+    values_from = scaled_full
+  ) %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, order(as.numeric(colnames(.))))
+
+# collect spectra normalised to total lignin
+Pt_export_scaled_lig <- Pt_spectra_filled %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, wavenumber, scaled_lig_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>% 
+  pivot_wider(
+    id_cols = c(genotype, cell_type, replicate, technical, TE, repeat_of),
+    names_from = wavenumber,
+    values_from = scaled_lig_full
+  ) %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, order(as.numeric(colnames(.))))
+
+writexl::write_xlsx(list(
+  "Raw spectra" = Pt_export_raw,
+  "AUC scaled spectra" = Pt_export_scaled,
+  "Lignin scaled spectra" = Pt_export_scaled_lig
+),
+path = "Pt_Raman_spectra.xlsx",
+col_names = TRUE,
+format_headers = TRUE,
+use_zip64 = FALSE
+)
+```
+
+
 
 
