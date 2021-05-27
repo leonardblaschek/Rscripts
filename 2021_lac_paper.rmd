@@ -595,7 +595,9 @@ ggplot(root_data, aes(
 
 # Wiesner
 
-## Load data
+## Point measurements
+
+### Load data
 
 ```{r, message=FALSE}
 Wiesner_files <-
@@ -657,7 +659,7 @@ Wiesner_n <- Wiesner_data %>%
   summarise(replicates = paste0(unique(replicate), collapse = ","))
 ```
 
-## Plot Wiesner
+### Plot Wiesner violins
 
 ```{r}
 letter_pos <- letter_groups(Wiesner_data,
@@ -706,6 +708,50 @@ pdf("lac_Wiesner.pdf", width = twocol, height = onecol * 0.5)
 Wiesner_plot
 dev.off()
 ```
+
+## IF profiles
+
+### Load data
+
+```{r}
+profile_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2021-05_Wiesner_profiles/",
+    pattern = "*.csv",
+    recursive = F,
+    full.names = TRUE
+  )
+
+read_profiles <- function(x) {
+  read_csv(x) %>% 
+    mutate(filename = basename(x))
+}
+
+profile_data <- map_dfr(profile_files, read_profiles) %>% 
+  group_by(filename) %>% 
+  mutate(pixel = row_number()) %>% 
+  pivot_longer(contains("ROI"), names_to = "profile", values_to = "absorbance") %>% 
+  mutate(profile = as.numeric(str_extract(profile, "[:digit:]+")) + 1,
+         absorbance = case_when(absorbance == 0 ~ NA_real_,
+                                TRUE ~ absorbance / 255)) %>% 
+  drop_na() %>% 
+  group_by(filename, profile) %>%
+  mutate(pixel = pixel / max(pixel)) 
+```
+
+### Plot profiles
+
+```{r}
+ggplot(profile_data,
+       aes(x = pixel,
+           y = absorbance,
+           colour = filename)) +
+  geom_line(aes(group = interaction(filename, profile)),
+            alpha = 0.25) +
+  geom_smooth(se = F)
+```
+
+
 
 # TE collapse
 
@@ -2134,12 +2180,12 @@ col_types = "ccDcccdcddd"
 #### subtract water column and background ####
 data_dab <- data_dab %>%
   filter(substrate == "DAB") %>%
-  anti_join(read_csv(paste0(
-    datapath,
-    "PhD/Laccase_activity/2020-09_activity/excluded_sections.csv"
-  ),
-  col_type = "ccDccc"
-  )) %>%
+  # anti_join(read_csv(paste0(
+  #   datapath,
+  #   "PhD/Laccase_activity/2020-09_activity/excluded_sections.csv"
+  # ),
+  # col_type = "ccDccc"
+  # )) %>%
   group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
   mutate(
     corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
