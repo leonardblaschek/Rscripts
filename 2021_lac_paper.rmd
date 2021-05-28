@@ -175,11 +175,14 @@ pheno_data <- read_csv(paste0(
   ),
   levels = c("WT", "Q-4", "Q-5", "Q-10", "Q-12", "Q-17", "Q")
   )) %>%
-  select(-mat.sil, -green.sil, -fl.stands)
-# mutate(
-#   total.sil = mat.sil + green.sil,
-#   senescence = green.sil / total.sil
-# )
+  select(-mat.sil, -green.sil, -fl.stands) %>% 
+  mutate(genotype = recode(genotype,
+                           "Q-4" = "<i>Q-4</i>",
+                           "Q-5" = "<i>Q-5</i>",
+                           "Q-10" = "<i>Q-10</i>",
+                           "Q-12" = "<i>Q-12</i>",
+                           "Q-17" = "<i>Q-17</i>",
+                           "Q" = "<i>Q</i>"))
 
 ggplot(
   pheno_data,
@@ -216,35 +219,52 @@ letters <- letter_groups(pheno_data,
   stretched.height,
   genotype,
   "tukey",
-  print_position = "above",
+  print_position = "below",
   print_adjust = 1
-)
+) %>% 
+  mutate(genotype = ordered(genotype, levels = c(
+      "WT",
+      "<i>Q-4</i>",
+      "<i>Q-5</i>",
+      "<i>Q-10</i>",
+      "<i>Q-12</i>",
+      "<i>Q-17</i>",
+      "<i>Q</i>"
+    )))
 
+rect_data = pheno_data %>% 
+  group_by(genotype) %>% 
+  summarise(genotype = unique(genotype))
 
 height <- ggplot(
   pheno_data,
   aes(
-    x = genotype,
+    x = 0.5,
     y = stretched.height,
     fill = genotype
   )
 ) +
-  ggbeeswarm::geom_quasirandom(aes(
-    colour = genotype
-  ),
-  # fill = "grey90",
+  geom_rect(data = rect_data,
+            aes(fill = genotype, y = 1),
+            xmin = -Inf,
+            xmax = Inf,
+            ymin = -Inf,
+            ymax = Inf,
+            alpha = 0.5) +
+  geom_quasirandom(
   shape = 16,
   alpha = 0.5,
-  size = 3
+  size = 0.5,
+  width = 0.5
   ) +
   geom_violin(
     draw_quantiles = 0.5,
     fill = "white",
     colour = "black",
-    alpha = 0.85,
-    width = 0.4,
-    size = 0.2,
-    scale = "width"
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2
+    # scale = "width"
   ) +
   geom_text(
     data = letters,
@@ -253,18 +273,26 @@ height <- ggplot(
     family = "Helvetica"
   ) +
   labs(y = "Stem height [cm]") +
+  scale_x_discrete(limits = c(0,1)) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
-  theme(
-    # legend.position = "bottom",
-    axis.title.x = element_blank()
-  )
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_textbox_simple(
+          orientation = "left-rotated",
+          halign = 0.5,
+          width = unit(15, "mm")
+          ),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        strip.text = element_markdown(hjust = 0.5),
+        panel.spacing = unit(0.75, "mm")) +
+  facet_wrap(~ genotype, nrow = 1)
 
-# pdf("lac_height.pdf", width = twocol, height = onecol * 0.25)
+pdf("lac_height.pdf", width = onecol, height = onecol * 0.15)
 # raw_absorbance /
 #   activity_grid /
 height
-# dev.off()
+dev.off()
 ```
 
 ## Image based phenotyping
@@ -736,19 +764,62 @@ profile_data <- map_dfr(profile_files, read_profiles) %>%
                                 TRUE ~ absorbance / 255)) %>% 
   drop_na() %>% 
   group_by(filename, profile) %>%
-  mutate(pixel = pixel / max(pixel)) 
+  mutate(pixel = pixel / max(pixel)) %>% 
+  separate(filename, into = c("date", "genotype", "replicate"), sep = "_", extra = "drop") %>% 
+  mutate(genotype = ordered(genotype, levels = c(
+    "WT",
+    "Q-4",
+    "Q-5",
+    "Q-10",
+    "Q-12",
+    "Q-17",
+    "Q"
+  ))) %>% 
+  mutate(genotype = recode(genotype,
+                           "Q-4" = "<i>Q-4</i>",
+                           "Q-5" = "<i>Q-5</i>",
+                           "Q-10" = "<i>Q-10</i>",
+                           "Q-12" = "<i>Q-12</i>",
+                           "Q-17" = "<i>Q-17</i>",
+                           "Q" = "<i>Q</i>"))
+  
 ```
 
 ### Plot profiles
 
 ```{r}
-ggplot(profile_data,
+rect_data = profile_data %>% 
+  group_by(genotype) %>% 
+  summarise(genotype = unique(genotype))
+
+profiles <- ggplot(profile_data,
        aes(x = pixel,
-           y = absorbance,
-           colour = filename)) +
-  geom_line(aes(group = interaction(filename, profile)),
-            alpha = 0.25) +
-  geom_smooth(se = F)
+           y = absorbance)) +
+  geom_rect(data = rect_data,
+            aes(fill = genotype, x = 0, y = 0,),
+            xmin = -Inf,
+            xmax = Inf,
+            ymin = -Inf,
+            ymax = Inf,
+            alpha = 0.5) +
+  geom_line(aes(group = interaction(genotype, profile)),
+            alpha = 0.25,
+            size = 0.1) +
+  geom_smooth(se = F, size = 0.2, colour = "black") +
+  scale_fill_viridis_d() +
+  scale_y_continuous(breaks = c(0, 0.2, 0.4)) +
+  theme_leo() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        strip.text = element_markdown(hjust = 0.5),
+        panel.spacing = unit(0.75, "mm")) +
+  facet_wrap(~ genotype, nrow = 1)
+
+pdf("Wiesner_profiles.pdf", width = onecol, height = onecol * 0.15)
+profiles
+dev.off()
+
 ```
 
 
@@ -760,7 +831,7 @@ ggplot(profile_data,
 ```{r, message=FALSE}
 collapse_files <-
   list.files(
-    path = paste0(datapath, "PhD/Wiesner/2021-05_Wiesner/Collapse/Measurements/"),
+    path = paste0(datapath, "PhD/Wiesner/2021-04_lac_wiesner/Collapse/Measurements/"),
     pattern = "*.csv",
     recursive = TRUE,
     full.names = TRUE
@@ -802,7 +873,14 @@ collapse_stats <- collapse_data %>%
             "Perim." = unique(Perim.) * 4, # analysed images were scaled down to 0.25, this corrects the scale
             "Circ." = unique(Circ.),
             "Solidity" = unique(Solidity)) %>%
-  pivot_longer(c(Area:Solidity), names_to = "variable", values_to = "value")
+  pivot_longer(c(Area:Solidity), names_to = "variable", values_to = "value") %>% 
+  mutate(genotype = recode(genotype,
+                           "Q-4" =  "<i>Q-4</i>",
+                           "Q-5" =  "<i>Q-5</i>",
+                           "Q-10" = "<i>Q-10</i>",
+                           "Q-12" = "<i>Q-12</i>",
+                           "Q-17" = "<i>Q-17</i>",
+                           "Q" =    "<i>Q</i>"))
 
 collapse_n <- collapse_stats %>% 
   group_by(genotype) %>% 
@@ -852,6 +930,76 @@ collapse_plot <- ggplot(collapse_stats,
   
 pdf("lac_collapse.pdf", width = onecol, height = onecol)
 collapse_plot
+dev.off()
+
+# presentation figure
+collapse_pres_data <- collapse_stats %>% 
+  filter(variable == "Solidity" & cell_type == "MX") 
+
+letters <- letter_groups(collapse_pres_data,
+                         value,
+                         genotype,
+                         "kruskal",
+                         print_position = "below") %>% 
+  mutate(genotype = ordered(genotype, levels = c(
+      "WT",
+      "<i>Q-4</i>",
+      "<i>Q-5</i>",
+      "<i>Q-10</i>",
+      "<i>Q-12</i>",
+      "<i>Q-17</i>",
+      "<i>Q</i>"
+    )))
+
+rect_data = collapse_pres_data %>% 
+  group_by(genotype) %>% 
+  summarise(genotype = unique(genotype))
+
+MX_collapse <- ggplot(collapse_pres_data,
+       aes(x = 0.5,
+           y = value)) +
+  geom_rect(data = rect_data,
+            aes(fill = genotype, y = 1),
+            xmin = -Inf,
+            xmax = Inf,
+            ymin = -Inf,
+            ymax = Inf,
+            alpha = 0.5) +
+  geom_quasirandom(
+    shape = 16,
+    size = 0.5,
+    alpha = 0.5) +
+  # geom_violin(
+  #   draw_quantiles = 0.5,
+  #   fill = "white",
+  #   colour = "black",
+  #   alpha = 0.85,
+  #   width = 0.2,
+  #   size = 0.2,
+  #   scale = "width") +
+  stat_summary(fill = "white",
+               geom = "point",
+               fun = "median",
+               size = 1,
+               shape = 21,
+               stroke = 0.2) +
+  geom_text(data = letters,
+            aes(label = Letters),
+            size = ggtext_size,
+            family = "Helvetica") +
+  labs(y = "TE convexity") +
+  scale_fill_viridis_d() +
+  ylim(0.4, 1) +
+  theme_leo() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        strip.text = element_markdown(hjust = 0.5),
+        panel.spacing = unit(0.75, "mm")) +
+  facet_wrap(~ genotype, nrow = 1)
+
+pdf("collapse_pres.pdf", width = onecol, height = onecol * 0.15)
+MX_collapse
 dev.off()
 ```
 
@@ -2139,7 +2287,7 @@ slopes
 
 ```{r}
 lm_start <- 150
-lm_stop <- 400
+lm_stop <- 250
 
 
 data_dab <- read_csv(paste0(
@@ -2180,12 +2328,12 @@ col_types = "ccDcccdcddd"
 #### subtract water column and background ####
 data_dab <- data_dab %>%
   filter(substrate == "DAB") %>%
-  # anti_join(read_csv(paste0(
-  #   datapath,
-  #   "PhD/Laccase_activity/2020-09_activity/excluded_sections.csv"
-  # ),
-  # col_type = "ccDccc"
-  # )) %>%
+  anti_join(read_csv(paste0(
+    datapath,
+    "PhD/Laccase_activity/2020-09_activity/excluded_sections.csv"
+  ),
+  col_type = "ccDccc"
+  )) %>%
   group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
   mutate(
     corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
@@ -2246,14 +2394,16 @@ unfiltered_data_dab <- data_dab %>%
 data_dab <- data_dab %>%
   filter(cell_type %in% c("IF", "XF", "MX", "PX") &
     pH == 5 &
-    treatment == "none" &
-    adj.r.squared > 0.85)
+    treatment == "none" 
+    # adj.r.squared > 0.85
+    )
 
 nested_data_dab <- nested_data_dab %>%
   filter(cell_type %in% c("IF", "XF", "MX", "PX") &
     pH == 5 &
-    treatment == "none" &
-    adj.r.squared > 0.85)
+    treatment == "none" 
+    # adj.r.squared > 0.85
+    )
 
 avg_slopes <- nested_data_dab %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
@@ -2991,7 +3141,7 @@ dev.off()
 
 ```{r}
 # start and stop of the time-window for linear regressions
-lm_start <- 40
+lm_start <- 80
 lm_stop <- 160
 
 
@@ -3092,12 +3242,14 @@ slope_dist <- ggplot(nested_data_daf) +
 
 data_daf <- data_daf %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
   pH == 5 &
-  treatment == "none" &
-  adj.r.squared > 0.85)
+  treatment == "none" 
+  # adj.r.squared > 0.85
+  )
 nested_data_daf <- nested_data_daf %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
   pH == 5 &
-  treatment == "none" &
-  adj.r.squared > 0.85)
+  treatment == "none" 
+  # adj.r.squared > 0.85
+  )
 
 avg_slopes <- nested_data_daf %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
@@ -3268,15 +3420,15 @@ slopes <- ggplot(
   scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
   theme(
-    # legend.position = "bottom",
+    legend.position = "bottom",
     axis.title.x = element_blank()
   ) +
   facet_wrap(~cell_type, ncol = 5)
 
-pdf("DAF_pH5.pdf", width = twocol, height = onecol * 0.5)
-# raw_absorbance /
-  # activity_grid /
-slopes
+pdf("DAF_pH5.pdf", width = twocol, height = twocol)
+raw_absorbance /
+  activity_grid /
+  slopes
 dev.off()
 
 # pdf("DAF_pH5_diagnostics.pdf", width = onecol, height = onecol)
@@ -3287,6 +3439,7 @@ dev.off()
 # bulk_bars
 # dev.off()
 ```
+
 
 ### Animations
 
@@ -3374,6 +3527,89 @@ animate(raw_absorbance,
 )
 
 anim_save("Full_IF_1_animation.gif")
+```
+
+## Single plots
+
+```{r}
+single_violin_data <- nested_data_dab %>%
+  full_join(nested_data_daf) %>% 
+  mutate(genotype = recode(genotype,
+                           "Q-4" = "<i>Q-4</i>",
+                           "Q-5" = "<i>Q-5</i>",
+                           "Q-10" = "<i>Q-10</i>",
+                           "Q-12" = "<i>Q-12</i>",
+                           "Q-17" = "<i>Q-17</i>",
+                           "Q" = "<i>Q</i>"))
+
+single_violin_avg <- single_violin_data
+
+act_violin <- function(subst, ct) {
+  letters <- letter_groups(single_violin_data %>% 
+                             filter(substrate == subst & cell_type == ct),
+    estimate,
+    genotype,
+    "tukey",
+    print_position = "below",
+    print_adjust = 0.75
+  ) 
+
+  ggplot(
+    data = single_violin_data %>% 
+      filter(substrate == subst & cell_type == ct),
+    aes(x = genotype, y = estimate)
+  ) +
+    geom_quasirandom(
+      aes(fill = genotype),
+      dodge.width = 0.6,
+      shape = 21,
+      alpha = 0.75,
+      size = 1,
+      stroke = 0.2
+    ) +
+    geom_violin(aes(
+      group = genotype
+    ),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+    ) +
+    geom_text(
+      data = letters,
+      aes(label = Letters),
+      size = ggtext_size,
+      family = "Helvetica",
+      position = position_dodge(width = 0.6)
+    ) +
+    labs(y = paste(subst, "oxidation rate"),
+         title = ct) +
+    scale_y_continuous(expand = expansion(mult = 0.1)) +
+    # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
+    # scale_fill_manual(values = pal_flame_disc) +
+    # expand_limits(y = 0) +
+    theme_leo() +
+    theme(
+      text = element_text(family = "Helvetica"),
+      axis.title.x = element_blank(),
+      axis.title.y = element_markdown(),
+      axis.text.y = element_blank(),
+      axis.text.x = element_markdown(),
+      axis.ticks.y = element_blank()
+    )
+}
+
+pdf("DAF_IF_pH5.pdf", width = onecol * 0.5, height = onecol * 0.25)
+act_violin("DAF", "IF")
+dev.off()
+
+pdf("DAB_IF_pH5.pdf", width = onecol * 0.5, height = onecol * 0.25)
+act_violin("DAB", "IF")
+dev.off()
 ```
 
 # TE activity
@@ -5600,7 +5836,7 @@ violin_data <- rmn_lac_sum %>%
     # "Benzaldehydes" = Benz_rel,
     "G-CHOH" = GOH_rel,
     "G-CHO" = GCHO_rel,
-    "G-CHO/G-OH" = GCHO.GOH
+    "G-CHO/G-CHOH" = GCHO.GOH
   ) %>%
   filter(cell_type != "LP") %>%
   pivot_longer(
@@ -5870,7 +6106,6 @@ dev.off()
 ### Single plots
 
 ```{r}
-
 # scatter plots
 scatter_data <- rmn_lac_sum %>%
   select(
@@ -5884,26 +6119,29 @@ scatter_data <- rmn_lac_sum %>%
     # "G-units" = G_rel,
     "G-CHOH" = GOH_rel,
     # "Lignin/cellulose" = lig.cellu,
-    "G-CHO/G-OH" = GCHO.GOH
+    "G<sub>CHO</sub>/G<sub>OH</sub>" = GCHO.GOH
   ) %>%
-  filter(cell_type != "LP")
+  filter(cell_type != "LP") 
 
 # single correlations
 lig_sg <- ggplot(scatter_data,
        aes(x = `Total lignin`, y = `S/G`)
        ) +
   geom_point(
-    shape = 16,
-    alpha = 0.5
-    # aes(colour = genotype)
+    shape = 21,
+    alpha = 0.5,
+    stroke = 0.2,
+    aes(fill = genotype)
     ) +
   # stat_ellipse(aes(colour = genotype),
   #              # geom = "polygon",
   #              type = "t", 
   #              level = 0.4) +
-  geom_smooth(method = "lm",
+  geom_smooth(method = "loess",
               se = F,
-              colour = pal_ostwald_disc[1]) +
+              colour = "black",
+              span = 3) +
+  scale_fill_viridis_d() +
   theme_leo() +
   theme(legend.position = "bottom") +
   facet_wrap(~cell_type)
@@ -5914,18 +6152,29 @@ dev.off()
 
 # single comparisons
 
+single_violin_data <- violin_data %>% 
+  mutate(genotype = recode(genotype,
+                           "Q-4" = "<i>Q-4</i>",
+                           "Q-5" = "<i>Q-5</i>",
+                           "Q-10" = "<i>Q-10</i>",
+                           "Q-12" = "<i>Q-12</i>",
+                           "Q-17" = "<i>Q-17</i>",
+                           "Q" = "<i>Q</i>"),
+         variable = recode(variable,
+                           "G-CHO/G-CHOH" = "<b>G</b><sub>CHO</sub>/<b>G</b><sub>CHOH</sub>"))
+
 lig_violin <- function(var, ct) {
-  letters <- letter_groups(violin_data %>% 
+  letters <- letter_groups(single_violin_data %>% 
                              filter(variable == var & cell_type == ct),
     value,
     genotype,
     "tukey",
     print_position = "below",
-    print_adjust = 1
+    print_adjust = 0.5
   ) 
 
   ggplot(
-    data = violin_data %>% 
+    data = single_violin_data %>% 
       filter(variable == var & cell_type == ct),
     aes(x = genotype, y = value)
   ) +
@@ -5958,23 +6207,26 @@ lig_violin <- function(var, ct) {
     ) +
     labs(y = var,
          title = ct) +
+    scale_y_continuous(expand = expansion(mult = 0.1)) +
     # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
     # scale_fill_manual(values = pal_flame_disc) +
     # expand_limits(y = 0) +
     theme_leo() +
     theme(
       text = element_text(family = "Helvetica"),
-      axis.title.x = element_blank()
+      axis.title.x = element_blank(),
+      axis.title.y = element_markdown(),
+      axis.text.y = element_blank(),
+      axis.text.x = element_markdown(),
+      axis.ticks.y = element_blank()
     )
 }
-pdf("single_plots.pdf", width = onecol * 1.5, height = onecol)
-lig_violin("Total lignin", "IF") +
-lig_violin("G-CHOH", "IF") +
-lig_violin("Total lignin", "XF") +
-lig_violin("G-CHOH", "XF") +
-lig_violin("Total lignin", "MX") +
-lig_violin("G-CHOH", "MX") +
-  plot_layout(ncol = 2)
+pdf("IF_ald_to_alc.pdf", width = onecol * 0.5, height = onecol * 0.25)
+lig_violin("<b>G</b><sub>CHO</sub>/<b>G</b><sub>CHOH</sub>", "IF") 
+dev.off()
+
+pdf("IF_total_lignin.pdf", width = onecol * 0.5, height = onecol * 0.25)
+lig_violin("Total lignin", "IF") 
 dev.off()
 ```
 
@@ -6285,3 +6537,96 @@ pdf("celltype_PCAs.pdf", width = onecol * 1.5, height = onecol)
 cell_type_pca("PX") + cell_type_pca("MX") + cell_type_pca("XF") + cell_type_pca("IF")
 dev.off()
 ```
+
+# Supplements
+
+## Expression
+
+### Load data
+
+```{r}
+expression <- read_csv("/home/leonard/Documents/Uni/Master/Master thesis/Laccases/Expression/R_file.csv") %>% 
+  filter(dataset == "array") %>% 
+  mutate(time = case_when(time == 0 ~ "Proliferation",
+                          TRUE ~ "SCW formation"),
+         laccase = ordered(laccase, levels = c(
+           "LAC1",
+           "LAC2",
+           "LAC3",
+           "LAC4",
+           "LAC5",
+           "LAC6",
+           "LAC7",
+           "LAC8",
+           "LAC9",
+           "LAC10",
+           "LAC11",
+           "LAC12",
+           "LAC13",
+           "LAC14",
+           "LAC15",
+           "LAC16",
+           "LAC17",
+           "XCP2",
+           "IRX3"
+         )))
+```
+
+### Plot Expression
+```{r}
+expression_highlight <- tibble(laccase = c("LAC4", "LAC5", "LAC10", "LAC11", "LAC12", "LAC17")) %>% 
+  mutate(laccase = ordered(laccase, levels = c(
+           "LAC1",
+           "LAC2",
+           "LAC3",
+           "LAC4",
+           "LAC5",
+           "LAC6",
+           "LAC7",
+           "LAC8",
+           "LAC9",
+           "LAC10",
+           "LAC11",
+           "LAC12",
+           "LAC13",
+           "LAC14",
+           "LAC15",
+           "LAC16",
+           "LAC17",
+           "XCP2",
+           "IRX3"
+         )))
+
+expression_plot <- ggplot(expression,
+       aes(x = laccase)) +
+  geom_tile(data = expression_highlight,
+            aes(y = 3,
+                width = 0.75,
+                height = 10),
+            fill = "#ffcc3d") +
+  scale_fill_manual(values = c("black", "white")) +
+  scale_x_discrete(drop = F) +
+  geom_pointrange(aes(
+    y = absolute, 
+    fill = time,
+    ymin = absolute - absolute.sd,
+           ymax = absolute + absolute.sd),
+                  shape = 21,
+                  stroke = 0.2) +
+  labs(y = "Relative expression") +
+  coord_flip(clip = "off", ylim = c(0, 8)) +
+  theme_leo() +
+  theme(axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_text(hjust = 0),
+        axis.ticks = element_blank(),
+        # panel.border = element_blank(),
+        legend.position = "bottom",
+        legend.title = element_blank()) 
+
+pdf("lac_expression.pdf", width = onecol, height = onecol * 0.65)
+expression_plot
+dev.off()
+```
+
+
