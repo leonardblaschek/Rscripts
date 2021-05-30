@@ -4959,13 +4959,14 @@ ggplot(kinetics %>% filter(sample == "TE" & pH == 4),
 dev.off()
 ```
 
+
 ### Plot linear phase slope
 
 ```{r}
 # write_csv(kinetics, "kinetics.csv")
 
 kinetics_nested <- kinetics %>%
-  filter(substrate != "SGZ") %>% 
+  # filter(substrate != "SGZ") %>%
   filter(time >= lm_start & time <= lm_stop) %>%
   select(-absorbance, -adjusted_absorbance) %>%
   nest(data = c(time, corrected_absorbance)) %>%
@@ -5149,6 +5150,61 @@ slope_grid
   # plot_layout(design = layout)
 dev.off()
 
+```
+
+#### Single pH
+
+```{r}
+kinetics_single <- kinetics_nested %>% 
+  filter(pH == 5) %>% 
+  mutate(pH = paste("pH", pH),
+         substrate = recode(substrate,
+                            "MBTH" = "L-DOPA"))
+slope_grid <- ggplot(kinetics_single %>% filter(sample == "TE"),
+       aes(x = day,
+           y = scaled_estimate,
+           colour = substrate)) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = 3,
+    xmax = 7,
+    fill = "grey90"
+  ) +
+  # geom_vline(data = kinetic_max %>% filter(sample == "TE"),
+  #            aes(xintercept = day),
+  #            size = 0.2,
+  #            linetype = 2) +
+  geom_line(aes(group = interaction(replicate, sample)),
+            size = 0.2,
+            alpha = 0.5) +
+  stat_smooth(geom = "line",
+              size = 0.4,
+              se = FALSE) +
+  # scale_colour_brewer(palette = "Set1") +
+  scale_colour_manual(
+    values = c(
+      "#66CCCC",
+      "#6699FF",
+      "#D35877",
+      "#FFCC66",
+      "#FF99CC"
+    )) +
+  labs(y = "Relative oxidation rate",
+       x = "Days past induction") +
+  # scale_colour_manual(values = c("grey75", pal_ostwald_disc[1])) +
+  theme_leo() +
+  theme(strip.text.y = element_markdown(padding = unit(0.1, "mm")),
+        axis.title.y = element_textbox_simple(
+          orientation = "left-rotated",
+          halign = 0.5,
+          width = unit(15, "mm")
+          )) +
+  facet_grid(pH ~ substrate)
+
+pdf("TE_activity_pH5.pdf", width = onecol, height = onecol * 0.25)
+slope_grid
+dev.off()
 ```
 
 #### Supplement with explicit nTE
