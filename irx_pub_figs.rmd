@@ -1963,290 +1963,6 @@ ggplot(rmn_pop_data) +
                 y = Solidity)) +
   scale_colour_viridis_d() +
   facet_wrap(~cell_type)
-
-```
-
-### Scatter plots
-
-```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-
-rmn_lignin_dist <- model_data_pop %>%
-  group_by(genotype, replicate) %>%
-  mutate(
-    max_dist = max(Distance, na.rm = T),
-    Distance = Distance / max_dist
-    ) %>%
-  filter(str_detect(cell_type, "SV")) %>%
-  unite("ID", genotype, replicate,
-        sep = "_",
-        remove = FALSE) %>%
-  # filter(Distance < 2500) %>%
-  # filter(ID != "WT_1") %>%
-  select(genotype, replicate, technical, Distance, TE,
-         # "Cellulose (381 + 1099)" = cellulose,
-         # "AUC scaled lignin" = total_lignin,
-         # "Total G-units (1603)" = G_tot,
-         # "Total S-units (1334)" = S_tot,
-         # "Phenyl" = P_rel,
-         "Lignin/Cellulose" = lig.cellu,
-         # "Unscaled lignin" = unscaled_lignin,
-         # "AUC" = AUC,
-         # "Complete lignin" = broad_lignin,
-         # "Total G/Cellulose" = G.cellu,
-         # "Relative G-units" = G_rel, 
-         # "Relative S-units" = S_rel, 
-         # "Relative aldehyde end-units" = GCHO_rel,
-         "S/G" = S.G,
-         "G-CHO/G-CHOH" = GCHO.GOH,
-         # "Convexity" = Solidity
-         ) %>%
-  drop_na() %>%
-  pivot_longer(-c(genotype, replicate, technical, Distance, TE), 
-               names_to = "variable", 
-               values_to = "value") %>%
-  mutate(variable = ordered(variable, levels = c("Lignin/Cellulose", "S/G", "G-CHO/G-CHOH"))) %>%
-  anti_join(read_csv("/home/leonard/Dropbox/2020_IRX manuscript/pop_g_layers.csv",
-                     col_types = "cccc"))
-
-# bulk model
-# regressions <- rmn_lignin_dist %>%
-#   ungroup() %>%
-#   filter(str_detect(cell_type, "SV")) %>%
-#   select(-replicate, -technical) %>%
-#   nest(data = c(TE, Distance, value)) %>%
-#   group_by(variable) %>%
-#   mutate(max = max(map_dbl(data, ~ max(.x$value))),
-#          min = max(map_dbl(data, ~ min(.x$value)))) %>%
-#   group_by(genotype, variable) %>%
-#   mutate(
-#     fit = map(data, ~ lm(value ~ Distance, data = .x)),
-#     tidied = map(fit, glance),
-#     Distance = map_dbl(data, ~ max(.x$Distance))
-#   ) %>%
-#   unnest(tidied) %>%
-#   select(-data, -fit) %>%
-#   mutate(face = case_when(p.value > 0.05 ~ "plain",
-#                           TRUE ~ "bold")) %>%
-#   group_by(variable) %>%
-#   mutate(
-#     Distance = max(Distance),
-#     spacer = max - min,
-#     value = case_when(
-#       genotype == "WT" ~ max + (0.2 * spacer),
-#       genotype == "CCR1" ~ max + (0.1 * spacer),
-#       genotype == "C4H" ~ max
-#     )
-#   )
-
-# mixed model
-regressions <- rmn_lignin_dist %>%
-  ungroup() %>%
-  # filter(str_detect(cell_type, "SV")) %>%
-  select(-technical) %>%
-  nest(data = c(TE, replicate, Distance, value)) %>%
-  group_by(variable) %>%
-  mutate(max = max(map_dbl(data, ~ max(.x$value))),
-         min = max(map_dbl(data, ~ min(.x$value)))) %>%
-  group_by(genotype, variable) %>%
-  mutate(
-    fit = map(data, ~ lme4::lmer(value ~ Distance + 
-                                   # (1 + Distance | replicate),
-                                   (1 | replicate),
-                                 data = .x)),
-    pred = map(fit, predict),
-    tidied = map(fit, broom.mixed::glance),
-    r2 = map(fit, MuMIn::r.squaredGLMM),
-    r2 = map(r2, 2),
-    r2 = as.numeric(r2),
-    Distance = map_dbl(data, ~ max(.x$Distance))
-  ) %>%
-  group_by(variable) %>%
-  mutate(
-    Distance = max(Distance),
-    spacer = case_when(variable == "Lignin/Cellulose" ~ (max - min) * 1.3,
-                       TRUE ~ max - min),
-    value = case_when(
-      genotype == "WT" ~ max + (0.2 * spacer),
-      genotype == "CCR1" ~ max + (0.1 * spacer),
-      genotype == "C4H" ~ max
-    )
-  ) %>%
-  ungroup() %>%
-  mutate(genotype = recode(genotype, 
-                           "CCR1" = "<i>CCR1</i>-RNAi",
-                           "C4H" = "<i>C4H</i>-RNAi"))
-
-rmn_lignin_dist_pred <- regressions %>%
-  unnest(data, pred)
-
-# dist_lig <- ggplot(
-#   rmn_lignin_dist_pred %>% filter(str_detect(cell_type, "SV")),
-#   aes(
-#     x = Distance,
-#     y = value,
-#     colour = genotype,
-#     # fill = replicate
-#   )
-# ) +
-#   geom_point(
-#     aes(shape = replicate),
-#     alpha = 0.5
-#     ) +
-#   geom_smooth(
-#     size = 0.5,
-#     method = "lm",
-#     se = F
-#   ) +
-#   ggtext::geom_richtext(
-#     data = regressions,
-#     size = ggtext_size,
-#     vjust = 0,
-#     hjust = 1,
-#     # colour = "black",
-#     label.colour = NA,
-#     family = "Helvetica",
-#     fill = NA,
-#     aes(label =
-#           paste0(genotype,
-#                  ": R<sup>2</sup> = ",
-#                  round(r2, 2)
-#                  # ", <i>P</i> = ",
-#                  # format(p.value, scientific = TRUE, digits = 2)
-#                  ),
-#         colour = genotype,
-#         # fontface = face
-#         )
-#   ) +
-#   # ggrepel::geom_text_repel(aes(label = TE)) +
-#   theme_leo() +
-#   theme(axis.title.y = element_blank()) +
-#   labs(x = "Distance [px]") +
-#   # coord_cartesian(clip = "off") +
-#   scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
-#   scale_x_continuous(breaks = c(0.05, 0.95), labels = c("Cambium", "Pith")) +
-#   scale_colour_manual(values = pal_ostwald_disc) +
-#   facet_wrap(vars(variable),
-#              scales = "free_y",
-#              nrow = 1)
-# 
-# pdf("post_mortem_lignification.pdf", width = twocol, height = onecol * 0.5)
-# dist_lig
-# dev.off()
-
-
-dist_lig1 <- ggplot(
-  rmn_lignin_dist_pred,
-  aes(
-    x = Distance,
-    y = value,
-    colour = genotype,
-    # fill = replicate
-  )
-) +
-  geom_point(
-    aes(shape = replicate),
-    size = 1,
-    alpha = 0.25
-    ) +
-  geom_smooth(
-    aes(group = interaction(genotype, replicate),
-        y = pred),
-    size = 0.5,
-    method = "lm",
-    se = F
-  ) +
-  ggtext::geom_richtext(
-    data = regressions,
-    size = ggtext_size,
-    vjust = 0,
-    hjust = 1,
-    # colour = "black",
-    label.colour = NA,
-    family = "Helvetica",
-    fill = NA,
-    aes(label =
-          paste0(genotype,
-                 ": R<sup>2</sup> = ",
-                 format(round(r2, 2), nsmall = 2)
-                 # ", <i>P</i> = ",
-                 # format(p.value, scientific = TRUE, digits = 2)
-                 ),
-        colour = genotype,
-        # fontface = face
-        )
-  ) +
-  # ggrepel::geom_text_repel(aes(label = TE)) +
-  theme_leo() +
-  theme(axis.title.y = element_blank()) +
-  labs(x = "Relative distance") +
-  # coord_cartesian(clip = "off") +
-  scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
-  scale_x_continuous(breaks = c(0.025, 0.975), labels = c("Cambium", "Pith")) +
-  scale_colour_manual(values = pal_ostwald_disc) +
-  facet_wrap(vars(variable),
-             scales = "free_y",
-             nrow = 1)
-
-pdf("individual_intercept.pdf", width = twocol, height = onecol * 0.5)
-dist_lig1
-dev.off()
-
-# dist_lig2 <- ggplot(
-#   rmn_lignin_dist_pred %>% filter(str_detect(cell_type, "SV")),
-#   aes(
-#     x = Distance,
-#     y = value,
-#     colour = genotype,
-#     # fill = replicate
-#   )
-# ) +
-#   geom_point(
-#     aes(shape = replicate),
-#     alpha = 0.5
-#     ) +
-#   geom_smooth(
-#     aes(group = interaction(genotype, replicate),
-#         y = value),
-#     size = 0.5,
-#     method = "loess",
-#     span = 5,
-#     se = F
-#   ) +
-#   # ggtext::geom_richtext(
-#   #   data = regressions,
-#   #   size = ggtext_size,
-#   #   vjust = 0,
-#   #   hjust = 1,
-#   #   # colour = "black",
-#   #   label.colour = NA,
-#   #   family = "Helvetica",
-#   #   fill = NA,
-#   #   aes(label =
-#   #         paste0(genotype,
-#   #                ": R<sup>2</sup> = ",
-#   #                round(r2, 2)
-#   #                # ", <i>P</i> = ",
-#   #                # format(p.value, scientific = TRUE, digits = 2)
-#   #                ),
-#   #       colour = genotype,
-#   #       # fontface = face
-#   #       )
-#   # ) +
-#   # ggrepel::geom_text_repel(aes(label = TE)) +
-#   theme_leo() +
-#   theme(axis.title.y = element_blank()) +
-#   labs(x = "Distance [px]") +
-#   coord_cartesian(clip = "off") +
-#   scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
-#   scale_colour_manual(values = pal_ostwald_disc) +
-#   facet_wrap(vars(variable),
-#              scales = "free_y",
-#              nrow = 1)
-# 
-# pdf("individual_slope+intercept.pdf", width = twocol, height = onecol * 0.5)
-# dist_lig2
-# dev.off()
-
 ```
 
 ### Violin plots
@@ -3870,7 +3586,7 @@ dev.off()
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 patch <- area_medium + transpiration_medium + recovery_collapse
 
-pdf("IRX_Figure6.pdf", width = onecol * 0.55, height = onecol * 0.8)
+pdf("IRX_Figure6.pdf", width = onecol * 0.5, height = onecol * 1)
 patch + plot_layout(ncol = 1) &
   plot_annotation(
     theme = theme(plot.margin = margin(0, -2, 0, -2))
@@ -4537,42 +4253,43 @@ readr::write_file(coef_tab, "sem_coef_tab.txt")
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 rmn_irx_long <- rmn_irx %>%
-  select(genotype:cell.type, n_v, Area, Perim., Circ., convexity, total_lignin, G_rel, GOH.G, S_rel, cellulose, mean.OD1, GCHO_rel, S.G, P_rel, Benz_rel) %>%
+  mutate(n_v = n_v * 100) %>% 
+  select(genotype:cell.type, n_v, Area, Perim., Circ., convexity, total_lignin, G_rel, GOH_rel, S_rel, cellulose, mean.OD1, GCHO_rel, S.G, P_rel, Benz_rel) %>%
   pivot_longer(cols = -c(genotype:cell.type), names_to = "variable", values_to = "value") %>%
   mutate(
     variable = factor(variable,
                       levels = c(
-      "n_v",
       "Area",
-      "cellulose",
+      "Perim.",
+      "n_v",
       "Circ.",
       "convexity",
+      "total_lignin",
       "G_rel",
-      "GOH.G",
+      "GOH_rel",
       "mean.OD1",
       "GCHO_rel",
-      "Perim.",
-      "total_lignin",
       "S_rel",
       "P_rel",
       "Benz_rel",
-      "S.G"
+      "S.G",
+      "cellulose"
     ),
-    labels = c("Adj. vessels",
-               "Area [µm²]",
-               "Cellulose",
+    labels = c("Area [µm²]",
+               "Perimeter [µm]",
+               "Adj. TEs [%]",
                "Circularity",
                "Convexity",
+               "Lignin",
                "bold(G)",
                "bold(G)[CHOH]",
                "Total~bold(G)[CHO]",
                "Terminal~bold(G)[CHO]",
-               "Perimeter [µm]",
-               "Lignin",
                "bold(S)",
                "bold(P)",
                "Benzaldehydes",
-               "bold(S)~'/'~bold(G)"
+               "bold(S)~'/'~bold(G)",
+               "Cellulose"
                )),
     genotype = ordered(genotype,
       levels = c(
@@ -4593,39 +4310,16 @@ rmn_irx_long <- rmn_irx %>%
   )
 
 # compare only within cell types 
-# rmn_irx_letters <- letter_groups(
-#   rmn_irx_long,
-#   value,
-#   genotype,
-#   "tukey",
-#   cell.type,
-#   variable,
-#   print_position = "above",
-#   print_adjust = 1
-# ) %>%
-#   mutate(value = case_when(variable == "Area [µm²]" & cell.type %in% c("PX", "SMX") ~
-#            value + 20,
-#            variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type %in% c("PX", "SMX") ~
-#              value + 0.5,
-#            variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type == "PMX" ~
-#              value + 0.2,
-#            variable == "Term~'/'~tot~bold(G)[CHO]" & cell.type %in% c("PMX", "SMX") ~
-#              value + 2,
-#          TRUE ~ value))
-
-# compare within and between cell types
 rmn_irx_letters <- letter_groups(
-  rmn_irx_long %>% unite("ID", genotype, cell.type),
+  rmn_irx_long,
   value,
-  ID,
+  genotype,
   "tukey",
-  # cell.type,
+  cell.type,
   variable,
   print_position = "above",
   print_adjust = 1
 ) %>%
-  separate(ID, into = c("genotype", "cell.type"), sep = "_") %>%
-  mutate(cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX"))) %>%
   mutate(value = case_when(variable == "Area [µm²]" & cell.type %in% c("PX", "SMX") ~
            value + 20,
            variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type %in% c("PX", "SMX") ~
@@ -4636,9 +4330,32 @@ rmn_irx_letters <- letter_groups(
              value + 2,
          TRUE ~ value))
 
+# compare within and between cell types
+# rmn_irx_letters <- letter_groups(
+#   rmn_irx_long %>% unite("ID", genotype, cell.type),
+#   value,
+#   ID,
+#   "tukey",
+#   # cell.type,
+#   variable,
+#   print_position = "above",
+#   print_adjust = 1
+# ) %>%
+#   separate(ID, into = c("genotype", "cell.type"), sep = "_") %>%
+#   mutate(cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX"))) %>%
+#   mutate(value = case_when(variable == "Area [µm²]" & cell.type %in% c("PX", "SMX") ~
+#            value + 20,
+#            variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type %in% c("PX", "SMX") ~
+#              value + 0.5,
+#            variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type == "PMX" ~
+#              value + 0.2,
+#            variable == "Term~'/'~tot~bold(G)[CHO]" & cell.type %in% c("PMX", "SMX") ~
+#              value + 2,
+#          TRUE ~ value))
+
 rmn_irx_lig <- ggplot(
   filter(rmn_irx_long, !variable %in%
-           c("Adj. vessels",
+           c("Adj. TEs [%]",
              "Area [µm²]",
              "Circularity",
              "Convexity",
@@ -4657,19 +4374,28 @@ rmn_irx_lig <- ggplot(
     size = 1,
     stroke = 0.25
   ) +
-  geom_boxplot(
+  # geom_boxplot(
+  #   fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_violin(
+    draw_quantiles = 0.5,
     fill = "white",
-    alpha = 0.5,
-    width = 0.6,
-    outlier.alpha = 0,
-    lwd = 0.25,
-    fatten = 1,
-    width = 0.25
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    size = 0.2,
+    scale = "width"
   ) +
   geom_text(
     data = filter(rmn_irx_letters, 
                   !variable %in%
-           c("Adj. vessels",
+           c("Adj. TEs [%]",
              "Area [µm²]",
              "Circularity",
              "Convexity",
@@ -4700,16 +4426,20 @@ rmn_irx_lig <- ggplot(
       angle = 90,
       hjust = 1
     ),
-    axis.title = element_blank()
+    axis.title = element_blank(),
+    # panel.spacing = unit(1, "mm"),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5),
   ) +
   facet_grid(variable ~ cell.type,
     scales = "free_y",
-    labeller = label_parsed
+    labeller = labeller(variable = label_parsed, cell.type = label_value),
+    switch = "y"
   )
 
 rmn_irx_morph <- ggplot(
   filter(rmn_irx_long, variable %in%
-           c("Adj. vessels",
+           c("Adj. TEs [%]",
              "Area [µm²]",
              "Circularity",
              "Convexity",
@@ -4728,19 +4458,28 @@ rmn_irx_morph <- ggplot(
     size = 1,
     stroke = 0.25
   ) +
-  geom_boxplot(
+  # geom_boxplot(
+  #   fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_violin(
+    draw_quantiles = 0.5,
     fill = "white",
-    alpha = 0.5,
-    width = 0.6,
-    outlier.alpha = 0,
-    lwd = 0.25,
-    fatten = 1,
-    width = 0.25
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    size = 0.2,
+    scale = "width"
   ) +
   geom_text(
     data = filter(rmn_irx_letters, 
                   variable %in%
-           c("Adj. vessels",
+           c("Adj. TEs [%]",
              "Area [µm²]",
              "Circularity",
              "Convexity",
@@ -4771,11 +4510,14 @@ rmn_irx_morph <- ggplot(
       angle = 90,
       hjust = 1
     ),
-    axis.title = element_blank()
+    axis.title = element_blank(),
+    # panel.spacing = unit(1, "mm"),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5),
   ) +
   facet_grid(variable ~ cell.type,
     scales = "free_y",
-    # labeller = label_parsed
+    switch = "y"
   )
 
 pdf("IRX_FigureS1a.pdf", width = onecol * 1.5, height = onecol * 1.5)
@@ -4792,42 +4534,44 @@ dev.off()
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 rmn_irx_long <- model_data_pop %>%
   ungroup() %>%
-  select(genotype, cell_type, n_v, Area, Perim., Circ., Solidity, total_lignin, G_rel, GOH.G, S_rel, cellulose, wiesner_avg, GCHO_rel, S.G, P_rel, Benz_rel) %>%
+  select(genotype, cell_type, Distance, n_v, Area, Perim., Circ., Solidity, total_lignin, G_rel, GOH_rel, S_rel, cellulose, wiesner_avg, GCHO_rel, S.G, P_rel, Benz_rel) %>%
   pivot_longer(cols = -c(genotype, cell_type), names_to = "variable", values_to = "value") %>%
   mutate(
     variable = factor(variable,
                       levels = c(
-      "n_v",
       "Area",
-      "cellulose",
+      "Perim.",
+      "Distance",
+      "n_v",
       "Circ.",
       "Solidity",
+      "total_lignin",
       "G_rel",
-      "GOH.G",
+      "GOH_rel",
       "wiesner_avg",
       "GCHO_rel",
-      "Perim.",
-      "total_lignin",
       "S_rel",
       "P_rel",
       "Benz_rel",
-      "S.G"
+      "S.G",
+      "cellulose"
     ),
-    labels = c("Adj.~TEs",
-               "'Area [µm²]'",
-               "Cellulose",
+    labels = c("'Area [µm²]'",
+               "'Perim. [µm]'",
+               "'Dist. [µm]'",
+               "'Adj. TEs [%]'",
                "Circularity",
                "Convexity",
+               "Lignin",
                "bold(G)",
                "bold(G)[CHOH]",
                "Total~bold(G)[CHO]",
                "Term.~bold(G)[CHO]",
-               "'Perim. [µm]'",
-               "Lignin",
                "bold(S)",
                "bold(P)",
                "Benzald.",
-               "bold(S)~'/'~bold(G)"
+               "bold(S)~'/'~bold(G)",
+               "Cellulose"
                )),
     genotype = ordered(genotype,
                        levels = c(
@@ -5016,15 +4760,24 @@ pop_S1 <- ggplot(
     size = 1,
     stroke = 0.25
   ) +
-  geom_boxplot(
+  geom_violin(
+    draw_quantiles = 0.5,
     fill = "white",
-    alpha = 0.5,
-    width = 0.6,
-    outlier.alpha = 0,
-    lwd = 0.25,
-    fatten = 1,
-    width = 0.25
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    size = 0.2,
+    scale = "width"
   ) +
+  # geom_boxplot(
+  #   fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
   geom_text(
     data = rmn_irx_letters,
     aes(label = Letters),
@@ -5045,16 +4798,170 @@ pop_S1 <- ggplot(
       # angle = 90,
       # hjust = 1
     ),
-    axis.title = element_blank()
+    axis.title = element_blank(),
+    panel.spacing = unit(1, "mm"),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5),
   ) +
   facet_grid(variable ~ cell_type,
     scales = "free_y",
-    labeller = labeller(variable = label_parsed, cell_type = label_value)
+    labeller = labeller(variable = label_parsed, cell_type = label_value),
+    switch = "y"
   )
 
-pdf("IRX_FigureS1_pop.pdf", width = onecol * 1.5, height = twocol)
+pdf("IRX_FigureS1_pop.pdf", width = onecol * 1.5, height = twocol * 1.2)
 pop_S1
 dev.off()
+```
+
+### Post-mortem lignification
+
+#### Scatter plots
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+rmn_lignin_dist <- model_data_pop %>%
+  group_by(genotype, replicate) %>%
+  mutate(
+    max_dist = max(Distance, na.rm = T),
+    Distance = Distance / max_dist
+    ) %>%
+  filter(str_detect(cell_type, "SV")) %>%
+  unite("ID", genotype, replicate,
+        sep = "_",
+        remove = FALSE) %>%
+  # filter(Distance < 2500) %>%
+  # filter(ID != "WT_1") %>%
+  select(genotype, replicate, technical, Distance, TE,
+         # "Cellulose (381 + 1099)" = cellulose,
+         # "AUC scaled lignin" = total_lignin,
+         # "Total G-units (1603)" = G_tot,
+         # "Total S-units (1334)" = S_tot,
+         # "Phenyl" = P_rel,
+         "'Lignin / Cellulose'" = lig.cellu,
+         # "Unscaled lignin" = unscaled_lignin,
+         # "AUC" = AUC,
+         # "Complete lignin" = broad_lignin,
+         # "Total G/Cellulose" = G.cellu,
+         # "Relative G-units" = G_rel, 
+         # "Relative S-units" = S_rel, 
+         # "Relative aldehyde end-units" = GCHO_rel,
+         "bold(S)~'/'~bold(G)" = S.G,
+         "Term.~bold(G)[CHO]~'/'~bold(G)[CHOH]" = GCHO.GOH,
+         # "Convexity" = Solidity
+         ) %>%
+  drop_na() %>%
+  pivot_longer(-c(genotype, replicate, technical, Distance, TE), 
+               names_to = "variable", 
+               values_to = "value") %>%
+  mutate(variable = ordered(variable, levels = c(
+    "'Lignin / Cellulose'",
+    "bold(S)~'/'~bold(G)",
+    "Term.~bold(G)[CHO]~'/'~bold(G)[CHOH]"
+  ))) %>%
+  anti_join(read_csv("/home/leonard/Dropbox/2020_IRX manuscript/pop_g_layers.csv",
+                     col_types = "cccc"))
+
+# mixed model
+regressions <- rmn_lignin_dist %>%
+  ungroup() %>%
+  # filter(str_detect(cell_type, "SV")) %>%
+  select(-technical) %>%
+  nest(data = c(TE, replicate, Distance, value)) %>%
+  group_by(variable) %>%
+  mutate(max = max(map_dbl(data, ~ max(.x$value))),
+         min = max(map_dbl(data, ~ min(.x$value)))) %>%
+  group_by(genotype, variable) %>%
+  mutate(
+    fit = map(data, ~ lme4::lmer(value ~ Distance + 
+                                   # (1 + Distance | replicate),
+                                   (1 | replicate),
+                                 data = .x)),
+    pred = map(fit, predict),
+    tidied = map(fit, broom.mixed::glance),
+    r2 = map(fit, MuMIn::r.squaredGLMM),
+    r2 = map(r2, 2),
+    r2 = as.numeric(r2),
+    Distance = map_dbl(data, ~ max(.x$Distance))
+  ) %>%
+  group_by(variable) %>%
+  mutate(
+    Distance = max(Distance),
+    spacer = case_when(variable == "'Lignin / Cellulose'" ~ (max - min) * 1.3,
+                       TRUE ~ max - min),
+    value = case_when(
+      genotype == "WT" ~ max + (0.2 * spacer),
+      genotype == "CCR1" ~ max + (0.1 * spacer),
+      genotype == "C4H" ~ max
+    )
+  ) %>%
+  ungroup() %>%
+  mutate(genotype = recode(genotype, 
+                           "CCR1" = "<i>CCR1</i>-RNAi",
+                           "C4H" = "<i>C4H</i>-RNAi"))
+
+rmn_lignin_dist_pred <- regressions %>%
+  unnest(data, pred)
+
+
+dist_lig1 <- ggplot(
+  rmn_lignin_dist_pred,
+  aes(
+    x = Distance,
+    y = value,
+    colour = genotype,
+    # fill = replicate
+  )
+) +
+  geom_point(
+    aes(shape = replicate),
+    size = 1,
+    alpha = 0.25
+    ) +
+  geom_smooth(
+    aes(group = interaction(genotype, replicate),
+        y = pred),
+    size = 0.5,
+    method = "lm",
+    se = F
+  ) +
+  ggtext::geom_richtext(
+    data = regressions,
+    size = ggtext_size,
+    vjust = 0,
+    hjust = 1,
+    # colour = "black",
+    label.colour = NA,
+    family = "Helvetica",
+    fill = NA,
+    aes(label =
+          paste0(genotype,
+                 ": R<sup>2</sup> = ",
+                 format(round(r2, 2), nsmall = 2)
+                 # ", <i>P</i> = ",
+                 # format(p.value, scientific = TRUE, digits = 2)
+                 ),
+        colour = genotype,
+        # fontface = face
+        )
+  ) +
+  # ggrepel::geom_text_repel(aes(label = TE)) +
+  theme_leo() +
+  theme(axis.title.y = element_blank()) +
+  labs(x = "Relative distance") +
+  # coord_cartesian(clip = "off") +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
+  scale_x_continuous(breaks = c(0.025, 0.975), labels = c("Cambium", "Pith")) +
+  scale_colour_manual(values = pal_ostwald_disc) +
+  facet_wrap(vars(variable),
+             scales = "free_y",
+             labeller = label_parsed,
+             nrow = 1)
+
+pdf("individual_intercept.pdf", width = twocol, height = onecol * 0.5)
+dist_lig1
+dev.off()
+
 ```
 
 ### In vitro Poplar
