@@ -666,8 +666,8 @@ Wiesner_data <- map_dfr(Wiesner_files, read_csv) %>%
       replicate %in% c(1:5) ~ "1",
       TRUE ~ "2"
     )
-  ) %>% 
-  filter(cell_type %in% c("IF", "XF", "PX", "MX", "PH", "BG"))
+  ) 
+  # filter(cell_type %in% c("IF", "XF", "PX", "MX", "PH", "BG"))
 
 if(any(Wiesner_data$first_image != "unstained")) warning("Stained and unstained values might be inverted in some images.")
 
