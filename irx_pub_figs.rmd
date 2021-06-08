@@ -1973,6 +1973,7 @@ wt_data_pop <- model_data_pop %>%
   filter(genotype == "WT") %>%
   group_by(cell_type, replicate, technical, TE) %>%
   select(-genotype) %>%
+  mutate(n_v = n_v * 100) %>% 
   pivot_longer(
     cols = -c(replicate:TE),
     names_to = "variable",
