@@ -2754,12 +2754,24 @@ sample_rm <- tribble(
   unnest(time) %>%
   unnest(cell_type)
 
+# load individual .csv files (from after the initial file became too large)
+activity_opt_files <-
+  list.files(
+    path = paste0(datapath, "PhD/Laccase_activity/2021-01_optimal_pH/ROIs/Measurements/"),
+    pattern = "*.csv$",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+pH_data_single_files <- map_dfr(activity_opt_files, read_csv)
+
 pH_data <- read_csv(paste0(
   datapath,
   "PhD/Laccase_activity/2021-01_optimal_pH/pH_data.csv"
 ),
 comment = '"#'
 ) %>%
+  bind_rows(pH_data_single_files) %>% 
   mutate(time = slice * interval) %>%
   select(-c(slice, interval)) %>%
   separate(image,
