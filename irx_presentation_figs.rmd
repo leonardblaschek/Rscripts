@@ -1,0 +1,6715 @@
+---
+title: "IRX publication figures"
+author: "Leonard Blaschek"
+date: "07/10/2019"
+output: 
+  pdf_document:
+    latex_engine: lualatex
+    fig_caption: yes
+    fig_height: 6
+    includes:
+      in_header: rmd_temp.tex
+sansfont: IBM Plex Sans
+monofont: Inconsolata
+mainfont: IBM Plex Sans
+bibliography: /home/leonard/Documents/Bibliographics/zotero_lib.bib
+link-citations: true
+linkcolor: black
+urlcolor: blue
+citecolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(baseline)
+library(interactions)
+# library(effects)
+library(grid)
+library(png)
+library(magick)
+library(ggthemes)
+library(showtext)
+# library(zoo)
+library(cowplot)
+library(kableExtra)
+library(tidyverse)
+library(ggbeeswarm)
+library(ggridges)
+library(sf)
+library(piecewiseSEM)
+library(tukeygrps)
+library(scales)
+library(patchwork)
+
+
+pal_ostwald_cont <- c(
+  "#155DA7",
+  "#0A75B9",
+  # "#0C89C9",
+  "#FED32F",
+  # "#F8A63A",
+  "#EF663A",
+  "#ED4137"
+)
+pal_ostwald_cont2 <- c(
+  "#275d95",
+  "#286e9b",
+  "#e8c245",
+  "#d37456",
+  "#d25952"
+)
+pal_ostwald_disc <- c(
+  "#275d95",
+  "#e8c245",
+  "#d25952"
+)
+pal_ostwald_disc2 <- c(
+  "#8fab1d",
+  "#2d7d73",
+  "#1d566f"
+)
+pal_ostwald_disc3 <- c(
+  "#275d95",
+  "#275d95",
+  "#e8c245",
+  "#d25952",
+  "#d25952"
+)
+pal_flame <- c(
+  "#1F265D",
+  "#203F8F",
+  "#404678",
+  "#897B88",
+  "#E7BBA2",
+  "#FFEDC3",
+  "#FEFEFE"
+)
+pal_flame_disc <- c(
+  "#ffedc3",
+  "#897b88",
+  "#1f265d"
+)
+pal_ylgnbu <- c(
+  "#c7e9b4",
+  "#7fcdbb",
+  "#41b6c4",
+  "#1d91c0",
+  "#225ea8",
+  "#253494",
+  "#081d58"
+)
+
+
+#### import Helvetica ####
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 6,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, 
+                                # face = "italic"
+                                ),
+      axis.ticks = element_line(
+        size = 0.125,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        size = 6,
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        size = 6,
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.title = element_text(
+        colour = "black",
+        size = 6
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = 6),
+      legend.key.height = unit(4, "mm"),
+      plot.title = element_text(
+        size = 6,
+        hjust = 0
+      ),
+      complete = TRUE
+    )
+}
+
+scale_range <- function(x) {
+  (x) / (max(x))
+}
+
+ggtext_size <- 6 / (14 / 5)
+twocol <- 18 / 2.54
+onehalfcol <- 14 / 2.54
+onecol <- 9 / 2.54
+
+#### machine dependent paths ####
+## office
+datapath <- "/data/"
+
+## laptop
+# datapath <- "/home/leonard/Documents/Uni/"
+
+```
+
+## EDS data
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+eds_data <- read_csv(paste0(datapath, "PhD/IRX/EDS/eds_data.csv"),
+  col_types = "ccnnn"
+)
+
+#### create plot function ####
+eds_plot <- function(num, den, lbl) {
+  num <- enquo(num)
+  den <- enquo(den)
+  lbl <- enquo(lbl)
+
+  p_values <- eds_data %>%
+    mutate(ratio = !!num / !!den) %>%
+    group_by(days) %>%
+    summarise(p_value = broom::tidy(
+      t.test(ratio[layer == "PCW"], ratio[layer == "SCW"])
+    )[["p.value"]]) %>%
+    mutate(p_value = case_when(
+      p_value > 0.001 ~ round(p_value, digits = 3),
+      p_value > 0.0001 ~ round(p_value, digits = 4),
+      p_value > 0.00001 ~ round(p_value, digits = 5),
+      p_value > 0.000001 ~ round(p_value, digits = 6),
+      p_value > 0.0000001 ~ round(p_value, digits = 7),
+      TRUE ~ round(p_value, digits = 8)
+    ))
+
+  eds_avg <- eds_data %>%
+    mutate(min = min(!!num / !!den)) %>%
+    group_by(layer, days) %>%
+    summarise(
+      mean = mean(!!num / !!den),
+      min = min(min)
+    ) %>%
+    group_by(days) %>%
+    summarise(
+      diff = round((mean[layer == "SCW"] / mean[layer == "PCW"]) * 100, digits = 0),
+      min = min(min)
+    ) %>%
+    left_join(p_values)
+
+  ggplot(
+    eds_data,
+    aes(
+      x = days,
+      y = !!num / !!den,
+      fill = layer
+    )
+  ) +
+    geom_quasirandom(
+      # aes(fill = cell.type, group = days),
+      dodge.width = 0.6,
+      shape = 21,
+      # width = 0.1,
+      # colour = NA,
+      alpha = 0.75,
+      size = 1,
+      stroke = 0.2
+    ) +
+    geom_violin(aes(
+      group = interaction(days, layer),
+      # fill = cell.type
+    ),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+    ) +
+    geom_text(
+      data = eds_avg,
+      aes(
+        label = paste0(diff, "%\n", "P=", p_value),
+        y = 0,
+        vjust = 0,
+        fill = NA
+      ),
+      size = ggtext_size,
+      family = "Helvetica",
+      lineheight = 0.75,
+      position = position_dodge(width = 0.6)
+    ) +
+    # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
+    # scale_fill_manual(values = pal_flame_disc) +
+    scale_fill_grey(start = 0.9, end = 0.3) +
+    expand_limits(y = 0) +
+    scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+    labs(x = "Days after induction") +
+    theme_leo() +
+    theme(
+      text = element_text(family = "Helvetica"),
+      legend.position = "none",
+      plot.margin = unit(c(0.2, 0.2, 0.1, 0.1), "mm")
+    )
+}
+
+#### create plots and assemble subfigure ####
+C.Cr <- eds_plot(C, Cr) + theme(
+  axis.text.x = element_blank(),
+  axis.title.x = element_blank(),
+  axis.ticks.x = element_blank()
+) + annotate(
+  geom = "segment",
+  x = c(0.85, 1.15),
+  xend = c(0.85, 1.15),
+  y = c(6, 5.5),
+  yend = c(9, 7.5),
+  size = 0.2
+) +
+  annotate("text",
+    x = c(0.85, 1.15),
+    y = c(9.75, 8.25),
+    label = c("PCW", "SCW"),
+    family = "Helvetica",
+    size = ggtext_size
+  )
+
+C.O <- eds_plot(C, O)
+
+eds <- C.Cr / C.O
+
+pdf("eds_plots.pdf", width = onecol * 0.7, height = onecol * 0.7)
+eds
+dev.off()
+
+eds_data_PCW <- read_csv(paste0(datapath, "PhD/IRX/EDS/eds_data.csv"),
+  col_types = "ccnnn",
+  col_names = c("layer", "days", "PCW_C", "PCW_O", "PCW_Cr")
+) %>% 
+  filter(layer == "PCW") %>% 
+  select(-layer) %>% 
+  group_by(days) %>% 
+  mutate(point = row_number())
+
+eds_data_SCW <- read_csv(paste0(datapath, "PhD/IRX/EDS/eds_data.csv"),
+  col_types = "ccnnn",
+  col_names = c("layer", "days", "SCW_C", "SCW_O", "SCW_Cr")
+) %>% 
+  filter(layer == "SCW") %>% 
+  select(-layer) %>% 
+  group_by(days) %>% 
+  mutate(point = row_number())
+
+eds_data_ratio <- eds_data_SCW %>% 
+  full_join(eds_data_PCW) %>% 
+  group_by(days) %>% 
+  mutate("C/O" = (SCW_C / SCW_O) / (PCW_C / PCW_O))
+
+ggplot(eds_data_ratio, aes(x = days, y = `C/O`)) +
+  geom_quasirandom() +
+  geom_violin(draw_quantiles = 0.5)
+```
+
+## EM drying collapse
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+#### load data and calculate proportions of intact/collapsed cells ####
+em_data <- read_csv(paste0(datapath, "PhD/IRX/EM/AD_collapse.csv")) %>%
+  pivot_longer(cols = c(PX, MX), names_to = "cell.type", values_to = "count") %>%
+  mutate(
+    state = ordered(state, levels = c("Fully", "Partially", "Intact")),
+    cell.type = ordered(cell.type, levels = c("PX", "MX")),
+    days = as.character(days)
+  ) %>%
+  group_by(experiment, treatment, days, cell.type) %>%
+  mutate(sum = sum(count)) %>%
+  group_by(experiment, treatment, days, cell.type, state) %>%
+  mutate(proportion = (count / sum) * 100)
+
+#### calculate error bars for stacked bar plots ####
+em_data_avg <- em_data %>%
+  group_by(treatment, days, cell.type, state) %>%
+  summarise(
+    sd = sd(proportion),
+    proportion = mean(proportion)
+  ) %>%
+  group_by(treatment, days, cell.type) %>%
+  mutate(
+    ymin = case_when(
+      state == "Partially" ~ proportion[state == "Intact"] +
+        proportion[state == "Partially"] - sd,
+      state == "Fully" ~ 0,
+      state == "Intact" ~ proportion - sd
+    ),
+    ymax = case_when(
+      state == "Partially" ~ proportion[state == "Intact"] +
+        proportion[state == "Partially"] + sd,
+      state == "Fully" ~ 0,
+      state == "Intact" ~ proportion + sd
+    )
+  )
+
+#### create plot function ####
+em_collapse_plot <- function(cond) {
+  em_collapse <- ggplot(em_data_avg %>% filter(treatment == cond), aes(
+    x = days,
+    y = proportion,
+    fill = state
+  )) +
+    geom_col(
+      alpha = 0.85,
+      width = 0.6
+    ) +
+    geom_errorbar(aes(
+      ymin = ymin,
+      ymax = ymax
+    ),
+    width = 0.1,
+    size = 0.2
+    ) +
+    scale_fill_manual(values = rev(pal_ostwald_disc), name = "Collapse") +
+    scale_y_continuous(expand = expand_scale(mult = c(0, 0.05))) +
+    theme_leo() +
+    labs(
+      y = "Proportion",
+      x = "Days after induction"
+    ) +
+    facet_wrap(~cell.type, nrow = 1) +
+    theme(
+      legend.key.height = unit(2, "mm"),
+      legend.key.width = unit(2, "mm"),
+      legend.margin = unit(c(0, 0, 0, 0), "mm"),
+      plot.margin = unit(c(0.5, 6, 0.5, 6), "pt")
+    ) +
+    coord_cartesian(ylim = c(0, 100))
+}
+
+#### create plots and assemble subfigure ####
+cpd_plot <- em_collapse_plot("CPD") + labs(y = "After CPD [%]")
+
+ad_plot <- em_collapse_plot("AD") + labs(y = "After air drying [%]")
+
+pdf("em_collapse.pdf", width = onecol, height = onecol * 0.3)
+plot_grid(
+  cpd_plot,
+  ad_plot,
+  nrow = 1,
+  rel_heights = c(1, 1)
+)
+dev.off()
+```
+
+## AFM ratios 
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+afm_data <- read_csv(paste0(datapath, "PhD/IRX/AFM/afm_PX.csv")) %>%
+  tidyr::fill(everything()) %>%
+  mutate(days = as.character(days)) %>%
+  pivot_longer(cols = c(modulus, deformation, adhesion), names_to = "variable", values_to = "value") %>%
+  group_by(cell.type, days, cell, measurement, variable) %>%
+  summarise(ratio = value[layer == "SCW"] / value[layer == "PCW"]) %>%
+  filter(!(variable == "adhesion" & # remove > 20-fold outlier
+    cell == "Cell 4" &
+    measurement == 6 &
+    cell.type == "PX" &
+    days == "50")) %>%
+  ungroup() %>%
+  mutate(cell.type = ordered(cell.type, levels = c("PX", "MX")))
+
+#### create plot function ####
+rmn_violin <- function(x) {
+  afm_test <- afm_data %>% filter(variable == x)
+  p_values <- afm_test %>%
+    group_by(cell.type) %>%
+    summarise(p_value = broom::tidy(
+      t.test(ratio[days == "10"], ratio[days == "50"])
+    )[["p.value"]]) %>%
+    mutate(p_value = case_when(
+      p_value > 0.001 ~ round(p_value, digits = 3),
+      p_value > 0.0001 ~ round(p_value, digits = 4),
+      p_value > 0.00001 ~ round(p_value, digits = 5),
+      p_value > 0.000001 ~ round(p_value, digits = 6),
+      p_value > 0.0000001 ~ round(p_value, digits = 7),
+      p_value > 0.000000001 ~ round(p_value, digits = 9),
+      p_value > 0.0000000001 ~ round(p_value, digits = 10),
+      TRUE ~ round(p_value, digits = 13)
+    ))
+
+  ggplot(
+    data = afm_data %>% filter(variable == x),
+    aes(x = days, y = ratio)
+  ) +
+    geom_quasirandom(
+      aes(fill = cell.type, group = days),
+      dodge.width = 0.6,
+      shape = 21,
+      alpha = 0.75,
+      size = 1,
+      stroke = 0.2
+    ) +
+    geom_violin(aes(
+      group = interaction(days, cell.type)
+    ),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+    ) +
+    geom_text(
+      data = p_values,
+      aes(label = paste(("P ="), p_value)),
+      x = 0.5,
+      y = 0,
+      hjust = 0,
+      vjust = 1,
+      family = "Helvetica",
+      size = ggtext_size
+    ) +
+    scale_fill_manual(values = pal_flame_disc) +
+    expand_limits(y = 0) +
+    scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+    theme_leo() +
+    theme(
+      text = element_text(family = "Helvetica"),
+      legend.position = "none"
+    ) +
+    facet_wrap(~cell.type, nrow = 2)
+}
+
+#### create plots and assemble subfigure ####
+modulus <- rmn_violin("modulus") +
+  labs(
+    x = "Days after induction",
+    y = "DMT modulus  (SCW/PCW)"
+  )
+
+deformation <- rmn_violin("deformation") +
+  labs(
+    x = "",
+    y = "Deformation (SCW/PCW)"
+  )
+
+adhesion <- rmn_violin("adhesion") +
+  labs(
+    x = "",
+    y = "Adhesion  (SCW/PCW)"
+  )
+
+pdf("afm_eds.pdf", width = 6.9 / 2.54, height = 13.15 / 2.54)
+eds / (deformation | modulus | adhesion) +
+  plot_layout(heights = c(0.5, 0.5, 1))
+dev.off()
+```
+
+## Wild type vessel overview
+
+### Load Raman data
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+#### import and tidy Raman data (computationally heavy, so done once and written to file) ####
+# rmn_files <-
+#   list.files(
+#     path = paste0(datapath, "PhD/IRX/RAMAN/nuoendagula/",
+#     pattern = "*.txt",
+#     recursive = TRUE,
+#     full.names = TRUE
+#   )
+#
+# read_plus <- function(flnm) {
+#   read_tsv(flnm,
+#     comment = "#",
+#     col_names = FALSE,
+#     skip = 25,
+#     cols_only(
+#       X1 = col_number(),
+#       X2 = col_number()
+#     )
+#   ) %>%
+#     mutate(
+#       filename = flnm,
+#       exp_time = readLines(flnm) %>%
+#         str_split("\t") %>%
+#         grep("Exposure Time: .* s", ., value = T) %>%
+#         str_remove_all("#Exposure Time: | s") %>%
+#         as.numeric(),
+#       pwr = readLines(flnm) %>%
+#         str_split("\t") %>%
+#         grep("Excitation Power: .* mW", ., value = T) %>%
+#         str_remove_all("#Excitation Power: | mW") %>%
+#         as.numeric(),
+#       nd_fltr = 1 - (readLines(flnm) %>%
+#         str_split("\t") %>%
+#         grep("% \\([0-9]{3}/255\\)", ., value = T) %>%
+#         str_remove_all("#ND Filter : | % \\([0-9]{3}/255\\)") %>%
+#         as.numeric() / 100)
+#     )
+# }
+#
+# rmn_data <- lapply(rmn_files, read_plus) %>%
+#   bind_rows()
+#
+# # rmn_data <- rmn_data %>%
+# #   select(c(1:3))
+#
+# rmn_data$filename <- basename(rmn_data$filename)
+#
+# rmn_data$filename <-
+#   str_replace(rmn_data$filename, fixed("fah 1"), "fah1")
+#
+# rmn_data <- rmn_data %>%
+#   distinct(X1, filename, .keep_all = TRUE) %>%
+#   separate(
+#     filename,
+#     into = c("genotype", "replicate", "cell.type", "technical"),
+#     sep = "\\s*#|-|\\s",
+#     extra = "merge"
+#   ) %>%
+#   rename("wavenumber" = X1, "intensity" = X2) %>%
+#   mutate(
+#     genotype = recode(
+#       genotype,
+#       "4cl1＆2" = "4cl1x4cl2",
+#       "cad4＆5" = "cad4xcad5",
+#       "ccoaomt" = "ccoaomt1",
+#       "ccr1" = "ccr1-3",
+#       "col.o" = "Col-0",
+#       "Col.0" = "Col-0",
+#       "ccr1＆fah1" = "ccr1xfah1"
+#     ),
+#     cell.type = recode(cell.type,
+#       "px" = "PX",
+#       "SX" = "SMX",
+#       "MX" = "PMX"
+#     ),
+#     replicate = str_extract(
+#       replicate,
+#       "\\d"
+#     ),
+#     technical = str_extract(
+#       technical,
+#       "(\\d)+"
+#     ),
+#     wavenumber = round(wavenumber, digits = 0)
+#   ) %>%
+#   filter(cell.type != "？？") %>%
+#   group_by(genotype, cell.type, replicate, technical) %>%
+#   mutate(intensity = intensity / (exp_time * pwr * nd_fltr)) %>%
+#   select(-exp_time, -pwr, -nd_fltr)
+#
+# #### baseline correct Raman data ####
+# rmn_data_wide <- rmn_data %>%
+#   group_by(genotype, cell.type, replicate, technical) %>%
+#   mutate(group_id = row_number()) %>%
+#   spread(wavenumber, intensity) %>%
+#   select(-group_id) %>%
+#   summarise_all(funs(sum(., na.rm = TRUE)))
+#
+# rmn_data_mat <- as.matrix(rmn_data_wide[, -c(1:4)])
+# rownames(rmn_data_mat) <- paste(rmn_data_wide$genotype,
+#   rmn_data_wide$cell.type,
+#   rmn_data_wide$replicate,
+#   rmn_data_wide$technical,
+#   sep = "_"
+# )
+#
+# rmn_data_correction <- baseline.als(rmn_data_mat,
+#   lambda = 5,
+#   p = 0.01,
+#   maxit = 100
+# )
+# rmn_data_corrected <- as_tibble(rmn_data_correction$corrected, rownames = NA)
+#
+# rmn_data_corrected <- rmn_data_corrected %>%
+#   rownames_to_column() %>%
+#   separate(rowname, sep = "_", into = c("genotype", "cell.type", "replicate", "technical"), remove = TRUE) %>%
+#   gather(key = "wavenumber", value = "corrected.intensity", -c(genotype, cell.type, replicate, technical)) %>%
+#   mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X."), replacement = "-")) %>%
+#   mutate(wavenumber = str_replace(wavenumber, pattern = fixed("X"), replacement = "")) %>%
+#   mutate(wavenumber = as.numeric(wavenumber)) %>%
+#   group_by(genotype, cell.type, replicate, technical) %>%
+#   inner_join(., rmn_data, by = c("genotype", "cell.type", "replicate", "technical", "wavenumber")) %>%
+#   ungroup() %>%
+#   filter(genotype != "ccr1xfah1" &
+#     wavenumber %in% c(300:1700)) %>%
+#   mutate(
+#     genotype = ordered(genotype,
+#       levels = c(
+#         "Col-0",
+#         "4cl1",
+#         "4cl2",
+#         "4cl1x4cl2",
+#         "ccoaomt1",
+#         "fah1",
+#         "omt1",
+#         "ccr1-3",
+#         "cad4",
+#         "cad5",
+#         "cad4xcad5"
+#       )
+#     )
+#   )
+#
+# write_csv(rmn_data_corrected, "rmn_data_corrected.csv")
+
+#### load tidied and baseline corrected Raman spectra ####
+rmn_data_corrected <- read_csv("rmn_data_corrected.csv", col_types = "ccccnnn") %>%
+  mutate(
+    genotype = ordered(genotype,
+      levels = c(
+        "Col-0",
+        "4cl1",
+        "4cl2",
+        "4cl1x4cl2",
+        "ccoaomt1",
+        "fah1",
+        "omt1",
+        "ccr1-3",
+        "cad4",
+        "cad5",
+        "cad4xcad5"
+      )
+    )
+  )
+
+rmn_data_corrected <- rmn_data_corrected %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(
+    AUC = MESS::auc(wavenumber, corrected.intensity),
+    scaled = corrected.intensity / AUC,
+    scaled_lig = corrected.intensity / (
+      (corrected.intensity[wavenumber == 1603] / 2) + corrected.intensity[wavenumber == 1334]
+    )
+  )
+
+rmn_data_pre <- rmn_data_corrected %>%
+  group_by(genotype, cell.type, replicate, wavenumber) %>%
+  summarise(
+    samples.pre = length(corrected.intensity),
+    mean.scaled = mean(scaled, na.rm = TRUE),
+    mean.scaled_lig = mean(scaled_lig, na.rm = TRUE)
+  )
+
+rmn_data_avg <- rmn_data_pre %>%
+  group_by(genotype, cell.type, wavenumber) %>%
+  summarise(
+    mean.scaled = mean(mean.scaled, na.rm = TRUE),
+    mean.scaled_lig = mean(mean.scaled_lig, na.rm = TRUE)
+  )
+
+#### average Raman data, calculate integrals and band intensities ####
+rmn_sum <- rmn_data_corrected %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  summarise(
+    "total_lignin" = (scaled[wavenumber == 1603] / 2) + scaled[wavenumber == 1334],
+    "G_rel" = scaled_lig[wavenumber == 1603],
+    "GOH_rel" = scaled_lig[wavenumber == 1664],
+    "GCHO_rel" = scaled_lig[wavenumber == 1625],
+    "S_rel" = scaled_lig[wavenumber == 1334],
+    "P_rel" = scaled_lig[wavenumber == 1001],
+    "cellulose" = scaled[wavenumber == 1099] + scaled[wavenumber == 381],
+    "S.G" = scaled_lig[wavenumber == 1334] / scaled_lig[wavenumber == 1276],
+    "GOH.G" = scaled_lig[wavenumber == 1664] / scaled_lig[wavenumber == 1603],
+    "O4_van_rel" = scaled_lig[abs(wavenumber - 1303) == min(abs(wavenumber - 1303))][1],
+    "other_van_rel" = scaled_lig[abs(wavenumber - 785) == min(abs(wavenumber - 785))][1],
+    "O4_syr_rel" = scaled_lig[abs(wavenumber - 1297) == min(abs(wavenumber - 1297))][1],
+    "other_syr_rel" = scaled_lig[abs(wavenumber - 450) == min(abs(wavenumber - 450))][1],
+    "Benz_rel" = O4_van_rel + other_van_rel + O4_syr_rel + other_syr_rel,
+    "AUC" = mean(AUC)
+  )
+```
+
+### Load Wiesner data
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, warning = FALSE, eval = TRUE, echo = FALSE}
+
+#### import and tidy Wiesner test data ####
+wiesner.data <-
+  read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
+    skip = 2
+  )
+
+wiesner.data$genotype <- recode(wiesner.data$genotype, cad4x5 = "cad4xcad5")
+
+# set cell types according to measurement order
+wiesner.data[1:50 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 50), 4] <-
+  "IF"
+wiesner.data[51:100 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 50), 4] <-
+  "MX"
+wiesner.data[101:150 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 50), 4] <-
+  "XF"
+wiesner.data[151:200 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 50), 4] <-
+  "PX"
+wiesner.data[201:250 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 50), 4] <-
+  "LP"
+wiesner.data[251:300 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 50), 4] <-
+  "PH"
+
+# import SMX measurements
+wiesner.data.SMX <- read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_SMX.csv",
+  skip = 2
+)
+wiesner.data.SMX$replicate <- as.factor(wiesner.data.SMX$replicate)
+
+wiesner.data <- rbind(select(wiesner.data, -technical), select(wiesner.data.SMX, -technical))
+
+wiesner.data$genotype <-
+  ordered(
+    wiesner.data$genotype,
+    levels = c(
+      "col-0",
+      "4cl1",
+      "4cl2",
+      "4cl1x2",
+      "ccoaomt1",
+      "fah1",
+      "omt1",
+      "ccr1-3",
+      "ccr1xfah1",
+      "cad4",
+      "cad5",
+      "cad4xcad5"
+    )
+  )
+
+# calculate the correct hue on the 360 point circular scale
+wiesner.data$hue <- ((wiesner.data$h.stained + 128) / 255 * 360)
+
+wiesner.data$replicate <-
+  as.factor(as.character(wiesner.data$replicate))
+
+# calculate stained - unstained diff. and adjust for bleaching by subtracting the diff. in the unlignified phloem
+wiesner.data$diff <-
+  wiesner.data$OD.stained - wiesner.data$OD.unstained
+
+wiesner.data.bg <- wiesner.data %>%
+  filter(cell.type == "PH") %>%
+  select(1:2, 9) %>%
+  ungroup() %>%
+  group_by(genotype, replicate) %>%
+  summarise(OD.bg = mean(diff, na.rm = TRUE))
+
+wiesner.data <-
+  full_join(
+    wiesner.data,
+    wiesner.data.bg,
+    all = TRUE,
+    by = c("genotype", "replicate")
+  )
+wiesner.data$diff.adj <- wiesner.data$diff - wiesner.data$OD.bg
+wiesner.data <- subset(wiesner.data, cell.type != "PH")
+
+# average per replicate (for boxplots)
+wiesner.data.pre <- wiesner.data %>%
+  mutate(
+    cell.type = recode(cell.type, "MX" = "PMX"),
+    genotype = recode(genotype,
+      "col-0" = "Col-0",
+      "4cl1x2" = "4cl1x4cl2"
+    )
+  ) %>%
+  group_by(genotype, cell.type, replicate) %>%
+  summarise(
+    mean.hue1 = mean(hue, na.rm = TRUE),
+    SD.hue1 = sd(hue, na.rm = TRUE),
+    mean.OD1 = mean(diff.adj, na.rm = TRUE),
+    SD.OD1 = sd(diff.adj, na.rm = TRUE)
+  ) %>%
+  select(genotype, cell.type, replicate, mean.OD1)
+
+#### import and tidy shape data of the vessels from the Raman measurements ####
+rmn_irx <- read.csv(paste0(datapath, "PhD/IRX/raman_IRX_revisited.csv")) %>%
+  select(genotype:Perim., Circ., Round, Height, Width) %>%
+  filter(object == 2) %>%
+  select(-object)
+
+raman.nb <- read.csv(paste0(datapath, "PhD/IRX/raman_IRX.csv")) %>%
+  select(genotype:n_f)
+rmn_irx <- left_join(rmn_irx, raman.nb)
+rmn_irx$replicate <- as.character(rmn_irx$replicate)
+rmn_irx$technical <- as.character(rmn_irx$technical)
+
+raman_convex <- read.csv(paste0(datapath, "PhD/IRX/raman_irx_convex.csv"))
+
+raman_convex$File <-
+  str_replace(raman_convex$File, fixed("fah 1"), "fah1")
+
+raman_convex <- raman_convex %>%
+  select(-X) %>%
+  separate(
+    File,
+    into = c("genotype", "replicate", "cell.type", "technical"),
+    sep = "\\s*#|-|\\s",
+    extra = "merge"
+  ) %>%
+  mutate(
+    genotype = recode(
+      genotype,
+      "4cl1＆2" = "4cl1x4cl2",
+      "cad4＆5" = "cad4xcad5",
+      "ccoaomt" = "ccoaomt1",
+      "ccr1" = "ccr1-3",
+      "col.o" = "Col-0",
+      "Col.0" = "Col-0",
+      "ccr1＆fah1" = "ccr1xfah1"
+    ),
+    cell.type = recode(cell.type,
+      "px" = "PX",
+      "SX" = "SMX",
+      "MX" = "PMX"
+    ),
+    replicate = str_extract(
+      replicate,
+      "\\d"
+    ),
+    technical = str_extract(
+      technical,
+      "(\\d)+"
+    )
+  ) %>%
+  filter(cell.type != "？？")
+
+rmn_irx <- left_join(rmn_irx, raman_convex) %>%
+  mutate(
+    Area = Area * (1.84375^2), # convert areas to correct scale
+    ConvexArea = ConvexArea * (1.84375^2),
+    Perim. = Perim. * 1.84375
+  )
+
+# write_csv(rmn_irx, "raman_irx_shape.csv"))
+
+#### import and tidy plant height data ####
+raman.heights <- read.csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
+  select(genotype, replicate, height) %>%
+  mutate(genotype = recode(genotype, "col-0" = "Col-0")) %>%
+  rename("Plant.height" = "height") %>%
+  rbind(read.csv(paste0(datapath, "PhD/IRX/heights_haris.csv")))
+raman.heights$replicate <- as.character(raman.heights$replicate)
+
+#### merge data frames ####
+rmn_irx <- left_join(rmn_irx, rmn_sum)
+rmn_irx.switch <- left_join(read_tsv(paste0(datapath, "PhD/IRX/PMX_which_SMX.tsv"),
+  col_types = "cccc"
+), rmn_irx) %>%
+  mutate(
+    technical = str_c(technical, "switched", sep = "_"),
+    cell.type = "SMX"
+  )
+rmn_irx <- rmn_irx %>%
+  anti_join(read_tsv(paste0(datapath, "PhD/IRX/PMX_which_SMX.tsv"),
+    col_types = "cccc"
+  )) %>%
+  bind_rows(rmn_irx.switch)
+rmn_irx <- left_join(rmn_irx, raman.heights)
+rmn_irx <- left_join(rmn_irx, wiesner.data.pre) %>%
+  mutate(
+    convexity = Area / ConvexArea,
+    "GCHO_term.GCHO_tot" = GCHO_rel / mean.OD1,
+    "GCHO.GOH" = mean.OD1 / GOH_rel
+  )
+# write.csv(rmn_irx, file = "SEM_data.csv"))
+```
+
+### Violin plots
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%', fig.width=5, fig.height=4}
+
+rmn_sum_long <- rmn_irx %>%
+  filter(cell.type != "IF" & genotype == "Col-0") %>%
+  group_by(cell.type, replicate, technical) %>%
+  select(-genotype) %>%
+  pivot_longer(
+    cols = -c(replicate:cell.type),
+    names_to = "variable",
+    values_to = "value"
+  ) %>%
+  ungroup() %>%
+  mutate(
+    cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX"))
+  )
+
+rmn_adj <- rmn_sum_long %>%
+  filter(variable %in% c("n_v", "n_f", "n_p")) %>%
+  mutate(variable = ordered(as.factor(variable), levels = c("n_p", "n_f", "n_v")))
+
+rmn_adj_letters <- letter_groups(rmn_adj %>% unite("ID", cell.type, variable, sep = "-"),
+  value,
+  ID,
+  "kruskal",
+  # variable,
+  print_position = "below",
+  print_adjust = 0.5
+) %>%
+  separate(ID, into = c("cell.type", "variable"), sep = "-") %>% 
+  mutate(cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX")))
+
+rmn_adj_box <- ggplot(
+  data = rmn_adj,
+  aes(x = variable, y = value * 100)
+) +
+  geom_quasirandom(
+    aes(
+      group = interaction(cell.type, variable),
+      fill = cell.type
+    ),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  geom_violin(aes(
+    group = interaction(cell.type, variable)
+  ),
+  draw_quantiles = 0.5,
+  fill = "white",
+  colour = "black",
+  alpha = 0.85,
+  width = 0.2,
+  position = position_dodge(width = 0.6),
+  size = 0.2,
+  scale = "width"
+  ) +
+  geom_text(
+    data = rmn_adj_letters,
+    aes(
+      group = interaction(cell.type, variable),
+      label = Letters
+    ),
+    size = 6 / (14 / 5),
+    family = "Helvetica",
+    position = position_dodge(width = 0.6)
+  ) +
+  annotate("text",
+    x = c(0.8, 1, 1.2),
+    y = c(100, 90, 25),
+    label = c("PX", "PMX", "SMX"),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  annotate("segment",
+    x = c(0.8, 1, 1.2),
+    xend = c(0.8, 1, 1.2),
+    y = c(95, 85, 20),
+    yend = c(85, 75, 5),
+    colour = "black",
+    size = 0.2
+  ) +
+  scale_x_discrete(labels = c("Parenchyma", "Fibres", "TEs")) +
+  scale_fill_manual(values = pal_flame_disc) +
+  labs(
+    x = "Neighbouring cell type",
+    y = "CW adjacent [%]"
+  ) +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none"
+  )
+
+pdf("rmn_adj_box.pdf", width = 9 / 2.54, height = 1.5)
+rmn_adj_box
+dev.off()
+
+
+rmn_violin <- function(x) {
+  letters <- letter_groups(rmn_sum_long %>% filter(variable == x),
+    value,
+    cell.type,
+    "tukey",
+    print_position = "below",
+    print_adjust = 0.5
+  ) %>%
+    mutate(cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX")))
+
+  ggplot(
+    data = rmn_sum_long %>% filter(variable == x),
+    aes(x = cell.type, y = value)
+  ) +
+    geom_quasirandom(
+      aes(fill = cell.type),
+      dodge.width = 0.6,
+      shape = 21,
+      alpha = 0.75,
+      size = 1,
+      stroke = 0.2
+    ) +
+    geom_violin(aes(
+      group = cell.type
+    ),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+    ) +
+    geom_text(
+      data = letters,
+      aes(label = Letters),
+      size = ggtext_size,
+      family = "Helvetica",
+      position = position_dodge(width = 0.6)
+    ) +
+    scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
+    scale_fill_manual(values = pal_flame_disc) +
+    expand_limits(y = 0) +
+    theme_leo() +
+    theme(
+      text = element_text(family = "Helvetica"),
+      legend.position = "none",
+    )
+}
+
+rmn_area <- rmn_violin("Area") +
+  labs(
+    x = "",
+    y = expression(paste("Area [µm"^2, "]"))
+  )
+
+rmn_lig <- rmn_violin("total_lignin") +
+  labs(
+    x = "",
+    y = expression(paste("Relative lignin"))
+  )
+
+rmn_cellu <- rmn_violin("cellulose") +
+  labs(
+    x = "",
+    y = expression(paste("Relative cellulose"))
+  )
+
+rmn_s.g <- rmn_violin("S.G") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ bold(S) ~ "/" ~ bold(G)))
+  )
+
+rmn_gcho <- rmn_violin("GCHO_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ terminal ~ bold(G)[CHO]))
+  )
+
+rmn_goh <- rmn_violin("GOH_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ bold(G)[CHOH]))
+  )
+
+rmn_p <- rmn_violin("P_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ bold(P)))
+  )
+
+rmn_benz <- rmn_violin("Benz_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ benzald.))
+  )
+
+rmn_gcho_term.gcho_tot <- rmn_violin("GCHO_term.GCHO_tot") +
+  labs(
+    x = "",
+    y = expression(paste(Terminal ~ bold(G)[CHO] ~ "/" ~ bold(G)[CHO]))
+  )
+
+```
+
+#### Assemble figure
+
+```{r figure 2, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%', fig.width=5, fig.height=4}
+
+celltypes_WT <-
+  rasterGrob(image_read_pdf(
+    "/home/leonard/Dropbox/2020_IRX manuscript/Submission/Edits/IRX_WT.pdf",
+    density = 900
+  ))
+
+
+top <- plot_grid(celltypes_WT,
+  rmn_adj_box,
+  labels = c("A", "B"),
+  nrow = 1,
+  rel_widths = c(1, 2.2),
+  vjust = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica"
+)
+bottom <- plot_grid(
+  rmn_area,
+  rmn_lig,
+  rmn_s.g,
+  rmn_benz,
+  rmn_goh,
+  rmn_gcho,
+  labels = c("C", "D", "E", "F", "G", "H"),
+  vjust = 1,
+  nrow = 2,
+  label_size = 10,
+  label_fontfamily = "Helvetica",
+  align = "hv",
+  axis = "lr"
+)
+
+pdf("IRX_figure3.pdf", width = onecol, height = onecol)
+plot_grid(top,
+  bottom,
+  nrow = 2,
+  rel_heights = c(1.3, 2)
+)
+dev.off()
+```
+## Arabidopsis model
+
+### Visual vessel overview
+
+```{r figure 3, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+irx_data <-
+  read.csv(paste0(datapath,"PhD/IRX/irx_measurements.csv"), sep = "\t")
+irx_ref <- subset(irx_data, object == "ref", select = c(1, 2, 3, 6, 7, 27))
+irx_ref$ref.y1 <- irx_ref$Y
+irx_ref$ref.y2 <- irx_ref$Y
+irx_ref$ref.x1 <- irx_ref$X - (irx_ref$Length / 2)
+irx_ref$ref.x2 <- irx_ref$X + (irx_ref$Length / 2)
+
+
+irx_data <- irx_data %>%
+  filter(object != "ref") %>%
+  left_join(irx_ref[, c(1, 2, 3, 7, 8, 9, 10)],
+    by = c("genotype", "replicate", "technical")
+  )
+
+irx_data$Distance <-
+  apply(
+    irx_data[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
+    1,
+    function(x) {
+      a <- c(x[1], x[2])
+      b <- c(x[3], x[5])
+      c <- c(x[4], x[6])
+      v1 <- b - c
+      v2 <- a - b
+      m <- cbind(v1, v2)
+      d <- abs(det(m)) / sqrt(sum(v1 * v1))
+      d
+    }
+  )
+
+irx_data <- irx_data %>%
+  rownames_to_column(var = "number")
+
+irx_x <- irx_data %>%
+  select(genotype, replicate, technical, object, number, contains("ROIx")) %>%
+  group_by(genotype, replicate, technical, object, number) %>%
+  pivot_longer(contains("ROIx"), names_to = "variable", values_to = "ROIx") %>%
+  separate(variable, into = c("variable", "point"), sep = "x") %>%
+  select(-variable)
+
+irx_y <- irx_data %>%
+  select(genotype, replicate, technical, object, number, contains("ROIy")) %>%
+  group_by(genotype, replicate, technical, object, number) %>%
+  pivot_longer(contains("ROIy"), names_to = "variable", values_to = "ROIy") %>%
+  separate(variable, into = c("variable", "point"), sep = "y") %>%
+  select(-variable)
+
+irx_roi <- left_join(irx_x, irx_y) %>%
+  drop_na() %>%
+  filter_at(vars("ROIx", "ROIy"), any_vars(. != 0))
+
+irx_str <- irx_roi %>%
+  unite("ID", genotype:number, remove = FALSE, sep = ",") %>%
+  group_by(ID) %>%
+  mutate(
+    number = as.numeric(number),
+    ROIx = ROIx - mean(ROIx, na.rm = TRUE),
+    ROIy = ROIy - mean(ROIy, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  group_by(ID, point) %>%
+  summarise(xy = list(c(ROIx, ROIy))) %>%
+  ungroup() %>%
+  group_by(ID) %>%
+  mutate(
+    point = as.numeric(point),
+    max_point = max(point)
+  ) %>%
+  bind_rows(filter(., point == 0) %>%
+    group_by(ID) %>%
+    mutate(point = max_point + 1)) %>%
+  arrange(ID, point) %>%
+  summarise(xy = list(c(xy))) %>%
+  mutate(geometry = map(
+    xy,
+    ~ do.call(rbind, .) %>% # make each list a matrix
+      list() %>% # st_polygon() requires a list
+      st_polygon()
+  )) %>%
+  st_as_sf()
+
+irx_str <- irx_str %>%
+  group_by(ID) %>%
+  mutate(
+    area = st_area(geometry),
+    CH = st_convex_hull(geometry),
+    convex_area = st_area(CH),
+    convexity = area / convex_area,
+    circularity = 4 * pi * (area / (lwgeom::st_perimeter(geometry)^2))
+  ) %>%
+  separate(ID, into = c("genotype", "replicate", "technical", "cell.type", "number"), sep = ",") %>%
+  filter(genotype != "ccr1xfah1") %>%
+  mutate(
+    genotype = recode(genotype, "col-0" = "Col-0"),
+    genotype = ordered(genotype, levels = c(
+      "Col-0",
+      "4cl1",
+      "4cl2",
+      "4cl1x4cl2",
+      "ccoaomt1",
+      "fah1",
+      "omt1",
+      "ccr1-3",
+      "cad4",
+      "cad5",
+      "cad4xcad5"
+    )),
+    cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX"))
+  )
+
+sf_ROIs <- ggplot() +
+  geom_sf(
+    data = irx_str,
+    aes(colour = circularity),
+    # colour = "black",
+    fill = NA,
+    lwd = 0.1,
+    key_glyph = "point"
+  ) +
+  theme_leo() +
+  scale_x_continuous(expand = expand_scale(mult = 0)) +
+  scale_y_continuous(expand = expand_scale(mult = 0)) +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "right",
+    panel.border = element_blank(),
+    # panel.background = element_rect(fill = "black"),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank(),
+    strip.text = element_text(hjust = 0.5, face = "italic")
+  ) +
+  scale_colour_gradientn(colours = pal_ostwald_cont, trans = "reverse", name = "Circularity") +
+  guides(colour = guide_colourbar(barwidth = unit(2, "mm"))) +
+  facet_grid(cell.type ~ genotype, switch = "y")
+
+pdf("sf_ROIs.pdf", width = twocol * 0.7, height = onecol)
+sf_ROIs
+dev.off()
+
+
+xdens <- ggplot(irx_str) +
+  geom_density(aes(x = circularity, fill = cell.type),
+    size = 0.1,
+    alpha = 0.5
+  ) +
+  scale_fill_manual(values = pal_flame_disc) +
+  theme_void()
+
+ydens <- ggplot(irx_str) +
+  geom_density(aes(x = convexity, fill = cell.type),
+    size = 0.1,
+    alpha = 0.5
+  ) +
+  scale_fill_manual(values = pal_flame_disc) +
+  coord_flip() +
+  theme_void()
+
+
+pdf("shape_distribution.pdf", height = onecol / 2, width = onecol)
+scatter <- ggplot(irx_str) +
+  geom_point(aes(x = circularity, y = convexity, shape = cell.type, fill = cell.type),
+    size = 1,
+    alpha = 0.75,
+    stroke = 0.2
+  ) +
+  scale_fill_manual(values = pal_flame_disc) +
+  scale_shape_manual(values = c(21, 22, 23)) +
+  labs(
+    x = "Circularity",
+    y = "Convexity"
+  ) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.9, 0.2),
+    legend.title = element_blank()
+  )
+scatter_x <- insert_xaxis_grob(scatter, xdens,
+  height = grid::unit(0.1, "null"),
+  position = c("top")
+)
+scatter_xy <- insert_yaxis_grob(scatter_x, ydens,
+  width = grid::unit(0.1, "null"),
+  position = c("right")
+)
+ggdraw(scatter_xy)
+dev.off()
+```
+
+### Model otimisation
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+step_data <- rmn_irx %>%
+  filter(cell.type == "SMX") %>%
+  select(convexity,
+         # total_lignin,
+         # P_rel,
+         # G_rel,
+         # GOH.G,
+         S_rel,
+         mean.OD1,
+         Perim.,
+         n_v,
+         GCHO_rel,
+         GOH_rel,
+         # O4_van_rel,
+         # other_van_rel,
+         # O4_syr_rel,
+         # other_syr_rel,
+         Benz_rel
+         # X1141,
+         # X1174
+         ) %>%
+  drop_na()
+
+# Fit the full model 
+full_model <- lm(convexity ~., data = step_data)
+# Stepwise regression model
+step_model <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+summary(step_model)
+
+
+```
+
+### SEM for PX
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+
+psem_px <- psem(
+  lm(Circ. ~
+  # n_v +
+  convexity,
+  data = filter(drop_na(rmn_irx), cell.type == "PX")
+  ),
+  lm(convexity ~
+  # n_v +
+  # n_f +
+  # mean.OD1 +
+    Perim. +
+    # P_rel +
+    # cellulose +
+    # S.G +
+    # G_tot +
+    GOH_rel +
+    # GOH.G +
+    # G_rel +
+    # GOH_tot +
+    # S_rel +
+    # S_tot +
+    GCHO_rel +
+    # total_lignin:mean.OD1 +
+    total_lignin,
+  data = filter(drop_na(rmn_irx), cell.type == "PX")
+  ),
+  data = filter(drop_na(rmn_irx), cell.type == "PX")
+)
+ind_claims <- summary(psem_px)[["dTable"]][, c(1, 4, 5)] %>%
+  mutate(
+    model = "PX",
+    species = "Arabidopsis",
+    fishC = summary(psem_px)[["Cstat"]][["Fisher.C"]],
+    fishP = summary(psem_px)[["Cstat"]][["P.Value"]]
+  )
+
+coefs <- summary(psem_px)[["coefficients"]][, c(1:8)] %>%
+  mutate(
+    model = "PX",
+    species = "Arabidopsis",
+  )
+summary(psem_px)
+plot(psem_px)
+```
+
+### SEM for PMX
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+
+psem_pmx <- psem(
+  lm(Circ. ~
+  n_v +
+    convexity,
+  data = filter(drop_na(rmn_irx), cell.type == "PMX")
+  ),
+  lm(convexity ~
+  n_v +
+    # n_f +
+    mean.OD1 +
+    # P_rel +
+    # Perim. +
+    # S.G +
+    # G_tot +
+    # GOH_rel +
+    # GOH.G +
+    # G_rel +
+    # GOH_tot +
+    S_rel +
+    # S_tot +
+    GCHO_rel +
+    # total_lignin:mean.OD1 +
+    total_lignin,
+  data = filter(drop_na(rmn_irx), cell.type == "PMX")
+  ),
+  data = filter(drop_na(rmn_irx), cell.type == "PMX")
+)
+ind_claims <- ind_claims %>%
+  bind_rows(summary(psem_pmx)[["dTable"]][, c(1, 4, 5)] %>%
+    mutate(
+      model = "PMX",
+      species = "Arabidopsis",
+      fishC = summary(psem_pmx)[["Cstat"]][["Fisher.C"]],
+      fishP = summary(psem_pmx)[["Cstat"]][["P.Value"]]
+    ))
+
+coefs <- coefs %>%
+  bind_rows(summary(psem_pmx)[["coefficients"]][, c(1:8)] %>%
+    mutate(
+      model = "PMX",
+      species = "Arabidopsis"
+    ))
+plot(psem_pmx)
+summary(psem_pmx)
+```
+
+### SEM for SMX
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+
+psem_smx <- psem(
+  lm(Circ. ~
+  # n_v +
+  convexity,
+  data = filter(drop_na(rmn_irx), cell.type == "SMX")
+  ),
+  lm(convexity ~
+  # n_v +
+  # n_f +
+  # mean.OD1 +
+  # Perim. +
+  # S.G +
+  # G_tot +
+  GOH_rel +
+  # GOH.G +
+    # P_rel,
+    Benz_rel,
+    # G_rel +
+    # GOH_tot +
+    # S_rel +
+    # S_tot +
+    # GCHO_rel +
+    # X1174 +
+    # total_lignin:mean.OD1 +
+    # total_lignin,
+  data = filter(drop_na(rmn_irx), cell.type == "SMX")
+  ),
+  data = filter(drop_na(rmn_irx), cell.type == "SMX")
+)
+ind_claims <- ind_claims %>%
+  bind_rows(summary(psem_smx)[["dTable"]][, c(1, 4, 5)] %>%
+    mutate(
+      model = "SMX",
+      species = "Arabidopsis",
+      fishC = summary(psem_smx)[["Cstat"]][["Fisher.C"]],
+      fishP = summary(psem_smx)[["Cstat"]][["P.Value"]]
+    ))
+
+coefs <- coefs %>%
+  bind_rows(summary(psem_smx)[["coefficients"]][, c(1:8)] %>%
+    mutate(
+      model = "SMX",
+      species = "Arabidopsis",
+    ))
+plot(psem_smx)
+summary(psem_smx)
+```
+
+
+## Woody Poplar
+
+### Load Raman data
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+#### import and tidy poplar Raman data ####
+rmn_files <-
+  list.files(
+    path = paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar"),
+    pattern = "(TE|FI|RP)(.*).txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_tsv(flnm,
+    comment = "#",
+    col_names = c("wavenumber", "intensity"),
+    col_types = "cc",
+    # locale = locale(decimal_mark = ",")
+  ) %>%
+    mutate(
+      filename = str_remove(
+        flnm,
+        fixed(paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/"))
+      )
+    ) %>%
+    separate(filename, into = c("genotype", "replicate", "TE"), sep = "([/-])") %>%
+    mutate(
+      wavenumber = as.numeric(str_replace(wavenumber, fixed(","), fixed("."))),
+      intensity = as.numeric(str_replace(intensity, fixed(","), fixed("."))),
+      TE = str_remove(TE, fixed(".txt")),
+      technical = unlist(str_extract_all(TE, "[:alpha:]+")),
+      TE = unlist(str_extract_all(TE, "[:digit:]+")),
+      cell_type = case_when(
+        str_detect(technical, "TE") ~ "TE",
+        str_detect(technical, "FI") ~ "fibre",
+        TRUE ~ "ray"
+      )
+    ) %>%
+    pivot_wider(
+      id_cols = c(genotype, replicate, technical, cell_type, TE),
+      names_from = wavenumber,
+      values_from = intensity
+    ) %>%
+    group_by(genotype, replicate, technical, cell_type, TE) %>%
+    nest()
+}
+
+rmn_pop <- lapply(rmn_files, read_plus) %>%
+  bind_rows() %>%
+  filter(cell_type == "TE") %>%
+  ungroup() %>%
+  select(-cell_type) %>%
+  anti_join(read_csv(paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_exclude.csv"),
+    col_types = "ccccc"
+  ) %>%
+    select(-note))
+
+#### baseline correction ####
+rmn_als <- function(x) {
+  corrected_spectra <- baseline.als(as.matrix(x),
+    lambda = 5,
+    p = 0.01,
+    maxit = 100
+  )
+  as_tibble(corrected_spectra$corrected, rownames = NA)
+}
+
+rmn_pop_corrected <- rmn_pop %>%
+  mutate(corrected_data = map(data, rmn_als)) %>%
+  select(-data) %>%
+  unnest() %>%
+  pivot_longer(-c(genotype, replicate, technical, TE),
+    names_to = "wavenumber",
+    values_to = "corrected.intensity"
+  ) %>%
+  drop_na() %>%
+  mutate(wavenumber = as.numeric(wavenumber))
+
+#### aligment, filtering and scaling ####
+
+# alignment
+lig_peak <- rmn_pop_corrected %>%
+  unite("ID",
+    genotype, replicate, technical, TE,
+    remove = F,
+    sep = "_"
+  ) %>%
+  filter(round(wavenumber, digits = 0) %in% c(1560:1640)) %>%
+  group_by(genotype, replicate, technical, TE) %>%
+  mutate(
+    peak_pos = wavenumber[which.max(corrected.intensity)]
+  ) %>%
+  select(-wavenumber, -corrected.intensity) %>%
+  unique() %>%
+  ungroup() %>%
+  mutate(peak_pos_ref = case_when(
+    genotype == "T89" ~
+    peak_pos[ID == "T89_4_alignedTE_1"],
+    genotype == "CCR1" ~
+    peak_pos[ID == "CCR1_1_TE_1"],
+    genotype == "C4H" ~
+    peak_pos[ID == "C4H_4_cTE_1"],
+    TRUE ~ 0
+  ))
+
+rmn_pop_aligned <- rmn_pop_corrected %>%
+  left_join(lig_peak) %>%
+  group_by(genotype, replicate, technical, TE, wavenumber) %>%
+  mutate(wavenumber = wavenumber + (peak_pos_ref - peak_pos))
+
+# scaling and filtering
+rmn_pop_scaled <- rmn_pop_aligned %>%
+  group_by(genotype, replicate, technical, TE) %>%
+  mutate(
+    AUC = MESS::auc(wavenumber, corrected.intensity),
+    scaled = corrected.intensity / AUC,
+    scaled_lig = corrected.intensity / (
+      (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) + corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1]
+    )
+  ) %>%
+  filter(wavenumber > 200 & wavenumber < 1700)
+
+rmn_pop_avg <- rmn_pop_scaled %>%
+  mutate(wavenumber = round(wavenumber, digits = 1)) %>%
+  group_by(genotype) %>%
+  arrange(genotype, wavenumber) %>%
+  summarise(
+    # roll_mean = RcppRoll::roll_mean(scaled, 50, fill = NA, na.rm = TRUE),
+    roll_mean = slider::slide_index_dbl(scaled, wavenumber, mean, .before = 1, .after = 1),
+    roll_sd = slider::slide_index_dbl(scaled, wavenumber, sd, .before = 2, .after = 2),
+    wavenumber = wavenumber
+    )
+
+rmn_pop_sum <- rmn_pop_scaled %>%
+  group_by(genotype, replicate, technical, TE) %>%
+  summarise(
+    "unscaled_lignin" = 
+      (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
+      corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "broad_lignin" = 
+      corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] +
+      corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1] +
+      corrected.intensity[abs(wavenumber - 1660) == min(abs(wavenumber - 1660))][1] +
+      corrected.intensity[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
+    "total_lignin" = (scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
+      scaled[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "P_rel" = scaled_lig[abs(wavenumber - 1000) == min(abs(wavenumber - 1000))][1],
+    "G_rel" = scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "G_tot" = scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "GOH_rel" = scaled_lig[abs(wavenumber - 1660) == min(abs(wavenumber - 1660))][1],
+    "GCHO_rel" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
+    "GCHO_tot" = scaled[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
+    "S_rel" = scaled_lig[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "S_tot" = scaled[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "O4_van_rel" = scaled_lig[abs(wavenumber - 1303) == min(abs(wavenumber - 1303))][1],
+    "other_van_rel" = scaled_lig[abs(wavenumber - 785) == min(abs(wavenumber - 785))][1],
+    "O4_syr_rel" = scaled_lig[abs(wavenumber - 1297) == min(abs(wavenumber - 1297))][1],
+    "other_syr_rel" = scaled_lig[abs(wavenumber - 450) == min(abs(wavenumber - 450))][1],
+    "Benz_rel" = O4_van_rel + other_van_rel + O4_syr_rel + other_syr_rel,
+    "cellulose" =
+      scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1] +
+        scaled[abs(wavenumber - 375) == min(abs(wavenumber - 375))][1] +
+        scaled[abs(wavenumber - 1120) == min(abs(wavenumber - 1120))][1],
+    "lig.cellu" = total_lignin / cellulose,
+    "G.cellu" = G_tot / cellulose,
+    "S.G" = scaled_lig[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1] /
+      scaled_lig[abs(wavenumber - 1276) == min(abs(wavenumber - 1276))][1],
+    "GOH.G" = scaled_lig[abs(wavenumber - 1660) == min(abs(wavenumber - 1660))][1] /
+      scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "GCHO.GOH" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1] /
+      scaled_lig[abs(wavenumber - 1660) == min(abs(wavenumber - 1660))][1],
+    "AUC" = mean(AUC)
+  )
+
+
+rmn_pop_test <- ggplot(
+  rmn_pop_scaled %>% 
+    filter(genotype != "CCR1") %>%
+    mutate(genotype = recode(genotype, 
+                             "C4H" = "C4H-RNAi",
+                             "T89" = "WT")),
+  aes(
+    x = wavenumber,
+    y = scaled
+  )
+) +
+  scale_x_continuous(trans = "reverse",
+                     # limits = c(1020, 980)
+                     ) +
+  # scale_y_continuous(limits = c(-0.001, 0.003)) +
+  geom_vline(xintercept = 1001,
+             size = 0.2,
+             linetype = 2,
+             colour = "grey70") +
+  # annotate("text",
+  #          label = "1001",
+  #          y = 0.007,
+  #          x = 1002,
+  #          hjust = 0,
+  #          family = "Helvetica",
+  #          size = ggtext_size) +
+  # geom_line(aes(
+  #   group = interaction(genotype, replicate, technical, TE),
+  #   colour = genotype
+  # ),
+  # alpha = 0.25,
+  # size = 0.1
+  # ) +
+  geom_ribbon(data = rmn_pop_avg %>% 
+    filter(genotype != "CCR1") %>%
+    mutate(genotype = recode(genotype, 
+                             "C4H" = "C4H-RNAi",
+                             "T89" = "WT")),
+            aes(fill = genotype,
+                y = roll_mean,
+                ymin = roll_mean - roll_sd,
+                ymax = roll_mean + roll_sd),
+            colour = NA,
+            alpha = 0.25) +
+  geom_line(data = rmn_pop_avg %>% 
+    filter(genotype != "CCR1") %>%
+    mutate(genotype = recode(genotype, 
+                             "C4H" = "C4H-RNAi",
+                             "T89" = "WT")),
+            aes(colour = genotype,
+                y = roll_mean),
+            size = 0.2) +
+  scale_colour_manual(values = pal_ostwald_disc[c(3, 1)]) +
+  scale_fill_manual(values = pal_ostwald_disc[c(3, 1)]) +
+  labs(x = expression(paste("Wavenumber [cm"^-1,"]")),
+       y = "Scaled intensity") +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank()
+  ) +
+  guides(colour = guide_legend(override.aes = list(alpha = 1, size = 1)))
+
+# plotly::ggplotly(rmn_pop_test)
+pdf("rmn_pop.pdf", height = 3)
+rmn_pop_test
+dev.off()
+```
+
+### Load shape data
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+pop_irx <- read_csv(
+  paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/Wiesner/2020-10-22_poplar/registered/2020-11_pop_wiesner_irx.csv")
+  ) %>%
+  mutate(x = x / 5.84,
+         y = y / 5.84)
+
+#### create reference at the height of the cambium for distance calculation ####
+pop_irx_ref <- pop_irx %>%
+  filter(TE == 0) %>%
+  group_by(genotype,
+           replicate,
+           technical,
+           ref_line) %>%
+  summarise(ref.y1 = unique(y),
+            ref.y2 = unique(y),
+            ref.x1 = min(x),
+            ref.x2 = max(x))
+  
+  # select(c(
+  #   "genotype",
+  #   "replicate",
+  #   "technical", 
+  #   "ref_line",
+  #   "X",
+  #   "Y",
+  #   "Length"
+  # )) %>%
+  # mutate(
+  #   "ref.y1" = Y,
+  #   "ref.y2" = Y,
+  #   "ref.x1" = X - (Length / 2),
+  #   "ref.x2" = X + (Length / 2)
+  # )
+
+#### merge reference into data frame ####
+pop_irx <- pop_irx %>%
+  filter(TE != 0) %>%
+  left_join(pop_irx_ref,
+    by = c("genotype", "replicate", "technical", "ref_line")
+  ) %>%
+  mutate(
+    TE = as.character(TE),
+    replicate = as.character(replicate)
+  )
+
+#### calculate difference of the centre of each vessel to the cambium ####
+pop_irx$Distance <-
+  apply(
+    pop_irx[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
+    1,
+    function(x) {
+      a <- c(x[1], x[2])
+      b <- c(x[3], x[5])
+      c <- c(x[4], x[6])
+      v1 <- b - c
+      v2 <- a - b
+      m <- cbind(v1, v2)
+      d <- abs(det(m)) / sqrt(sum(v1 * v1))
+      d
+    }
+  )
+
+celltypes <- read_csv(
+  paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/poplar_cell_types.csv"),
+  col_types = "cccccnc")
+
+wiesner_na <- read_csv(paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/Wiesner/2020-10-22_poplar/registered/missing_wiesner.csv")) %>%
+  unite("ID", everything()) %>%
+  as.list() %>%
+  unlist()
+
+wiesner_bg <- read_csv(paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/Wiesner/2020-10-22_poplar/registered/wiesner_bg.csv")) %>%
+  mutate(stained = log10(255/stained),
+         unstained = log10(255/unstained),
+         wiesner_bg = stained - unstained) %>%
+  group_by(image) %>%
+  summarise(wiesner_bg = mean(wiesner_bg))
+
+pop_bin <- pop_irx %>%
+  left_join(celltypes) %>%
+  filter(cell_type == "SV") %>%
+  group_by(genotype, replicate, technical, cell_type, TE) %>%
+  summarise(Distance = mean(Distance)) %>%
+  group_by(genotype) %>%
+  mutate(median_dist = median(Distance, na.rm = TRUE),
+            cell_type = case_when(Distance > median_dist  ~ "Old SV",
+                               TRUE ~ "Young SV"))
+
+rmn_pop_data <- rmn_pop_sum %>%
+  left_join(pop_irx) %>%
+  left_join(pop_bin) %>%
+  mutate(cell_type = case_when(is.na(cell_type) ~ "PV",
+                               TRUE ~ cell_type)) %>%
+  left_join(celltypes %>% select(-cell_type)) %>%
+  unite("ID", genotype, replicate, technical, TE, remove = FALSE) %>%
+  mutate(value_stained = case_when(ID %in% wiesner_na ~ NA_real_,
+                                   is.na(value_stained) ~ NA_real_,
+                                   TRUE ~ value_stained),
+         value_unstained = case_when(ID %in% wiesner_na ~ NA_real_,
+                                     is.na(value_stained) ~ NA_real_,
+                                   TRUE ~ value_unstained)) %>%
+  select(-ID) %>%
+  left_join(wiesner_bg, by = "image") %>%
+  mutate(value_stained = log10(255/value_stained),
+         value_unstained = log10(255/value_unstained),
+         wiesner_raw = value_stained - value_unstained,
+         wiesner = wiesner_raw - wiesner_bg) %>%
+  nest(data = c(point, x, y, value_stained, value_unstained, wiesner_raw, wiesner)) %>%
+  mutate(genotype = recode(genotype, "T89" = "WT"),
+         genotype = ordered(genotype, levels = c("WT", "CCR1", "C4H")))
+
+wiesner_pop <- rmn_pop_data %>%
+  unnest(data)
+
+wiesner_pop_avg <- wiesner_pop %>%
+  group_by(genotype, replicate, technical, TE, cell_type) %>%
+  summarise(wiesner_avg = mean(wiesner, na.rm = TRUE),
+            wiesner_upper = quantile(wiesner, probs = 0.75, na.rm = TRUE)) %>%
+  filter(wiesner_avg > 0)
+
+
+model_data_pop <- rmn_pop_data %>%
+  left_join(wiesner_pop_avg) %>%
+  mutate(
+    "GCHO_term.GCHO_tot" = GCHO_rel / wiesner_avg,
+    "GCHO.GOH" = wiesner_avg / GOH_rel) %>%
+  separate(repeat_of, into = c("repeat_technical", "repeat_TE")) %>%
+  mutate(technical = case_when(!is.na(repeat_technical) ~ repeat_technical,
+                               TRUE ~ technical),
+         TE = case_when(!is.na(repeat_TE) ~ repeat_TE,
+                               TRUE ~ TE)) %>%
+  group_by(genotype, replicate, technical, cell_type, TE) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+pop_n <-model_data_pop %>%
+  group_by(genotype, cell_type) %>%
+  summarise(n = n())
+
+ write_csv(pop_n, "poplar_n.csv")
+```
+
+### Shape overview
+
+```{r}
+
+letters <- letter_groups(rmn_pop_data, 
+                         Solidity,
+                         genotype,
+                         "kruskal",
+                         cell_type,
+                         print_position = "below")
+
+ggplot(rmn_pop_data) +
+  geom_violin(aes(x = genotype, y = Solidity)) +
+  geom_quasirandom(aes(x = genotype, y = Solidity, colour = replicate),
+                   alpha = 0.5) +
+  geom_text(data = letters,
+            aes(label = Letters,
+                x = genotype,
+                y = Solidity)) +
+  scale_colour_viridis_d() +
+  facet_wrap(~cell_type)
+```
+
+### Violin plots
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+wt_data_pop <- model_data_pop %>%
+  filter(genotype == "WT") %>%
+  group_by(cell_type, replicate, technical, TE) %>%
+  select(-genotype) %>%
+  mutate(n_v = n_v * 100) %>% 
+  pivot_longer(
+    cols = -c(replicate:TE),
+    names_to = "variable",
+    values_to = "value"
+  ) %>%
+  ungroup() %>%
+  mutate(
+    cell_type = ordered(cell_type, levels = c("PV", "Old SV", "Young SV"))
+  ) %>%
+  anti_join(read_csv("/home/leonard/Dropbox/2020_IRX manuscript/pop_g_layers.csv",
+                     col_types = "cccc"))
+
+rmn_violin <- function(x) {
+  letters <- letter_groups(wt_data_pop %>% filter(variable == x),
+    value,
+    cell_type,
+    "tukey",
+    print_position = "below",
+    print_adjust = 0.5
+  ) %>%
+    mutate(cell_type = ordered(cell_type, levels = c("PV", "Old SV", "Young SV")))
+
+  ggplot(
+    data = wt_data_pop %>% filter(variable == x),
+    aes(x = cell_type, y = value)
+  ) +
+    geom_quasirandom(
+      aes(fill = cell_type),
+      dodge.width = 0.6,
+      shape = 21,
+      # width = 0.1,
+      # colour = NA,
+      alpha = 0.75,
+      size = 1,
+      stroke = 0.2
+    ) +
+    geom_violin(aes(
+      group = cell_type,
+      # fill = cell.type
+    ),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+    ) +
+    geom_text(
+      data = letters,
+      aes(label = Letters),
+      size = ggtext_size,
+      family = "Helvetica",
+      position = position_dodge(width = 0.6)
+    ) +
+    scale_x_discrete(labels = label_wrap(5)) +
+    scale_fill_manual(values = pal_flame_disc) +
+    expand_limits(y = 0) +
+    theme_leo() +
+    theme(
+      text = element_text(family = "Helvetica"),
+      legend.position = "none",
+      axis.text.x = element_text(vjust = 1)
+    )
+}
+
+rmn_nv <- rmn_violin("n_v") +
+  labs(
+    x = "",
+    y = expression(paste("Adj. vessels [%]"))
+  )
+
+rmn_area <- rmn_violin("Area") +
+  labs(
+    x = "",
+    y = expression(paste("Area [µm"^2, "]"))
+  )
+
+rmn_lig <- rmn_violin("total_lignin") +
+  labs(
+    x = "",
+    y = expression(paste("Relative lignin"))
+  )
+
+rmn_cellu <- rmn_violin("cellulose") +
+  labs(
+    x = "",
+    y = expression(paste("Relative cellulose"))
+  )
+
+rmn_gcho.goh <- rmn_violin("GCHO.GOH") +
+  labs(
+    x = "",
+    y = expression(paste(bold(G)[CHO] ~ "/" ~ bold(G)[CHOH]))
+  )
+
+rmn_s.g <- rmn_violin("S.G") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ bold(S) ~ "/" ~ bold(G)))
+  )
+
+rmn_gcho <- rmn_violin("GCHO_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Rel. ~ terminal ~ bold(G)[CHO]))
+  )
+
+rmn_goh <- rmn_violin("GOH_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ bold(G)[CHOH]))
+  )
+
+rmn_p <- rmn_violin("P_rel") +
+  labs(
+    x = "",
+    y = expression(paste(Relative ~ bold(P)))
+  )
+
+rmn_benz <- rmn_violin("Benz_rel") +
+  labs(
+    x = "",
+    y = "Relative benzald."
+  )
+
+rmn_gcho_term.gcho_tot <- rmn_violin("GCHO_term.GCHO_tot") +
+  labs(
+    x = "",
+    y = expression(paste(Terminal ~ bold(G)[CHO] ~ "/" ~ bold(G)[CHO]))
+  )
+```
+
+#### Assemble figure
+
+```{r figure 2, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%', fig.width=5, fig.height=4}
+celltypes_WT <-
+  rasterGrob(image_read_pdf(
+    "/home/leonard/Dropbox/2020_IRX manuscript/Submission/Edits/popWT.pdf",
+    density = 900
+  ))
+
+top <- plot_grid(
+  celltypes_WT,
+  rmn_nv,
+  labels = c("A", "B"),
+  vjust = 1,
+  nrow = 1,
+  # hjust = 0,
+  label_size = 10,
+  label_fontfamily = "Helvetica",
+  align = "hv",
+  axis = "lr",
+  rel_widths = c(2.25, 1)
+)
+
+bottom <- plot_grid(
+  rmn_area,
+  # rmn_cellu,
+  rmn_lig,
+  rmn_s.g,
+  rmn_benz,
+  rmn_goh,
+  rmn_gcho,
+  # rmn_gcho.goh,
+  # rmn_gcho_term.gcho_tot,
+  labels = c("C", "D", "E", "F", "G", "H"),
+  vjust = 1,
+  # hjust = 0,
+  nrow = 2,
+  label_y = 1.05,
+  label_size = 10,
+  label_fontfamily = "Helvetica",
+  align = "hv",
+  axis = "lr"
+)
+
+pdf("IRX_figure_pop1.pdf", width = onecol, height = onecol * 0.95)
+plot_grid(
+  top,
+  bottom,
+  labels = c(""),
+  vjust = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica",
+  align = "hv",
+  axis = "tlr",
+  nrow = 2,
+  rel_heights = c(1, 2)
+)
+dev.off()
+```
+### Collapse 
+
+#### Visual vessel overview
+
+```{r figure 3, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+pop_irx <- read_csv(
+  paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/Wiesner/2020-10-22_poplar/registered/2020-11_pop_wiesner_irx.csv")
+  ) %>%
+  mutate(x = x / 5.84,
+         y = y / 5.84)
+
+#### create reference at the height of the cambium for distance calculation ####
+pop_irx_ref <- pop_irx %>%
+  filter(TE == 0) %>%
+  group_by(genotype,
+           replicate,
+           technical,
+           ref_line) %>%
+  summarise(ref.y1 = unique(y),
+            ref.y2 = unique(y),
+            ref.x1 = min(x),
+            ref.x2 = max(x))
+  
+  # select(c(
+  #   "genotype",
+  #   "replicate",
+  #   "technical",
+  #   "ref_line",
+  #   "X",
+  #   "Y",
+  #   "Length"
+  # )) %>%
+  # mutate(
+  #   "ref.y1" = Y,
+  #   "ref.y2" = Y,
+  #   "ref.x1" = X - (Length / 2),
+  #   "ref.x2" = X + (Length / 2)
+  # )
+
+#### merge reference into data frame ####
+pop_irx <- pop_irx %>%
+  filter(TE != 0) %>%
+  left_join(pop_irx_ref,
+    by = c("genotype", "replicate", "technical", "ref_line")
+  ) %>%
+  mutate(
+    TE = as.character(TE),
+    replicate = as.character(replicate)
+  )
+
+#### calculate difference of the centre of each vessel to the cambium ####
+pop_irx$Distance <-
+  apply(
+    pop_irx[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
+    1,
+    function(x) {
+      a <- c(x[1], x[2])
+      b <- c(x[3], x[5])
+      c <- c(x[4], x[6])
+      v1 <- b - c
+      v2 <- a - b
+      m <- cbind(v1, v2)
+      d <- abs(det(m)) / sqrt(sum(v1 * v1))
+      d
+    }
+  )
+
+celltypes <- read_csv(
+  paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/poplar_cell_types.csv"),
+  col_types = "cccccnc")
+
+pop_bin <- pop_irx %>%
+  left_join(celltypes) %>%
+  filter(cell_type == "SV") %>%
+  group_by(genotype, replicate, technical, cell_type, TE) %>%
+  summarise(Distance = mean(Distance)) %>%
+  group_by(genotype) %>%
+  mutate(median_dist = median(Distance, na.rm = TRUE),
+            cell_type = case_when(Distance > median_dist  ~ "early SV",
+                               TRUE ~ "recent SV"))
+
+pop_str <- pop_irx %>%
+  left_join(pop_bin) %>%
+  mutate(cell_type = case_when(is.na(cell_type) ~ "PV",
+                               TRUE ~ cell_type)) %>%
+  select(genotype, replicate, technical, cell_type, TE, point, x, y) %>%
+  unite("ID", genotype:TE, remove = FALSE, sep = "_") %>%
+  group_by(ID) %>%
+  mutate(
+    x = x - mean(x, na.rm = TRUE),
+    y = y - mean(y, na.rm = TRUE)
+  ) %>%
+  group_by(ID, point) %>%
+  summarise(xy = list(c(x, y))) %>%
+  group_by(ID) %>%
+  mutate(
+    max_point = max(point)
+  ) %>%
+  bind_rows(filter(., point == 0) %>%
+    group_by(ID) %>%
+    mutate(point = max_point + 1)) %>%
+  arrange(ID, point) %>%
+  summarise(xy = list(c(xy))) %>%
+  mutate(geometry = map(
+    xy,
+    ~ do.call(rbind, .) %>% # make each list a matrix
+      list() %>% # st_polygon() requires a list
+      st_polygon()
+  )) %>%
+  st_as_sf() %>%
+  group_by(ID) %>%
+  mutate(
+    area = st_area(geometry),
+    CH = st_convex_hull(geometry),
+    convex_area = st_area(CH),
+    convexity = area / convex_area,
+    circularity = 4 * pi * (area / (lwgeom::st_perimeter(geometry)^2))
+  ) %>%
+  separate(ID, into = c("genotype", "replicate", "technical", "cell_type", "TE"), sep = "_") %>%
+  mutate(
+    genotype = recode(genotype, "T89" = "WT"),
+    genotype = ordered(genotype, levels = c(
+      "WT",
+      "CCR1",
+      "C4H"
+    )),
+    cell_type = ordered(cell_type, levels = c("PV", "early SV", "recent SV"))
+  )
+
+pop_str_n <- pop_str %>%
+  group_by(genotype, cell_type) %>%
+  summarise(n = n())
+
+sf_ROIs <- ggplot() +
+  geom_sf(
+    data = pop_str,
+    aes(colour = circularity),
+    # colour = "black",
+    fill = NA,
+    lwd = 0.1,
+    key_glyph = "point"
+  ) +
+  theme_leo() +
+  scale_x_continuous(expand = expand_scale(mult = 0)) +
+  scale_y_continuous(expand = expand_scale(mult = 0)) +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "right",
+    panel.border = element_blank(),
+    # panel.background = element_rect(fill = "black"),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank(),
+    strip.text = element_text(hjust = 0.5, face = "italic")
+  ) +
+  scale_colour_gradientn(colours = pal_ostwald_cont, trans = "reverse", name = "Circularity") +
+  guides(colour = guide_colourbar(barwidth = unit(2, "mm"))) +
+  facet_grid(cell_type ~ genotype, switch = "y")
+
+pdf("pop_vessels.pdf", width = twocol * 0.7, height = onecol)
+sf_ROIs
+dev.off()
+```
+
+
+#### Model otimisation
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+
+model_pv_pop <- model_data_pop %>%
+  filter(cell_type == "PV") %>%
+  ungroup() %>%
+  select(
+    Solidity,
+    # wiesner_avg,
+    n_v,
+    Perim.,
+    cellulose,
+    total_lignin,
+    # G_rel,
+    # GOH.G,
+    S_rel,
+    P_rel,
+    GOH_rel,
+    GCHO_rel,
+    # O4_van_rel,
+    # other_van_rel,
+    # O4_syr_rel,
+    # other_syr_rel,
+    # Benz_rel
+    # lig.cellu,
+  ) %>%
+  drop_na()
+
+model_esv_pop <- model_data_pop %>%
+  filter(cell_type == "Early SV") %>%
+  ungroup() %>%
+  select(
+    Solidity,
+    # wiesner_avg,
+    n_v,
+    Perim.,
+    cellulose,
+    total_lignin,
+    # G_rel,
+    # GOH.G,
+    S_rel,
+    P_rel,
+    GOH_rel,
+    GCHO_rel,
+    # O4_van_rel,
+    # other_van_rel,
+    # O4_syr_rel,
+    # other_syr_rel,
+    # Benz_rel
+    # lig.cellu
+  ) %>%
+  drop_na()
+
+model_rsv_pop <- model_data_pop %>%
+  filter(cell_type == "Recent SV") %>%
+  ungroup() %>%
+  select(
+    Solidity,
+    # wiesner_avg,
+    n_v,
+    Perim.,
+    cellulose,
+    total_lignin,
+    # G_rel,
+    # GOH.G,
+    S_rel,
+    P_rel,
+    GOH_rel,
+    GCHO_rel,
+    # O4_van_rel,
+    # other_van_rel,
+    # O4_syr_rel,
+    # other_syr_rel,
+    # Benz_rel
+    # lig.cellu
+  ) %>%
+  drop_na()
+
+# Fit the full model 
+full_model <- lm(Solidity ~ ., data = model_pv_pop)
+# Stepwise regression model
+step_model <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+summary(step_model)
+
+# Fit the full model 
+full_model <- lm(Solidity ~ ., data = model_esv_pop)
+# Stepwise regression model
+step_model <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+summary(step_model)
+
+# Fit the full model 
+full_model <- lm(Solidity ~., data = model_rsv_pop)
+# Stepwise regression model
+step_model <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+summary(step_model)
+
+
+```
+
+#### SEM PV
+
+```{r}
+
+psem_data_pv <- model_data_pop %>%
+  filter(cell_type == "PV") %>%
+  ungroup() %>%
+  select(
+    Solidity,
+    Circ.,
+    n_v
+  ) %>%
+  drop_na()
+
+psem_pop <- psem(
+  lm(Circ. ~
+    n_v +
+    Solidity,
+  data = psem_data_pv
+  ),
+  lm(Solidity ~
+    n_v,
+  data = data.frame(psem_data_pv)
+  ),
+  data = data.frame(psem_data_pv)
+)
+
+# ind_claims <- ind_claims %>%
+#   bind_rows(summary(psem_pop)[["dTable"]][, c(1, 4, 5)] %>%
+#     mutate(
+#       model = "Old",
+#       species = "Poplar",
+#       fishC = summary(psem_pop)[["Cstat"]][["Fisher.C"]],
+#       fishP = summary(psem_pop)[["Cstat"]][["P.Value"]]
+#     ))
+
+coefs <- coefs %>%
+  bind_rows(summary(psem_pop)[["coefficients"]][, c(1:8)] %>%
+    mutate(
+      model = "PV",
+      species = "Poplar"
+    ))
+
+plot(psem_pop)
+summary(psem_pop)
+
+```
+
+#### SEM early
+
+```{r}
+
+psem_data_early <-  model_data_pop %>%
+  filter(cell_type == "Early SV") %>%
+  ungroup() %>%
+  select(
+    Solidity,
+    Circ.,
+    n_v,
+    total_lignin,
+    P_rel,
+    GOH_rel,
+    GCHO_rel,
+    Benz_rel
+  ) %>%
+  drop_na()
+
+psem_pop <- psem(
+  lm(Circ. ~
+    n_v +
+    Solidity,
+  data = psem_data_early
+  ),
+  lm(Solidity ~
+    n_v +
+    P_rel +
+    GOH_rel +
+    GCHO_rel +
+    total_lignin,
+  data = data.frame(psem_data_early)
+  ),
+  data = data.frame(psem_data_early)
+)
+
+ind_claims <- ind_claims %>%
+  bind_rows(summary(psem_pop)[["dTable"]][, c(1, 4, 5)] %>%
+    mutate(
+      model = "Early SV",
+      species = "Poplar",
+      fishC = summary(psem_pop)[["Cstat"]][["Fisher.C"]],
+      fishP = summary(psem_pop)[["Cstat"]][["P.Value"]]
+    ))
+
+coefs <- coefs %>%
+  bind_rows(summary(psem_pop)[["coefficients"]][, c(1:8)] %>%
+    mutate(
+      model = "Old",
+      species = "Poplar"
+    ))
+
+plot(psem_pop)
+summary(psem_pop)
+
+```
+
+#### SEM recent
+
+```{r}
+
+psem_data_recent <-  model_data_pop %>%
+  filter(cell_type == "Recent SV") %>%
+  ungroup() %>%
+  select(
+    Solidity,
+    Circ.,
+    n_v,
+    Perim.,
+    S_rel,
+    P_rel,
+    GOH_rel,
+    GCHO_rel
+  ) %>%
+  drop_na()
+
+psem_pop <- psem(
+  lm(Circ. ~
+    n_v +
+    Solidity,
+  data = psem_data_recent
+  ),
+  lm(Solidity ~
+    n_v +
+    Perim. +
+    P_rel +
+    GOH_rel +
+    S_rel +
+    GCHO_rel,
+  data = data.frame(psem_data_recent)
+  ),
+  data = data.frame(psem_data_recent)
+)
+
+ind_claims <- ind_claims %>%
+  bind_rows(summary(psem_pop)[["dTable"]][, c(1, 4, 5)] %>%
+    mutate(
+      model = "Recent SV",
+      species = "Poplar",
+      fishC = summary(psem_pop)[["Cstat"]][["Fisher.C"]],
+      fishP = summary(psem_pop)[["Cstat"]][["P.Value"]]
+    ))
+
+coefs <- coefs %>%
+  bind_rows(summary(psem_pop)[["coefficients"]][, c(1:8)] %>%
+    mutate(
+      model = "Young",
+      species = "Poplar"
+    ))
+
+plot(psem_pop)
+summary(psem_pop)
+
+```
+
+## Plant bending
+
+### Hydration influence
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+medium_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/WT_medium.csv")) %>%
+  pivot_longer(cols = c(stiffness, strength), values_to = "value", names_to = "variable") %>%
+  mutate(medium = ordered(medium, levels = c("Water", "Air", "Sorbitol")))
+
+bending_files <-
+  list.files(
+    path = paste0(datapath, "PhD/IRX/Bending/media_raw/"),
+    pattern = "*.txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_delim(flnm,
+    delim = ";",
+    skip = grep("Raw Data", readLines(flnm)),
+    col_types = "cccccc",
+    col_names = FALSE
+  ) %>%
+    fill(X1) %>%
+    filter(X2 != "Time" & X2 != "(s)") %>%
+    mutate(
+      filename = basename(flnm)
+    ) %>%
+    rename(
+      "section" = X1,
+      "time" = X2,
+      "displacement" = X3,
+      "force" = X4,
+      "stress" = X5,
+      "strain" = X6
+    )
+}
+medium_curves <- lapply(bending_files, read_plus) %>%
+  bind_rows() %>%
+  mutate(
+    filename = str_remove(filename, fixed("Stem ")),
+    filename = str_remove(filename, fixed(".txt"))
+  ) %>%
+  separate(filename, into = c("replicate", "medium"), sep = " ") %>%
+  mutate(
+    replicate = as.factor(replicate),
+    medium = as.factor(medium)
+  ) %>%
+  mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed(".")))) %>%
+  mutate(medium = ordered(medium, levels = c("Water", "Air", "Sorbitol")))
+
+medium_breaking <- medium_curves %>%
+  group_by(medium, replicate, section) %>%
+  filter(strain < 2.5) %>%
+  summarise(
+    break_point = max(strain[stress == max(stress)]),
+    strength = max(stress)
+  ) %>%
+  pivot_longer(cols = c(break_point, strength), names_to = "variable", values_to = "value")
+
+flex_violin <- function(x, dat = medium_data) {
+  letters <- letter_groups(dat %>% filter(variable == x),
+    value,
+    medium,
+    "tukey",
+    print_position = "below",
+    print_adjust = 0.5
+  )
+
+  ggplot(
+    data = dat %>% filter(variable == x),
+    aes(x = medium, y = value)
+  ) +
+    geom_quasirandom(
+      aes(fill = medium),
+      # dodge.width = 0.6,
+      shape = 21,
+      # width = 0.1,
+      # colour = NA,
+      alpha = 0.75,
+      size = 1,
+      stroke = 0.2
+    ) +
+    geom_violin(
+      draw_quantiles = 0.5,
+      fill = "white",
+      colour = "black",
+      alpha = 0.85,
+      width = 0.2,
+      position = position_dodge(width = 0.6),
+      size = 0.2,
+      scale = "width"
+    ) +
+    geom_text(
+      data = letters,
+      aes(label = Letters),
+      size = ggtext_size,
+      family = "Helvetica",
+      position = position_dodge(width = 0.6)
+    ) +
+    scale_fill_grey(start = 0.9, end = 0.1) +
+    expand_limits(y = 0) +
+    scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+    theme_leo() +
+    theme(
+      text = element_text(family = "Helvetica"),
+      legend.position = "none"
+    )
+}
+
+medium_strength <- flex_violin("strength") +
+  labs(y = "Strength [MPa]") +
+  theme(axis.title.x = element_blank())
+
+medium_stiffness <- flex_violin("stiffness") +
+  labs(y = "Stiffness [MPa]") +
+  theme(axis.title.y = element_blank()) +
+  scale_x_discrete(
+    limits = rev(levels(medium_data$medium))
+  ) +
+  coord_flip()
+
+medium_breakpoint <- flex_violin("break_point", medium_breaking) +
+  labs(y = "Strain [%] at breaking") +
+  coord_flip() +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  scale_x_discrete(
+    limits = rev(levels(medium_data$medium))
+  )
+
+pdf("bending_medium.pdf", width = onecol / 1.25, height = onecol / 3)
+hydration <- plot_grid(
+  medium_strength,
+  medium_stiffness,
+  labels = c("B", "C"),
+  # vjust = 1,
+  nrow = 1,
+  rel_widths = c(1, 1.1),
+  label_size = 10,
+  label_fontfamily = "Helvetica"
+)
+hydration
+dev.off()
+```
+
+### Mutant bending
+
+#### Load data
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+#### fah1 ####
+bending_files <-
+  list.files(
+    path = paste0(datapath, "PhD/IRX/Bending/fah1_raw/"),
+    pattern = "*.txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_delim(flnm,
+    delim = ";",
+    skip = grep("Raw Data", readLines(flnm)),
+    col_types = "cccccc",
+    col_names = FALSE
+  ) %>%
+    fill(X1) %>%
+    filter(X2 != "Time" & X2 != "(s)") %>%
+    mutate(
+      filename = basename(flnm)
+    ) %>%
+    rename(
+      "section" = X1,
+      "time" = X2,
+      "displacement" = X3,
+      "force" = X4,
+      "strain" = X5,
+      "stress" = X6
+    )
+}
+
+fahA <- read_delim(bending_files[1],
+  delim = ";",
+  skip = grep("Raw Data", readLines(bending_files[1])),
+  col_types = "cccccc",
+  col_names = FALSE
+) %>%
+  mutate(filename = basename(bending_files[1])) %>%
+  fill(X1) %>%
+  filter(X2 != "Displacement" & X2 != "(mm)") %>%
+  rename(
+    "section" = X1,
+    "displacement" = X2,
+    "force" = X3,
+    "strain" = X4,
+    "stress" = X5
+  )
+
+bending_data <- lapply(bending_files[-1], read_plus) %>%
+  bind_rows()
+
+bending_data <- bending_data %>%
+  bind_rows(fahA) %>%
+  separate(filename, into = c("genotype", "replicate"), sep = " ", extra = "merge") %>%
+  mutate(
+    replicate = str_remove(replicate, "Air"),
+    replicate = str_remove(replicate, ".txt"),
+    replicate = str_remove(replicate, "\\d\\dcm"),
+    replicate = str_remove(replicate, " "),
+    replicate = as.factor(replicate),
+    section = as.factor(section),
+    experiment = factor("fah1", levels = c("fah1", "cad")),
+    genotype = ordered(recode(genotype, "Fah1" = "fah1"), levels = c("WT", "fah1", "cad4xcad5"))
+  ) %>%
+  mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
+
+read_stiffness <- function(flnm) {
+  read_delim(flnm,
+    delim = ";",
+    skip = 1,
+    col_names = FALSE
+  ) %>%
+    select(-X1) %>%
+    filter(str_detect(X2, "Fah1|WT")) %>%
+    rename(
+      "name" = X2,
+      "modulus" = X3,
+      "max.stress" = X4,
+      "AUC" = X5,
+      "N.max.stress" = X6
+    ) %>%
+    mutate(
+      name = str_remove(name, " Air"),
+      experiment = factor("fah1", levels = c("fah1", "cad"))
+    ) %>%
+    separate(name, into = c("genotype", "replicate", "sample"), extra = "merge") %>%
+    mutate(
+      genotype = ordered(recode(genotype, "Fah1" = "fah1"), levels = c("WT", "fah1", "cad4xcad5")),
+      replicate = as.factor(replicate),
+      sample = as.factor(sample)
+    ) %>%
+    mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
+}
+
+stiffness_fah1 <- lapply(bending_files, read_stiffness) %>%
+  bind_rows()
+
+#### cad4xcad5 ####
+bending_files <-
+  list.files(
+    path = paste0(datapath, "PhD/IRX/Bending/cad_raw/"),
+    pattern = "*.txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_delim(flnm,
+    delim = ";",
+    skip = grep("Raw Data", readLines(flnm)),
+    col_types = "ccccc",
+    col_names = FALSE
+  ) %>%
+    # fill(X1) %>%
+    filter(X1 != "Time" & X1 != "(s)") %>%
+    mutate(
+      filename = basename(flnm),
+      filename = str_remove(filename, ".txt"),
+      genotype = "cad4xcad5"
+    ) %>%
+    rename(
+      "time" = X1,
+      "displacement" = X2,
+      "force" = X3,
+      "strain" = X4,
+      "stress" = X5
+    ) %>%
+    separate(filename, into = c("section", "replicate"), sep = "_")
+}
+
+bending_data_cad <- lapply(bending_files, read_plus) %>%
+  bind_rows() %>%
+  mutate(
+    replicate = as.factor(replicate),
+    section = as.factor(section),
+    experiment = factor("cad", levels = c("fah1", "cad")),
+    genotype = ordered(genotype, levels = c("WT", "fah1", "cad4xcad5"))
+  ) %>%
+  mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
+
+read_stiffness <- function(flnm) {
+  read_delim(flnm,
+    delim = ";",
+    skip = 1,
+    col_names = FALSE
+  ) %>%
+    select(-X1) %>%
+    filter(str_detect(X2, "top|mid|Base")) %>%
+    rename(
+      "name" = X2,
+      "modulus" = X3,
+      "max.stress" = X4
+    ) %>%
+    mutate(
+      experiment = factor("cad", levels = c("fah1", "cad")),
+      genotype = ordered("cad4xcad5", levels = c("WT", "fah1", "cad4xcad5"))
+    ) %>%
+    separate(name, into = c("replicate", "sample"), extra = "merge") %>%
+    mutate(
+      replicate = as.factor(replicate),
+      sample = as.factor(sample)
+    ) %>%
+    mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
+}
+
+bending_files_stiff <- bending_files %>%
+  str_subset(pattern = fixed("_1."))
+
+stiffness_cad <- lapply(bending_files_stiff, read_stiffness) %>%
+  bind_rows()
+
+bending_data_complete <- bind_rows(bending_data, bending_data_cad)
+
+bending_pre <- bending_data_complete %>%
+  group_by(genotype, replicate, section) %>%
+  summarise(
+    break_point = strain[stress == max(stress)],
+    strength = max(stress)
+  ) %>%
+  pivot_longer(cols = c(break_point, strength), names_to = "variable", values_to = "value")
+
+stiffness_complete <- stiffness_fah1 %>%
+  bind_rows(stiffness_cad) %>%
+  select(-AUC, -N.max.stress) %>%
+  pivot_longer(cols = c(modulus, max.stress), names_to = "variable", values_to = "value")
+
+fold_change <- stiffness_complete %>%
+  group_by(genotype, variable) %>%
+  summarise(value = median(value)) %>%
+  group_by(variable) %>%
+  mutate(value = value / value[genotype == "WT"])
+
+fold_change_flex <- bending_pre %>%
+  group_by(genotype, variable) %>%
+  summarise(value = median(value)) %>%
+  group_by(variable) %>%
+  mutate(value = value / value[genotype == "WT"])
+```
+
+#### Figures
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+flex_violin <- function(x, dat = stiffness_complete) {
+  letters <- letter_groups(dat %>% filter(variable == x),
+    value,
+    genotype,
+    "tukey",
+    print_position = "below",
+    print_adjust = 0.5
+  )
+
+  ggplot(
+    data = dat %>% filter(variable == x),
+    aes(x = genotype, y = value)
+  ) +
+    # geom_line(aes(group = interaction(cell.type, variable, cell, measurement)),
+    #           size = 0.2,
+    #           alpha = 0.25) +
+    geom_quasirandom(
+      aes(fill = genotype),
+      dodge.width = 0.6,
+      shape = 21,
+      # width = 0.1,
+      # colour = NA,
+      alpha = 0.75,
+      size = 1,
+      stroke = 0.2
+    ) +
+    # geom_boxplot(
+    #   aes(group = interaction(cell.type, variable), fill = cell.type),
+    #   # fill = "white",
+    #   alpha = 0.5,
+    #   width = 0.6,
+    #   position = position_dodge2(width = 1),
+    #   outlier.alpha = 0,
+    #   lwd = 0.25,
+    #   fatten = 1,
+    #   width = 0.25
+    # ) +
+    geom_violin(
+      # aes(group = interaction(days, cell.type),
+      # fill = cell.type
+      # ),
+      draw_quantiles = 0.5,
+      fill = "white",
+      colour = "black",
+      alpha = 0.85,
+      width = 0.2,
+      position = position_dodge(width = 0.6),
+      size = 0.2,
+      scale = "width"
+    ) +
+    geom_text(
+      data = letters,
+      aes(label = Letters),
+      size = ggtext_size,
+      family = "Helvetica",
+      position = position_dodge(width = 0.6)
+    ) +
+    scale_x_discrete(
+      labels = rev(c(
+        "WT",
+        expression(italic("fah1")),
+        expression(paste(italic("cad4"), "x", italic("5")))
+      )),
+      limits = rev(levels(stiffness_complete$genotype))
+    ) +
+    scale_fill_manual(values = c(
+      pal_ostwald_disc[1],
+      pal_ostwald_disc[3],
+      pal_ostwald_disc[3]
+    )) +
+    # scale_fill_gradientn(colours = pal_ostwald_cont, trans = "reverse")
+    expand_limits(y = 0) +
+    scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+    theme_leo() +
+    theme(
+      text = element_text(family = "Helvetica"),
+      legend.position = "none",
+      # panel.border = element_blank(),
+      # axis.line.x = element_line(size = 0.2),
+      # axis.line.y = element_line(size = 0.2)
+    )
+}
+
+
+violin_strength <- flex_violin("max.stress") +
+  labs(y = "Strength [MPa]") +
+  theme(
+    # axis.text.y = element_blank(),
+    # axis.ticks.y = element_blank(),
+    # axis.line.x = element_line(size = 0.2)
+  ) + theme(axis.title.x = element_blank()) +
+  scale_x_discrete(
+    labels = c(
+      "WT",
+      expression(italic("fah1")),
+      expression(paste(italic("cad4"), "x", italic("5")))
+    ),
+    limits = levels(stiffness_complete$genotype)
+  )
+
+violin_stiffness <- flex_violin("modulus") +
+  labs(y = "Stiffness [MPa]") +
+  scale_y_continuous(
+    expand = expand_scale(mult = c(0.1, 0.05)),
+    breaks = c(0, 3000, 6000)
+  ) +
+  theme(axis.title.y = element_blank()) +
+  coord_flip()
+
+violin_breakpoint <- flex_violin("break_point", bending_pre) +
+  labs(y = "Strain [%] at breaking") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    # axis.line.x = element_line(size = 0.2)
+  ) +
+  theme(axis.title.y = element_blank()) +
+  coord_flip()
+
+pdf("breaking_point.pdf", width = 2, height = 2)
+violin_breakpoint
+dev.off()
+
+```
+
+### Mutant lignin composition
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+heights <- read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
+  select(genotype, height) %>%
+  filter(genotype %in% c("col-0", "fah1", "cad4xcad5")) %>%
+  mutate(genotype = recode(genotype, "col-0" = "WT")) %>%
+  group_by(genotype) %>%
+  summarise(
+    mean.height = mean(height),
+    sd.height = sd(height)
+  )
+
+biochem_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/bending_biochem.csv")) %>%
+  group_by(genotype) %>%
+  summarise(
+    mean.lig.py = mean(lignin.py),
+    sd.lig.py = sd(lignin.py),
+    mean.lig.tga = mean(lignin.tga),
+    sd.lig.tga = sd(lignin.tga),
+    mean.sg = mean(s.g),
+    sd.sg = sd(s.g),
+    mean.cho.choh = mean(gcho.gchoh),
+    sd.cho.choh = sd(gcho.gchoh)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    scaled.lig.py = scale_range(mean.lig.py),
+    scaled.lig.tga = scale_range(mean.lig.tga),
+    scaled.sg = scale_range(mean.sg),
+    scaled.cho.choh = scale_range(mean.cho.choh)
+  ) %>%
+  left_join(heights)
+
+bending_avg <- stiffness_complete %>%
+  group_by(genotype, variable) %>%
+  summarise(mean = mean(value)) %>%
+  pivot_wider(
+    id_cols = genotype,
+    names_from = variable,
+    values_from = mean
+  ) %>%
+  left_join(biochem_data)
+
+biochem <- ggplot(
+  biochem_data,
+  aes(x = genotype)
+) +
+  annotate("rect",
+    ymin = c(0.5, 2.5),
+    ymax = c(1.5, 3.5),
+    xmin = -Inf,
+    xmax = Inf,
+    fill = "grey95",
+    colour = NA
+  ) +
+  geom_point(aes(
+    size = scaled.lig.tga,
+    y = 1,
+    colour = genotype,
+    # alpha = mean.lig.tga / 10
+  ),
+  alpha = 0.75,
+  # size = 8,
+  shape = 16
+  ) +
+  # geom_segment(aes(y = 0.75,
+  #                  yend = 0.75 + (scaled.lig.tga * 0.5),
+  #                  x = c(0.75, 1.75, 2.75),
+  #                  xend = c(0.75, 1.75, 2.75),
+  #              colour = genotype)) +
+  geom_point(aes(
+    size = scaled.sg,
+    y = 2,
+    colour = genotype,
+    # alpha = mean.sg
+  ),
+  alpha = 0.75,
+  # size = 8,
+  shape = 16
+  ) +
+  geom_point(aes(
+    size = scaled.cho.choh,
+    y = 3,
+    colour = genotype,
+    # alpha = mean.cho.choh / 10
+  ),
+  alpha = 0.75,
+  # size = 8,
+  shape = 16
+  ) +
+  geom_text(aes(
+    label = paste0(
+      round(mean.lig.tga, digits = 2), "\n±",
+      round(sd.lig.tga, digits = 2)
+    ),
+    y = 1
+  ),
+  family = "Helvetica",
+  size = ggtext_size,
+  lineheight = 0.75,
+  hjust = 0.5
+  ) +
+  geom_text(aes(
+    label = paste0(
+      round(mean.sg, digits = 2), "\n±",
+      round(sd.sg, digits = 2)
+    ),
+    y = 2
+  ),
+  family = "Helvetica",
+  size = ggtext_size,
+  lineheight = 0.75,
+  hjust = 0.5
+  ) +
+  geom_text(aes(
+    label = paste0(
+      round(mean.cho.choh, digits = 2), "\n±",
+      round(sd.cho.choh, digits = 2)
+    ),
+    y = 3
+  ),
+  family = "Helvetica",
+  size = ggtext_size,
+  lineheight = 0.75,
+  hjust = 0.5
+  ) +
+  theme_leo() +
+  scale_size_area(
+    max_size = 8
+  ) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks.y = element_blank(),
+    # panel.border = element_blank(),
+    # axis.line.x = element_line(size = 0.2)
+  ) +
+  scale_y_continuous(
+    limits = c(0.5, 3.5),
+    breaks = c(1, 2, 3),
+    labels = c(
+      "Total\nlignin",
+      expression(
+        bold("S") * "/" *
+          bold("G")
+      ),
+      expression(
+        bold("G")[CHO] * "/" *
+          bold("G")[CHOH]
+      )
+    )
+  ) +
+  scale_colour_manual(values = rev(c(
+    pal_ostwald_disc[1],
+    pal_ostwald_disc[3],
+    pal_ostwald_disc[3]
+  ))) +
+  scale_x_discrete(limits = rev(levels(stiffness_complete$genotype))) +
+  coord_flip()
+```
+
+### Assemble bending figure
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+#### Load images ####
+WT <-
+  rasterGrob(
+    readPNG(
+      paste0(datapath, "PhD/IRX/Bending/Images/bending_adjusted.png")
+    )
+  )
+
+#### plot grid ####
+
+top <- plot_grid(WT,
+  medium_stiffness,
+  medium_breakpoint,
+  ncol = 3,
+  labels = c("", "B", "C"),
+  label_fontfamily = "Helvetica",
+  label_size = 10,
+  rel_widths = c(0.785, 1, 0.785)
+  # align = "hv"
+)
+bottom <- plot_grid(
+  violin_stiffness,
+  violin_breakpoint,
+  biochem,
+  ncol = 3,
+  labels = c("D", "E", "F"),
+  label_fontfamily = "Helvetica",
+  label_size = 10,
+  # vjust = 1,
+  # hjust = 0,
+  rel_widths = c(1, 0.785, 0.785),
+  align = "h"
+)
+
+patch <-
+  medium_stiffness + medium_breakpoint + plot_spacer() +
+  violin_stiffness + violin_breakpoint + biochem
+
+pdf("IRX_figure5.pdf", width = onecol, height = onecol * 0.85)
+patch +
+  plot_layout(ncol = 3) &
+  plot_annotation(
+    tag_levels = "A",
+    theme = theme(plot.margin = margin(-5, -5, -5, -5))
+  ) &
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
+
+dev.off()
+```
+
+## Drought experiment
+
+### Rosette area
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+rosettes <- read_csv(paste0(datapath, "PhD/IRX/Drought/drought_area.csv")) %>%
+  mutate(
+    image = str_remove(image, fixed(".JPG")),
+    mean_hue = (mean_hue / 255) * 360
+  ) %>%
+  separate(image, c("genotype", "medium", "replicate"), sep = "-") %>%
+  mutate(
+    medium = ordered(recode(medium,
+      "0%" = "Water",
+      "10%" = "10% PEG",
+      "20%" = "20% PEG"
+    ),
+    levels = c("Water", "10% PEG", "20% PEG")
+    ),
+    genotype = ordered(recode(genotype, "cad4x5" = "<i>cad4</i>x<i>5</i>"),
+                       levels = c("WT", "<i>cad4</i>x<i>5</i>"))
+  )
+
+letters <- letter_groups(rosettes,
+  area,
+  medium,
+  "tukey",
+  genotype,
+  print_position = "below"
+)
+
+area_medium <- ggplot(
+  rosettes,
+  aes(
+    x = medium,
+    y = area
+  )
+) +
+  geom_quasirandom(
+    aes(fill = genotype),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2
+  ) +
+  geom_violin(aes(
+    group = medium,
+  ),
+  draw_quantiles = 0.5,
+  fill = "white",
+  colour = "black",
+  alpha = 0.85,
+  width = 0.15,
+  position = position_dodge(width = 0.6),
+  size = 0.2,
+  scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(
+      label = Letters,
+      y = area,
+    ),
+    size = ggtext_size,
+    family = "Helvetica",
+    lineheight = 0.75,
+  ) +
+  scale_fill_manual(values = pal_ostwald_disc[c(1, 3)]) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1, 3)]) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 6)) +
+  expand_limits(y = 0) +
+  labs(y = "Rosette area [cm<sup>2</sup>]") +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = ggtext::element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5
+    ),
+    axis.text.x = element_text(vjust = 1),
+    strip.text = ggtext::element_markdown()
+  ) +
+  facet_wrap(~genotype)
+
+pdf("area_facet.pdf", width = onecol, height = onecol)
+area_medium
+dev.off()
+
+fold_change <- rosettes %>%
+  group_by(genotype, medium) %>%
+  summarise(area = median(area)) %>%
+  group_by(genotype) %>%
+  mutate(area = area / area[medium == "Water"])
+  
+```
+
+### Evapotranspiration
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+transpiration <- read_csv(
+  paste0(datapath, "PhD/IRX/Drought/evapotranspiration.csv")
+) %>%
+  pivot_longer(-c(medium, time), names_to = "plant", values_to = "transp_rate") %>%
+  mutate(
+    genotype = unlist(str_extract_all(plant, "[:alpha:]+")),
+    genotype = ordered(recode(genotype, "CAD" = "<i>cad4</i>x<i>5</i>"),
+      levels = c("WT", "<i>cad4</i>x<i>5</i>")
+    ),
+    replicate = unlist(str_extract_all(plant, "[:digit:]+")),
+    medium = ordered(medium,
+      levels = c("Water", "10% PEG", "20% PEG")
+    ),
+    transp_rate = transp_rate * 1000
+  ) %>%
+  select(-plant) %>%
+  left_join(rosettes)
+
+transpiration_avg <- transpiration %>%
+  group_by(genotype, replicate, medium) %>%
+  summarise(mean_transp = mean(transp_rate, na.rm = TRUE))
+
+#comparison across genotypes
+# letters <- letter_groups(transpiration_avg %>% unite("ID", genotype, medium),
+#   mean_transp,
+#   ID,
+#   "tukey",
+#   print_position = "below",
+#   print_adjust = 3
+# ) %>%
+#   separate(ID, into = c("genotype", "medium"), sep = "_") %>%
+#   mutate(genotype = ordered(recode(genotype, "CAD" = "<i>cad4</i>x<i>5</i>"),
+#       levels = c("WT", "<i>cad4</i>x<i>5</i>")
+#     ))
+
+letters <- letter_groups(transpiration_avg,
+  mean_transp,
+  medium,
+  "tukey",
+  genotype,
+  print_position = "below",
+  print_adjust = 3
+) %>%
+  mutate(mean_transp = case_when(
+    genotype == "WT" ~ mean_transp + 1,
+    TRUE ~ mean_transp
+  ))
+
+transpiration_medium <- ggplot(
+  transpiration,
+  aes(
+    x = medium,
+    y = transp_rate
+  )
+) +
+  geom_quasirandom(
+    # aes(colour = genotype),
+    # dodge.width = 0.6,
+    shape = 16,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.15,
+    size = 0.25,
+    # stroke = 0.2
+  ) +
+  geom_quasirandom(
+    data = transpiration_avg,
+    aes(
+      y = mean_transp,
+      fill = genotype
+    ),
+    dodge.width = 0.6,
+    shape = 21,
+    width = 0.2,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2
+  ) +
+  geom_violin(aes(
+    group = medium,
+    # fill = cell.type
+  ),
+  draw_quantiles = 0.5,
+  fill = "white",
+  colour = "black",
+  alpha = 0.85,
+  width = 0.15,
+  position = position_dodge(width = 0.6),
+  size = 0.2,
+  scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(
+      label = Letters,
+      y = mean_transp,
+    ),
+    size = ggtext_size,
+    family = "Helvetica",
+    lineheight = 0.75
+  ) +
+  scale_fill_manual(values = pal_ostwald_disc[c(1, 3)]) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1, 3)]) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 6)) +
+  expand_limits(y = 0) +
+  labs(y = "Evapotranspiration [mg min<sup>-1</sup>]") +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = ggtext::element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5
+    ),
+    axis.text.x = element_text(vjust = 1),
+    strip.text = ggtext::element_markdown()
+  ) +
+  facet_wrap(~genotype)
+
+pdf("transpiration_facet.pdf", width = onecol, height = onecol * 0.25)
+transpiration_medium
+dev.off()
+
+fold_change <- transpiration_avg %>%
+  group_by(genotype, medium) %>%
+  summarise(mean_transp = median(mean_transp)) %>%
+  group_by(genotype) %>%
+  mutate(mean_transp = mean_transp / mean_transp[medium == "Water"])
+
+```
+
+### Drought recovery
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+recovery_data <- read_csv(paste0(datapath, "PhD/IRX/Drought/recovery.csv")) %>%
+  mutate(
+    state = ordered(state, levels = rev(c("Recovered", "Partly recovered", "Dead"))),
+    medium = ordered(medium, levels = c("Water", "10% PEG", "20% PEG")),
+    genotype = ordered(recode(genotype, "cad4x5" = "<i>cad4</i>x<i>5</i>"),
+                       levels = c("WT", "<i>cad4</i>x<i>5</i>"))
+  ) %>%
+  group_by(genotype, medium) %>%
+  mutate(sum = sum(count)) %>%
+  group_by(genotype, medium, state) %>%
+  mutate(proportion = (count / sum) * 100)
+
+recovery_collapse <- ggplot(recovery_data, aes(
+  x = medium,
+  y = proportion,
+  fill = state
+)) +
+  geom_col(
+    alpha = 0.85,
+    width = 0.6
+  ) +
+  scale_fill_manual(values = rev(pal_ostwald_disc)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 6)) +
+  theme_leo() +
+  labs(
+    y = "Recovery after treatment [%]"
+  ) +
+  facet_wrap(~genotype, nrow = 1) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = ggtext::element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = grid::unit(1.1, "npc")
+    ),
+    axis.text.x = element_text(vjust = 1),
+    strip.text = ggtext::element_markdown(),
+    legend.key.height = unit(2, "mm"),
+    legend.key.width = unit(2, "mm"),
+    legend.spacing = unit(c(0, 0, 0, 0), "mm"),
+    plot.margin = unit(c(0.5, 6, 0.5, 6), "pt")
+  ) +
+  coord_cartesian(ylim = c(0, 100))
+
+pdf("recovery.pdf", width = onecol, height = onecol * 0.5)
+recovery_collapse
+dev.off()
+```
+
+### Assemble figure
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+patch <- area_medium + transpiration_medium + recovery_collapse
+
+pdf("IRX_Figure6.pdf", width = onecol * 0.5, height = onecol * 1)
+patch + plot_layout(ncol = 1) &
+  plot_annotation(
+    theme = theme(plot.margin = margin(0, -2, 0, -2))
+  ) &
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
+dev.off()
+```
+
+## Supplemental figures
+
+### Model supplements
+
+#### Interactions Arabidopsis
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+
+#### protoxylem ####
+find_interactions <- function(x) {
+  rmn_irx <- filter(rmn_irx, cell.type == x) %>%
+    select(convexity,
+         total_lignin,
+         # P_rel,
+         # G_rel,
+         # GOH.G,
+         # S_rel,
+         # mean.OD1,
+         Perim.,
+         # n_v,
+         GCHO_rel,
+         GOH_rel,
+         # X1141,
+         # X1174
+         ) %>%
+    drop_na()
+
+  full_model <- lm(convexity ~ .^2,
+    data = rmn_irx
+  )
+
+  best_model <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+
+  best_model
+}
+
+best_model <- find_interactions("PX")
+
+px_interactions <- tidy(best_model) %>%
+    filter(str_detect(term, fixed(":")) & 
+             p.value < 0.05)
+
+# plots
+
+lignin_Perim <- interact_plot(best_model,
+  pred = total_lignin, modx = Perim.,
+  colors = c("black", "black", "black"),
+  x.label = "Total lignin",
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = pal_flame_disc[1])
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+lignin_Perim$layers[[1]]$aes_params$size <- 0.4
+
+GCHO_Perim <- interact_plot(best_model,
+  pred = GCHO_rel, modx = Perim.,
+  colors = c("black", "black", "black"),
+  x.label = expression(paste("Terminal "*bold(G)[CHO])),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = pal_flame_disc[1])
+  ) +
+  theme(aspect.ratio = 1)
+GCHO_Perim$layers[[1]]$aes_params$size <- 0.4
+
+GOH_Perim <- interact_plot(best_model,
+  pred = GOH_rel, modx = Perim.,
+  colors = c("black", "black", "black"),
+  x.label = expression(paste(bold(G)[CHOH])),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = pal_flame_disc[1])
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  scale_x_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+GOH_Perim$layers[[1]]$aes_params$size <- 0.4
+
+GCHO_GOH <- interact_plot(best_model,
+  pred = GCHO_rel, modx = GOH_rel,
+  colors = c("black", "black", "black"),
+  x.label = expression(paste("Terminal "*bold(G)[CHO])),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = pal_flame_disc[1])
+  ) +
+  theme(aspect.ratio = 1)
+GCHO_GOH$layers[[1]]$aes_params$size <- 0.4
+
+pdf("PX_interactions.pdf", height = twocol, width = twocol / 3)
+px <- plot_grid(
+  lignin_Perim + theme(legend.position = "none"),
+  GCHO_Perim + theme(legend.position = "none"),
+  GOH_Perim + theme(legend.position = "none"),
+  GCHO_GOH + theme(legend.position = "none"),
+  ncol = 2
+)
+px
+dev.off()
+
+#### primary metaxylem ####
+find_interactions <- function(x) {
+  rmn_irx <- filter(rmn_irx, cell.type == x) %>%
+    select(convexity,
+         total_lignin,
+         # P_rel,
+         # G_rel,
+         # GOH.G,
+         S_rel,
+         mean.OD1,
+         # Perim.,
+         n_v,
+         GCHO_rel,
+         # GOH_rel,
+         # X1141,
+         # X1174
+         ) %>%
+    drop_na()
+
+  full_model <- lm(convexity ~ .^2,
+    data = rmn_irx
+  )
+
+  best_model <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+
+  best_model
+}
+
+best_model <- find_interactions("PMX")
+
+pmx_interactions <- tidy(best_model) %>%
+    filter(str_detect(term, fixed(":")) & 
+             p.value < 0.05)
+
+Wiesner_v <- interact_plot(best_model,
+  pred = mean.OD1, modx = n_v,
+  colors = c("black", "black", "black"),
+  x.label = expression(paste("Total "*bold(G)[CHO])),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5))
+  ) +
+  theme(aspect.ratio = 1)
+Wiesner_v$layers[[1]]$aes_params$size <- 0.4
+
+lignin_GCHO <- interact_plot(best_model,
+  pred = total_lignin, modx = GCHO_rel,
+  colors = c("black", "black", "black"),
+  x.label = "Total lignin",
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5))
+  ) +
+  theme(aspect.ratio = 1)
+lignin_GCHO$layers[[1]]$aes_params$size <- 0.4
+
+
+pdf("PMX_interactions.pdf", height = onecol, width = twocol / 3)
+pmx <- plot_grid(
+  Wiesner_v + theme(legend.position = "none"),
+  lignin_GCHO + theme(legend.position = "none"),
+  ncol = 1
+)
+pmx
+dev.off()
+
+#### secondary metaxylem ####
+find_interactions <- function(x) {
+  rmn_irx <- filter(rmn_irx, cell.type == x) %>%
+    select(convexity,
+         # total_lignin,
+         # P_rel,
+         # G_rel,
+         # GOH.G,
+         # S_rel,
+         # mean.OD1,
+         # Perim.,
+         # n_v,
+         # GCHO_rel,
+         GOH_rel,
+         Benz_rel,
+         # X1141,
+         # X1174
+         ) %>%
+    drop_na()
+
+  full_model <- lm(convexity ~ .^2,
+    data = rmn_irx
+  )
+
+  best_model <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+
+  best_model
+}
+
+best_model <- find_interactions("SMX")
+
+smx_interactions <- tidy(best_model) %>%
+    filter(str_detect(term, fixed(":")) & 
+             p.value < 0.05)
+
+Benz_GOH <- interact_plot(best_model,
+  pred = Benz_rel, modx = GOH_rel,
+  colors = c("white", "white", "white"),
+  x.label = "Benzaldehydes",
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  ) +
+  theme(aspect.ratio = 1)
+Benz_GOH$layers[[1]]$aes_params$size <- 0.4
+
+# GOH_Wiesner <- interact_plot(best_model,
+#   pred = GOH_rel, modx = mean.OD1,
+#   colors = c("white", "white", "white"),
+#   x.label = expression(paste(bold(G)[CHOH])),
+#   y.label = "Convexity"
+# ) +
+#   theme_leo() +
+#   theme(
+#     legend.position = c(0.75, 0.8),
+#     panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+#   ) +
+#   theme(aspect.ratio = 1)
+# GOH_Wiesner$layers[[1]]$aes_params$size <- 0.4
+
+# P_Wiesner <- interact_plot(best_model,
+#   pred = P_rel, modx = mean.OD1,
+#   colors = c("white", "white", "white"),
+#   x.label = expression(bold(P)),
+#   y.label = "Convexity"
+# ) +
+#   theme_leo() +
+#   theme(
+#     legend.position = c(0.75, 0.8),
+#     panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+#   ) +
+#   theme(aspect.ratio = 1)
+# P_Wiesner$layers[[1]]$aes_params$size <- 0.4
+
+# P_GOH <- interact_plot(best_model,
+#   pred = P_rel, modx = GOH_rel,
+#   colors = c("white", "white", "white"),
+#   x.label = expression(bold(P)),
+#   y.label = "Convexity"
+# ) +
+#   theme_leo() +
+#   theme(
+#     legend.position = c(0.75, 0.8),
+#     panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+#   ) +
+#   theme(aspect.ratio = 1)
+# P_GOH$layers[[1]]$aes_params$size <- 0.4
+
+pdf("SMX_interactions.pdf", height = twocol * 0.7, width = twocol / 3)
+# smx <- plot_grid(
+#   P_GOH + theme(legend.position = "none"),
+#   P_Wiesner + theme(legend.position = "none"),
+#   GOH_Wiesner + theme(legend.position = "none"),
+#   ncol = 2
+# )
+# smx
+Benz_GOH
+dev.off()
+
+
+# legend <- get_legend(n_v_total_lignin + guides(
+#   linetype = guide_legend(title = "Interactor"),
+#   colour = "none",
+#   fill = "none"
+# ) +
+#   theme(legend.justification = "top"))
+# 
+# pdf("interactions.pdf", height = twocol * 1.1, width = onecol)
+# plot_grid(px,
+#   pmx,
+#   smx,
+#   ncol = 3,
+#   labels = c("A", "B", "C"),
+#   vjust = 1,
+#   label_size = 10,
+#   label_fontfamily = "Helvetica"
+# )
+# dev.off()
+
+PX1 <- lignin_Perim
+PX2 <- GCHO_Perim
+PX3 <- GOH_Perim
+PX4 <- GCHO_GOH
+PMX1 <- Wiesner_v
+PMX2 <- lignin_GCHO
+SMX1 <- Benz_GOH
+# SMX1 <- GOH_Wiesner
+# SMX2 <- P_Wiesner
+# SMX3 <- P_GOH
+
+layout <- "
+AB
+CD
+EF
+G#
+"
+
+pdf("interactions.pdf", width = onecol, height = twocol * (4/5))
+PX1 + PX2 + PX3 + PX4 + PMX1 + PMX2 + SMX1 + 
+  plot_layout(design = layout)
+  
+dev.off()
+```
+
+#### Interactions woody poplar 
+
+```{r}
+
+#### Early secondary vessels ####
+find_interactions <- function() {
+  psem_data_early <-  model_data_pop %>%
+  filter(cell_type == "Early SV") %>%
+  ungroup() %>%
+  select(
+    Solidity,
+    n_v,
+    total_lignin,
+    P_rel,
+    GOH_rel,
+    GCHO_rel
+  ) %>%
+  drop_na()
+
+  full_model <- lm(Solidity ~ .^2,
+    data = psem_data_early
+  )
+
+  best_model <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+
+  best_model
+}
+
+best_model <- find_interactions()
+summary(best_model)
+
+esv_interactions <- tidy(best_model) %>%
+    filter(str_detect(term, fixed(":")) & 
+             p.value < 0.05)
+
+# plots
+p_v <- interact_plot(best_model,
+  pred = P_rel, modx = n_v,
+  colors = c("black", "black", "black"),
+  x.label = expression(bold(P)),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+p_v$layers[[1]]$aes_params$size <- 0.4
+
+goh_v <- interact_plot(best_model,
+  pred = GOH_rel, modx = n_v,
+  colors = c("black", "black", "black"),
+  x.label = expression(bold(G)[CHOH]),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+goh_v$layers[[1]]$aes_params$size <- 0.4
+
+goh_p <- interact_plot(best_model,
+  pred = GOH_rel, modx = P_rel,
+  colors = c("black", "black", "black"),
+  x.label = expression(bold(G)[CHOH]),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+goh_p$layers[[1]]$aes_params$size <- 0.4
+
+gcho_p <- interact_plot(best_model,
+  pred = GCHO_rel, modx = P_rel,
+  colors = c("black", "black", "black"),
+  x.label = expression(Terminal ~ bold(G)[CHO]),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[2], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+gcho_p$layers[[1]]$aes_params$size <- 0.4
+
+ESV1 <- p_v
+ESV2 <- goh_v
+ESV3 <- goh_p
+ESV4 <- gcho_p
+
+#### Recent secondary vessels ####
+find_interactions <- function() {
+  psem_data_recent <-  model_data_pop %>%
+  filter(cell_type == "Recent SV") %>%
+  ungroup() %>%
+  select(
+    Solidity,
+    n_v,
+    Perim.,
+    S_rel,
+    P_rel,
+    GOH_rel,
+    GCHO_rel
+  ) %>%
+  drop_na()
+
+  full_model <- lm(Solidity ~ .^2,
+    data = psem_data_recent
+  )
+
+  best_model <- MASS::stepAIC(full_model, direction = "both", 
+                      trace = FALSE)
+
+  best_model
+}
+
+best_model <- find_interactions()
+summary(best_model)
+
+rsv_interactions <- tidy(best_model) %>%
+    filter(str_detect(term, fixed(":")) & 
+             p.value < 0.05)
+
+# plots
+
+s_v <- interact_plot(best_model,
+  pred = S_rel, modx = n_v,
+  colors = c("white", "white", "white"),
+  x.label = expression(bold(S)),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+s_v$layers[[1]]$aes_params$size <- 0.4
+
+p_perim <- interact_plot(best_model,
+  pred = P_rel, modx = Perim.,
+  colors = c("white", "white", "white"),
+  x.label = expression(bold(P)),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+p_perim$layers[[1]]$aes_params$size <- 0.4
+
+gcho_perim <- interact_plot(best_model,
+  pred = GCHO_rel, modx = Perim.,
+  colors = c("white", "white", "white"),
+  x.label = expression(Terminal ~ bold(G)[CHO]),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+gcho_perim$layers[[1]]$aes_params$size <- 0.4
+
+gcho_p <- interact_plot(best_model,
+  pred = GCHO_rel, modx = P_rel,
+  colors = c("white", "white", "white"),
+  x.label = expression(Terminal ~ bold(G)[CHO]),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+gcho_p$layers[[1]]$aes_params$size <- 0.4
+
+s_p <- interact_plot(best_model,
+  pred = S_rel, modx = P_rel,
+  colors = c("white", "white", "white"),
+  x.label = expression(bold(S)),
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = c(0.75, 0.8),
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+  theme(aspect.ratio = 1)
+s_p$layers[[1]]$aes_params$size <- 0.4
+
+RSV1 <- p_perim
+RSV2 <- gcho_perim
+RSV3 <- s_v
+RSV4 <- s_p
+RSV5 <- gcho_p
+
+#### Assemble figure ####
+
+layout <- "
+AB
+CD
+EF
+GH
+I#
+"
+
+pdf("interactions_poplar.pdf", width = onecol, height = twocol)
+ESV1+ ESV2 + ESV3 + ESV4 + RSV1 + RSV2 + RSV3 + RSV4 + RSV5 +
+  plot_layout(design = layout)
+  
+dev.off()
+```
+
+#### Coefficient tables
+
+```{r} 
+ind_claims <- ind_claims %>%
+  select(species, model, fishC, fishP, Independ.Claim, Crit.Value, P.Value)
+fit_tab <- kable(ind_claims,
+  "latex",
+  # align = "lllllcccc",
+  # caption = "Raman bands validated by Py--GC/MS.",
+  # col.names = c(
+  #   "Band no.",
+  #   "Band intensity at",
+  #   "Normalised to",
+  #   "Assigned polymer",
+  #   "Assigned structure",
+  #   "Pearson's r",
+  #   "P-value",
+  #   "Pearson's r",
+  #   "P-value"
+  # ),
+  booktabs = TRUE,
+  linesep = ""
+) %>%
+  kable_styling(latex_options = c("hold_position", "striped", "scale_down"))
+# add_header_above(c(" " = 5, "Total pyrolysate" = 2, "Total lignin" = 2)) %>%
+# save_kable("IRX_tableS1.pdf")
+
+readr::write_file(fit_tab, "sem_fit_tab.txt")
+
+coefs <- coefs %>%
+  select(species, model, Response, Predictor, Estimate, Std.Error, Crit.Value, P.Value, Std.Estimate)
+
+coef_tab <- kable(coefs,
+  "latex",
+  # align = "lllllcccc",
+  # caption = "Raman bands validated by Py--GC/MS.",
+  # col.names = c(
+  #   "Band no.",
+  #   "Band intensity at",
+  #   "Normalised to",
+  #   "Assigned polymer",
+  #   "Assigned structure",
+  #   "Pearson's r",
+  #   "P-value",
+  #   "Pearson's r",
+  #   "P-value"
+  # ),
+  booktabs = TRUE,
+  linesep = ""
+) %>%
+  kable_styling(latex_options = c("hold_position", "striped", "scale_down"))
+# add_header_above(c(" " = 5, "Total pyrolysate" = 2, "Total lignin" = 2)) %>%
+# save_kable("IRX_tableS2.pdf")
+
+readr::write_file(coef_tab, "sem_coef_tab.txt")
+```
+
+### Overview vessel lignin and morphology
+
+#### Arabidopsis
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+rmn_irx_long <- rmn_irx %>%
+  mutate(n_v = n_v * 100) %>% 
+  select(genotype:cell.type, n_v, Area, Perim., Circ., convexity, total_lignin, G_rel, GOH_rel, S_rel, cellulose, mean.OD1, GCHO_rel, S.G, P_rel, Benz_rel) %>%
+  pivot_longer(cols = -c(genotype:cell.type), names_to = "variable", values_to = "value") %>%
+  mutate(
+    variable = factor(variable,
+                      levels = c(
+      "Area",
+      "Perim.",
+      "n_v",
+      "Circ.",
+      "convexity",
+      "total_lignin",
+      "G_rel",
+      "GOH_rel",
+      "mean.OD1",
+      "GCHO_rel",
+      "S_rel",
+      "P_rel",
+      "Benz_rel",
+      "S.G",
+      "cellulose"
+    ),
+    labels = c("Area [µm²]",
+               "Perimeter [µm]",
+               "Adj. TEs [%]",
+               "Circularity",
+               "Convexity",
+               "Lignin",
+               "bold(G)",
+               "bold(G)[CHOH]",
+               "Total~bold(G)[CHO]",
+               "Terminal~bold(G)[CHO]",
+               "bold(S)",
+               "bold(P)",
+               "Benzaldehydes",
+               "bold(S)~'/'~bold(G)",
+               "Cellulose"
+               )),
+    genotype = ordered(genotype,
+      levels = c(
+        "Col-0",
+        "4cl1",
+        "4cl2",
+        "4cl1x4cl2",
+        "ccoaomt1",
+        "fah1",
+        "omt1",
+        "ccr1-3",
+        "cad4",
+        "cad5",
+        "cad4xcad5"
+      )
+    ),
+    cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX"))
+  )
+
+# compare only within cell types 
+rmn_irx_letters <- letter_groups(
+  rmn_irx_long,
+  value,
+  genotype,
+  "tukey",
+  cell.type,
+  variable,
+  print_position = "above",
+  print_adjust = 1
+) %>%
+  mutate(value = case_when(variable == "Area [µm²]" & cell.type %in% c("PX", "SMX") ~
+           value + 20,
+           variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type %in% c("PX", "SMX") ~
+             value + 0.5,
+           variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type == "PMX" ~
+             value + 0.2,
+           variable == "Term~'/'~tot~bold(G)[CHO]" & cell.type %in% c("PMX", "SMX") ~
+             value + 2,
+         TRUE ~ value))
+
+# compare within and between cell types
+# rmn_irx_letters <- letter_groups(
+#   rmn_irx_long %>% unite("ID", genotype, cell.type),
+#   value,
+#   ID,
+#   "tukey",
+#   # cell.type,
+#   variable,
+#   print_position = "above",
+#   print_adjust = 1
+# ) %>%
+#   separate(ID, into = c("genotype", "cell.type"), sep = "_") %>%
+#   mutate(cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX"))) %>%
+#   mutate(value = case_when(variable == "Area [µm²]" & cell.type %in% c("PX", "SMX") ~
+#            value + 20,
+#            variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type %in% c("PX", "SMX") ~
+#              value + 0.5,
+#            variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type == "PMX" ~
+#              value + 0.2,
+#            variable == "Term~'/'~tot~bold(G)[CHO]" & cell.type %in% c("PMX", "SMX") ~
+#              value + 2,
+#          TRUE ~ value))
+
+rmn_irx_lig <- ggplot(
+  filter(rmn_irx_long, !variable %in%
+           c("Adj. TEs [%]",
+             "Area [µm²]",
+             "Circularity",
+             "Convexity",
+             "Perimeter [µm]")),
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
+  geom_quasirandom(
+    aes(fill = cell.type),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  # geom_boxplot(
+  #   fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_violin(
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_text(
+    data = filter(rmn_irx_letters, 
+                  !variable %in%
+           c("Adj. TEs [%]",
+             "Area [µm²]",
+             "Circularity",
+             "Convexity",
+             "Perimeter [µm]")),
+    aes(label = Letters),
+    size = 6 / (14 / 5),
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = pal_flame_disc) +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  theme_leo() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1
+    ),
+    axis.title = element_blank(),
+    # panel.spacing = unit(1, "mm"),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5),
+  ) +
+  facet_grid(variable ~ cell.type,
+    scales = "free_y",
+    labeller = labeller(variable = label_parsed, cell.type = label_value),
+    switch = "y"
+  )
+
+rmn_irx_morph <- ggplot(
+  filter(rmn_irx_long, variable %in%
+           c("Adj. TEs [%]",
+             "Area [µm²]",
+             "Circularity",
+             "Convexity",
+             "Perimeter [µm]")),
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
+  geom_quasirandom(
+    aes(fill = cell.type),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  # geom_boxplot(
+  #   fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_violin(
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_text(
+    data = filter(rmn_irx_letters, 
+                  variable %in%
+           c("Adj. TEs [%]",
+             "Area [µm²]",
+             "Circularity",
+             "Convexity",
+             "Perimeter [µm]")),
+    aes(label = Letters),
+    size = 6 / (14 / 5),
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = pal_flame_disc) +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  theme_leo() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1
+    ),
+    axis.title = element_blank(),
+    # panel.spacing = unit(1, "mm"),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5),
+  ) +
+  facet_grid(variable ~ cell.type,
+    scales = "free_y",
+    switch = "y"
+  )
+
+pdf("IRX_FigureS1a.pdf", width = onecol * 1.5, height = onecol * 1.5)
+rmn_irx_morph
+dev.off()
+
+pdf("IRX_FigureS1b.pdf", width = onecol * 1.5, height = twocol)
+rmn_irx_lig
+dev.off()
+```
+
+#### Poplar
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+rmn_irx_long <- model_data_pop %>%
+  ungroup() %>%
+  select(genotype, cell_type, Distance, n_v, Area, Perim., Circ., Solidity, total_lignin, G_rel, GOH_rel, S_rel, cellulose, wiesner_avg, GCHO_rel, S.G, P_rel, Benz_rel) %>%
+  pivot_longer(cols = -c(genotype, cell_type), names_to = "variable", values_to = "value") %>%
+  mutate(
+    variable = factor(variable,
+                      levels = c(
+      "Area",
+      "Perim.",
+      "Distance",
+      "n_v",
+      "Circ.",
+      "Solidity",
+      "total_lignin",
+      "G_rel",
+      "GOH_rel",
+      "wiesner_avg",
+      "GCHO_rel",
+      "S_rel",
+      "P_rel",
+      "Benz_rel",
+      "S.G",
+      "cellulose"
+    ),
+    labels = c("'Area [µm²]'",
+               "'Perim. [µm]'",
+               "'Dist. [µm]'",
+               "'Adj. TEs [%]'",
+               "Circularity",
+               "Convexity",
+               "Lignin",
+               "bold(G)",
+               "bold(G)[CHOH]",
+               "Total~bold(G)[CHO]",
+               "Term.~bold(G)[CHO]",
+               "bold(S)",
+               "bold(P)",
+               "Benzald.",
+               "bold(S)~'/'~bold(G)",
+               "Cellulose"
+               )),
+    genotype = ordered(genotype,
+                       levels = c(
+        "WT",
+        "CCR1",
+        "C4H"
+      )
+    ),
+    cell_type = ordered(cell_type, levels = c("PV", "Old SV", "Young SV"))
+  )
+
+# compare only within cell types
+rmn_irx_letters <- letter_groups(
+  rmn_irx_long,
+  value,
+  genotype,
+  "tukey",
+  cell_type,
+  variable,
+  print_position = "above",
+  print_adjust = 1
+) 
+
+# compare within and across cell types
+# rmn_irx_letters <- letter_groups(
+#   rmn_irx_long %>% unite("ID", genotype, cell_type),
+#   value,
+#   ID,
+#   "tukey",
+#   # cell_type,
+#   variable,
+#   print_position = "above",
+#   print_adjust = 1
+# ) %>%
+#   separate(ID, into = c("genotype", "cell_type"), sep = "_") %>%
+#   mutate(cell_type = ordered(cell_type, levels = c("PV", "Old SV", "Young SV")))
+
+# rmn_irx_lig <- ggplot(
+#   filter(rmn_irx_long, !variable %in%
+#            c("Adj. vessels",
+#              "Area [µm²]",
+#              "Circularity",
+#              "Convexity",
+#              "Perimeter [µm]")),
+#   aes(
+#     x = genotype,
+#     y = value
+#   )
+# ) +
+#   geom_quasirandom(
+#     aes(fill = cell_type),
+#     shape = 21,
+#     # width = 0.1,
+#     # colour = NA,
+#     alpha = 0.75,
+#     size = 1,
+#     stroke = 0.25
+#   ) +
+#   geom_boxplot(
+#     fill = "white",
+#     alpha = 0.5,
+#     width = 0.6,
+#     outlier.alpha = 0,
+#     lwd = 0.25,
+#     fatten = 1,
+#     width = 0.25
+#   ) +
+#   geom_text(
+#     data = filter(rmn_irx_letters, 
+#                   !variable %in%
+#            c("Adj. vessels",
+#              "Area [µm²]",
+#              "Circularity",
+#              "Convexity",
+#              "Perimeter [µm]")),
+#     aes(label = Letters),
+#     size = 6 / (14 / 5),
+#     family = "Helvetica"
+#   ) +
+#   scale_fill_manual(values = pal_flame_disc) +
+#   scale_x_discrete(
+#     labels = c(
+#       "WT",
+#       expression(paste(italic("CCR1"), "-RNAi")),
+#       expression(paste(italic("C4H"), "-RNAi"))
+#     )
+#   ) +
+#   theme_leo() +
+#   theme(
+#     axis.text.x = element_text(
+#       angle = 90,
+#       hjust = 1
+#     ),
+#     axis.title = element_blank()
+#   ) +
+#   facet_grid(variable ~ cell_type,
+#     scales = "free_y",
+#     labeller = labeller(variable = label_parsed, cell_type = label_value)
+#   )
+# 
+# rmn_irx_morph <- ggplot(
+#   filter(rmn_irx_long, variable %in%
+#            c("Adj. vessels",
+#              "Area [µm²]",
+#              "Circularity",
+#              "Convexity",
+#              "Perimeter [µm]")),
+#   aes(
+#     x = genotype,
+#     y = value
+#   )
+# ) +
+#   geom_quasirandom(
+#     aes(fill = cell_type),
+#     shape = 21,
+#     # width = 0.1,
+#     # colour = NA,
+#     alpha = 0.75,
+#     size = 1,
+#     stroke = 0.25
+#   ) +
+#   geom_boxplot(
+#     fill = "white",
+#     alpha = 0.5,
+#     width = 0.6,
+#     outlier.alpha = 0,
+#     lwd = 0.25,
+#     fatten = 1,
+#     width = 0.25
+#   ) +
+#   geom_text(
+#     data = filter(rmn_irx_letters, 
+#                   variable %in%
+#            c("Adj. vessels",
+#              "Area [µm²]",
+#              "Circularity",
+#              "Convexity",
+#              "Perimeter [µm]")),
+#     aes(label = Letters),
+#     size = 6 / (14 / 5),
+#     family = "Helvetica"
+#   ) +
+#   scale_fill_manual(values = pal_flame_disc) +
+#   scale_x_discrete(
+#     labels = c(
+#       "WT",
+#       expression(paste(italic("CCR1"), "-RNAi")),
+#       expression(paste(italic("C4H"), "-RNAi"))
+#     )
+#   ) +
+#   theme_leo() +
+#   theme(
+#     axis.text.x = element_text(
+#       angle = 90,
+#       hjust = 1
+#     ),
+#     axis.title = element_blank()
+#   ) +
+#   facet_grid(variable ~ cell_type,
+#     scales = "free_y",
+#     # labeller = label_parsed
+#   )
+# 
+# pdf("IRX_FigureS1a_pop.pdf", width = onecol * 1.5, height = onecol * 1.5)
+# rmn_irx_morph
+# dev.off()
+# 
+# pdf("IRX_FigureS1b_pop.pdf", width = onecol * 1.5, height = twocol)
+# rmn_irx_lig
+# dev.off()
+
+# combined figure
+pop_S1 <- ggplot(
+  rmn_irx_long,
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
+  geom_quasirandom(
+    aes(fill = cell_type),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  geom_violin(
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    size = 0.2,
+    scale = "width"
+  ) +
+  # geom_boxplot(
+  #   fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_text(
+    data = rmn_irx_letters,
+    aes(label = Letters),
+    size = 6 / (14 / 5),
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = pal_flame_disc) +
+  scale_x_discrete(
+    labels = c(
+      "WT",
+      expression(paste(italic("CCR1"), "-RNAi")),
+      expression(paste(italic("C4H"), "-RNAi"))
+    )
+  ) +
+  theme_leo() +
+  theme(
+    axis.text.x = element_text(
+      # angle = 90,
+      # hjust = 1
+    ),
+    axis.title = element_blank(),
+    panel.spacing = unit(1, "mm"),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5),
+  ) +
+  facet_grid(variable ~ cell_type,
+    scales = "free_y",
+    labeller = labeller(variable = label_parsed, cell_type = label_value),
+    switch = "y"
+  )
+
+pdf("IRX_FigureS1_pop.pdf", width = onecol * 1.5, height = twocol * 1.2)
+pop_S1
+dev.off()
+```
+
+### Post-mortem lignification
+
+#### Scatter plots
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+rmn_lignin_dist <- model_data_pop %>%
+  group_by(genotype, replicate) %>%
+  mutate(
+    max_dist = max(Distance, na.rm = T),
+    Distance = Distance / max_dist
+    ) %>%
+  filter(str_detect(cell_type, "SV")) %>%
+  unite("ID", genotype, replicate,
+        sep = "_",
+        remove = FALSE) %>%
+  # filter(Distance < 2500) %>%
+  # filter(ID != "WT_1") %>%
+  select(genotype, replicate, technical, Distance, TE,
+         # "Cellulose (381 + 1099)" = cellulose,
+         # "AUC scaled lignin" = total_lignin,
+         # "Total G-units (1603)" = G_tot,
+         # "Total S-units (1334)" = S_tot,
+         # "Phenyl" = P_rel,
+         "'Lignin / Cellulose'" = lig.cellu,
+         # "Unscaled lignin" = unscaled_lignin,
+         # "AUC" = AUC,
+         # "Complete lignin" = broad_lignin,
+         # "Total G/Cellulose" = G.cellu,
+         # "Relative G-units" = G_rel, 
+         # "Relative S-units" = S_rel, 
+         # "Relative aldehyde end-units" = GCHO_rel,
+         "bold(S)~'/'~bold(G)" = S.G,
+         "Term.~bold(G)[CHO]~'/'~bold(G)[CHOH]" = GCHO.GOH,
+         # "Convexity" = Solidity
+         ) %>%
+  drop_na() %>%
+  pivot_longer(-c(genotype, replicate, technical, Distance, TE), 
+               names_to = "variable", 
+               values_to = "value") %>%
+  mutate(variable = ordered(variable, levels = c(
+    "'Lignin / Cellulose'",
+    "bold(S)~'/'~bold(G)",
+    "Term.~bold(G)[CHO]~'/'~bold(G)[CHOH]"
+  ))) %>%
+  anti_join(read_csv("/home/leonard/Dropbox/2020_IRX manuscript/pop_g_layers.csv",
+                     col_types = "cccc"))
+
+# mixed model
+regressions <- rmn_lignin_dist %>%
+  ungroup() %>%
+  # filter(str_detect(cell_type, "SV")) %>%
+  select(-technical) %>%
+  nest(data = c(TE, replicate, Distance, value)) %>%
+  group_by(variable) %>%
+  mutate(max = max(map_dbl(data, ~ max(.x$value))),
+         min = max(map_dbl(data, ~ min(.x$value)))) %>%
+  group_by(genotype, variable) %>%
+  mutate(
+    fit = map(data, ~ lme4::lmer(value ~ Distance + 
+                                   # (1 + Distance | replicate),
+                                   (1 | replicate),
+                                 data = .x)),
+    pred = map(fit, predict),
+    tidied = map(fit, broom.mixed::glance),
+    r2 = map(fit, MuMIn::r.squaredGLMM),
+    r2 = map(r2, 2),
+    r2 = as.numeric(r2),
+    Distance = map_dbl(data, ~ max(.x$Distance))
+  ) %>%
+  group_by(variable) %>%
+  mutate(
+    Distance = max(Distance),
+    spacer = case_when(variable == "'Lignin / Cellulose'" ~ (max - min) * 1.3,
+                       TRUE ~ max - min),
+    value = case_when(
+      genotype == "WT" ~ max + (0.2 * spacer),
+      genotype == "CCR1" ~ max + (0.1 * spacer),
+      genotype == "C4H" ~ max
+    )
+  ) %>%
+  ungroup() %>%
+  mutate(genotype = recode(genotype, 
+                           "CCR1" = "<i>CCR1</i>-RNAi",
+                           "C4H" = "<i>C4H</i>-RNAi"))
+
+rmn_lignin_dist_pred <- regressions %>%
+  unnest(data, pred)
+
+
+dist_lig1 <- ggplot(
+  rmn_lignin_dist_pred,
+  aes(
+    x = Distance,
+    y = value,
+    colour = genotype,
+    # fill = replicate
+  )
+) +
+  geom_point(
+    aes(shape = replicate),
+    size = 1,
+    alpha = 0.25
+    ) +
+  geom_smooth(
+    aes(group = interaction(genotype, replicate),
+        y = pred),
+    size = 0.5,
+    method = "lm",
+    se = F
+  ) +
+  ggtext::geom_richtext(
+    data = regressions,
+    size = ggtext_size,
+    vjust = 0,
+    hjust = 1,
+    # colour = "black",
+    label.colour = NA,
+    family = "Helvetica",
+    fill = NA,
+    aes(label =
+          paste0(genotype,
+                 ": R<sup>2</sup> = ",
+                 format(round(r2, 2), nsmall = 2)
+                 # ", <i>P</i> = ",
+                 # format(p.value, scientific = TRUE, digits = 2)
+                 ),
+        colour = genotype,
+        # fontface = face
+        )
+  ) +
+  # ggrepel::geom_text_repel(aes(label = TE)) +
+  theme_leo() +
+  theme(axis.title.y = element_blank()) +
+  labs(x = "Relative distance") +
+  # coord_cartesian(clip = "off") +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
+  scale_x_continuous(breaks = c(0.025, 0.975), labels = c("Cambium", "Pith")) +
+  scale_colour_manual(values = pal_ostwald_disc) +
+  facet_wrap(vars(variable),
+             scales = "free_y",
+             labeller = label_parsed,
+             nrow = 1)
+
+pdf("individual_intercept.pdf", width = twocol, height = onecol * 0.5)
+dist_lig1
+dev.off()
+
+```
+
+### In vitro Poplar
+
+#### Load data
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+
+pop_irx <- read_csv(paste0(datapath, "PhD/IRX/Poplar/poplar_irx.csv"))
+
+#### create reference at the height of the cambium for distance calculation ####
+pop_irx_ref <- pop_irx %>%
+  filter(object == "ref") %>%
+  select(c(
+    "genotype",
+    "replicate",
+    "technical",
+    "X",
+    "Y",
+    "Length"
+  ))
+pop_irx_ref$ref.y1 <- pop_irx_ref$Y
+pop_irx_ref$ref.y2 <- pop_irx_ref$Y
+pop_irx_ref$ref.x1 <- pop_irx_ref$X - (pop_irx_ref$Length / 2)
+pop_irx_ref$ref.x2 <- pop_irx_ref$X + (pop_irx_ref$Length / 2)
+
+#### merge reference into data frame ####
+pop_irx <- pop_irx %>%
+  filter(object != "ref") %>%
+  full_join(select(pop_irx_ref, -X, -Y, -Length),
+    by = c("genotype", "replicate", "technical")
+  ) %>%
+  mutate(genotype = ordered(genotype, levels = c("WT", "c4h", "ccr1")))
+
+#### calculate difference of the centre of each vessel to the cambium ####
+pop_irx$Distance <-
+  apply(
+    pop_irx[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
+    1,
+    function(x) {
+      a <- c(x[1], x[2])
+      b <- c(x[3], x[5])
+      c <- c(x[4], x[6])
+      v1 <- b - c
+      v2 <- a - b
+      m <- cbind(v1, v2)
+      d <- abs(det(m)) / sqrt(sum(v1 * v1))
+      d
+    }
+  )
+
+pop_irx <- pop_irx %>%
+  mutate(bin = cut(
+    Distance,
+    breaks = c(-Inf, 50, 100, Inf),
+    labels = c("I", "II", "III")
+  ))
+
+pop_irx <- pop_irx %>%
+  mutate(
+    convexity = Area / ConvexArea,
+    Mean = Mean / 255,
+    type = recode(type,
+      "P" = "PX",
+      "S" = "SX"
+    )
+  )
+```
+
+#### Wiesner by distance
+
+```{r}
+
+pop_irx_dist <- pop_irx %>%
+  mutate(genotype = recode(genotype, 
+                           "c4h" = "C4H-RNAi",
+                           "ccr1" = "CCR1-RNAi"),
+         type = recode(type, 
+                       "PX" = "PV",
+                       "SX" = "SV")) %>%
+  group_by(genotype, replicate) %>%
+  mutate(rel_dist = Distance / max(Distance))
+
+pop_dist <- ggplot(pop_irx_dist,
+       aes(x = rel_dist,
+           y = Mean)) +
+  geom_point(aes(fill = type),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25) +
+  geom_smooth(aes(colour = type),
+              method = "lm",
+              size = 0.4) +
+  labs(x = "Relative distance",
+       y = expression(paste("Relative "*bold(G)[CHO]))) +
+  scale_x_continuous(breaks = c(0.05,0.95), labels = c("Cambium", "Pith")) +
+  scale_colour_manual(values = pal_flame_disc[c(1,3)]) +
+  scale_fill_manual(values = pal_flame_disc[c(1,3)]) +
+  theme_leo() +
+  theme(legend.position = "right",
+        legend.title = element_blank()) +
+  facet_wrap(~ genotype)
+
+pdf("pop_dist.pdf", width = twocol * 0.975, height = onecol * 0.33)
+pop_dist
+
+```
+
+#### Mutant overview
+
+```{r}
+
+pop_irx_overview <- pop_irx %>%
+  ungroup() %>%
+  select(
+    genotype = genotype,
+    type = type,
+    `Adj. vessels` = n_v,
+    Area = Area,
+    Circularity = Circ.,
+    Distance = Distance,
+    Convexity = convexity
+  ) %>%
+  pivot_longer(`Adj. vessels`:Convexity, names_to = "variable", values_to = "value") %>%
+  drop_na()
+
+write_csv(
+  pop_irx_overview %>%
+    filter(genotype == "WT") %>%
+    group_by(genotype, type, variable) %>%
+    summarise(value = mean(value)),
+  "WT_values.csv"
+)
+
+
+pop_letters <- letter_groups(pop_irx_overview,
+  value,
+  genotype,
+  "kruskal",
+  type,
+  variable,
+  print_position = "below",
+  print_adjust = 0.75
+) %>%
+  mutate(value = case_when(
+    variable == "Convexity" ~ value - 0.1,
+    variable == "Circularity" ~ value - 0.1,
+    TRUE ~ value
+  ))
+
+pop_overview <- ggplot(
+  pop_irx_overview,
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
+  geom_quasirandom(
+    aes(fill = type),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  geom_violin(aes(
+    group = genotype,
+    # fill = cell.type
+  ),
+  draw_quantiles = 0.5,
+  fill = "white",
+  colour = "black",
+  alpha = 0.85,
+  width = 0.2,
+  position = position_dodge(width = 0.6),
+  size = 0.2,
+  scale = "width"
+  ) +
+  # geom_boxplot(
+  #   fill = "white",
+  #   colour = "black",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_text(
+    data = pop_letters,
+    aes(label = Letters),
+    size = 6 / (14 / 5),
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = pal_flame_disc[c(1, 3)]) +
+  scale_x_discrete(
+    labels = c(
+      "WT",
+      expression(paste(italic("C4H"), "-RNAi")),
+      expression(paste(italic("CCR"), "-RNAi"))
+    )
+  ) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+  theme_leo() +
+  theme(
+    # axis.text.x = element_text(angle = 90,
+    #                                hjust = 1),
+    axis.title = element_blank()
+  ) +
+  expand_limits(y = 0) +
+  facet_grid(variable ~ type,
+    scales = "free_y"
+  )
+
+
+# pop_neighbourhood <- ggplot(pop_irx, aes(x = n_v, y = convexity)) +
+#   geom_point(aes(fill = genotype),
+#     shape = 21,
+#     size = 2,
+#     alpha = 0.75,
+#     stroke = 0.2
+#   ) +
+#   scale_fill_few() +
+#   scale_y_continuous(limits = c(0.7,1)) +
+#   labs(x = "Fraction of perimeter adjacent to other vessels") +
+#   theme_leo() +
+#   geom_smooth(
+#     method = "loess",
+#     span = 1,
+#     colour = "black",
+#     linetype = 2
+#   ) +
+#   facet_wrap(~ bin, ncol = 1)
+#
+# pop_distance <- ggplot(pop_irx, aes(x = Distance, y = convexity)) +
+#   geom_point(aes(fill = genotype),
+#     shape = 21,
+#     size = 2,
+#     alpha = 0.75,
+#     stroke = 0.2
+#   ) +
+#   scale_fill_few() +
+#   scale_y_continuous(limits = c(0.7,1)) +
+#   labs(x = "Distance from the cambium [µm]") +
+#   theme_leo() +
+#   geom_smooth(
+#     method = "loess",
+#     span = 1,
+#     colour = "black",
+#     linetype = 2
+#   ) +
+#   facet_wrap(~ bin, ncol = 1)
+
+pdf("pop_overview.pdf", width = onecol * 0.9, height = onecol * 0.9)
+pop_overview
+dev.off()
+```
+
+#### WT overview
+
+```{r}
+
+pop_adj <- pop_irx %>%
+  select(genotype:n_v) %>%
+  filter(genotype == "WT") %>%
+  pivot_longer(n_r:n_v, names_to = "variable", values_to = "value")
+
+p_values <- pop_adj %>%
+  group_by(variable) %>%
+  summarise(p_value = broom::tidy(
+    wilcox.test(value[type == "PX"], value[type == "SX"])
+  )[["p.value"]]) %>%
+  mutate(
+    p_value = formatC(p_value, format = "e", digits = 1)
+    #        case_when(
+    # p_value > 0.001 ~ round(p_value, digits = 3),
+    # p_value > 0.0001 ~ round(p_value, digits = 4),
+    # p_value > 0.00001 ~ round(p_value, digits = 5),
+    # p_value > 0.000001 ~ round(p_value, digits = 6),
+    # p_value > 0.0000001 ~ round(p_value, digits = 7),
+    # TRUE ~ round(p_value, digits = 8)
+  )
+
+pop_adj_box <- ggplot(
+  data = pop_adj,
+  aes(x = variable, y = value * 100)
+) +
+  geom_quasirandom(
+    aes(
+      group = interaction(type, variable),
+      fill = type
+    ),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  # geom_boxplot(
+  #   aes(group = interaction(cell.type, variable), fill = cell.type),
+  #   # fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   position = position_dodge2(width = 1),
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_violin(aes(
+    group = interaction(type, variable),
+    # fill = cell.type
+  ),
+  draw_quantiles = 0.5,
+  fill = "white",
+  colour = "black",
+  alpha = 0.85,
+  width = 0.2,
+  position = position_dodge(width = 0.6),
+  size = 0.2,
+  scale = "width"
+  ) +
+  geom_text(
+    data = p_values,
+    aes(label = paste(("P ="), p_value)),
+    # x = 0.5,
+    y = -5,
+    hjust = 0.5,
+    vjust = 1,
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  annotate("text",
+    x = c(0.6, 1.4),
+    y = c(100, 100),
+    label = c("PV", "SV"),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  annotate("segment",
+    x = c(0.7, 1.3),
+    xend = c(0.8, 1.2),
+    y = c(100, 100),
+    yend = c(100, 100),
+    colour = "black",
+    size = 0.2
+  ) +
+  scale_x_discrete(labels = c("Fibres", "Parenchyma", "Rays", "Vessels")) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.15, 0.05))) +
+  # scale_fill_grey(start = 1, end = 0) +
+  # scale_fill_brewer(palette = "Greys") +
+  scale_fill_manual(values = pal_flame_disc[c(1, 3)]) +
+  # scale_fill_manual(values = pal_ostwald[c(3, 4, 6)]) +
+  # scale_colour_manual(values = pal_ostwald[c(3, 4, 6)]) +
+  labs(
+    x = "Neighbouring cell type",
+    y = "CW adjacent [%]"
+  ) +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none"
+  )
+
+pdf("pop_adj_box.pdf", width = 9 / 2.54, height = 1.5)
+pop_adj_box
+dev.off()
+
+
+rmn_violin <- function(x) {
+  pop_irx_overview <- pop_irx %>%
+    filter(genotype == "WT") %>%
+    select(genotype:type, Mean, Distance, Area) %>%
+    pivot_longer(c(Mean, Distance, Area), names_to = "variable", values_to = "value")
+
+  p_values <- pop_irx_overview %>%
+    filter(variable == x) %>%
+    summarise(p_value = broom::tidy(
+      t.test(value[type == "PX"], value[type == "SX"])
+    )[["p.value"]]) %>%
+    mutate(p_value = formatC(p_value, format = "e", digits = 1))
+
+  ggplot(
+    data = pop_irx_overview %>% filter(variable == x),
+    aes(x = type, y = value)
+  ) +
+    geom_quasirandom(
+      aes(fill = type),
+      dodge.width = 0.6,
+      shape = 21,
+      # width = 0.1,
+      # colour = NA,
+      alpha = 0.75,
+      size = 1,
+      stroke = 0.2
+    ) +
+    # geom_boxplot(
+    #   aes(group = interaction(cell.type, variable), fill = cell.type),
+    #   # fill = "white",
+    #   alpha = 0.5,
+    #   width = 0.6,
+    #   position = position_dodge2(width = 1),
+    #   outlier.alpha = 0,
+    #   lwd = 0.25,
+    #   fatten = 1,
+    #   width = 0.25
+    # ) +
+    geom_violin(aes(
+      group = type,
+      # fill = cell.type
+    ),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+    ) +
+    geom_text(
+      data = p_values,
+      aes(label = paste(("P ="), p_value)),
+      x = 1.5,
+      y = -0,
+      hjust = 0.5,
+      vjust = 1,
+      family = "Helvetica",
+      size = ggtext_size
+    ) +
+    scale_x_discrete(labels = c("PV", "SV")) +
+    scale_fill_manual(values = pal_flame_disc[c(1, 3)]) +
+    scale_y_continuous(expand = expand_scale(mult = c(0.15, 0.05))) +
+    expand_limits(y = 0) +
+    theme_leo() +
+    theme(
+      text = element_text(family = "Helvetica"),
+      legend.position = "none",
+    )
+}
+
+pop_area <- rmn_violin("Area") +
+  labs(
+    x = "",
+    y = expression(paste("Area [µm"^2, "]"))
+  )
+
+pop_wiesner <- rmn_violin("Mean") +
+  labs(
+    x = "",
+    y = expression(paste(bold(G)[CHO]))
+  )
+
+pop_distance <- rmn_violin("Distance") +
+  labs(
+    x = "",
+    y = expression(paste("Distance [µm]"))
+  )
+
+
+celltypes_WT <-
+  rasterGrob(readPNG(
+    "/home/leonard/Dropbox/IRX manuscript/Submission/Edits/poplarWT.png"
+  ))
+
+
+right_low <- plot_grid(
+  pop_area,
+  pop_distance,
+  pop_wiesner,
+  labels = c("C", "D", "E"),
+  nrow = 1,
+  # rel_widths = c(1, 2.2),
+  vjust = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica"
+)
+
+right <- plot_grid(
+  pop_adj_box,
+  right_low,
+  labels = c("B", ""),
+  nrow = 2,
+  # rel_widths = c(1, 2.2),
+  vjust = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica"
+)
+
+pdf("IRX_figure2_pop.pdf", width = onecol * 1.15, height = onecol * 0.75)
+plot_grid(
+  celltypes_WT,
+  right,
+  labels = c("A", ""),
+  nrow = 1,
+  # rel_widths = c(1, 2.2),
+  vjust = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica",
+  rel_widths = c(1, 2)
+)
+dev.off()
+```
+
+#### SEMs
+
+```{r}
+
+pop_irx <- as.data.frame(pop_irx)
+poplar_psem <- psem(
+  lm(Circ. ~
+  n_v +
+    Distance +
+    # n_p +
+    convexity,
+  data = filter(pop_irx, type == "PX")
+  ),
+  lm(convexity ~
+  n_v +
+    # n_p +
+    Mean +
+    Distance +
+    Perim.,
+  data = filter(pop_irx, type == "PX")
+  ),
+  data = filter(pop_irx, type == "PX")
+)
+
+ind_claims <- ind_claims %>%
+  bind_rows(summary(poplar_psem)[["dTable"]][, c(1, 4, 5)] %>%
+    mutate(
+      model = "PX",
+      species = "Populus",
+      fishC = summary(poplar_psem)[["Cstat"]][["Fisher.C"]],
+      fishP = summary(poplar_psem)[["Cstat"]][["P.Value"]]
+    ))
+
+coefs <- coefs %>%
+  bind_rows(summary(poplar_psem)[["coefficients"]][, c(1:8)] %>%
+    mutate(
+      model = "PX",
+      species = "Populus"
+    ))
+plot(poplar_psem)
+
+poplar_psem <- psem(
+  lm(Circ. ~
+  n_v +
+    Distance +
+    # n_p +
+    convexity,
+  data = filter(pop_irx, type == "SX")
+  ),
+  lm(convexity ~
+  n_v +
+    # n_p +
+    Mean +
+    Distance +
+    Perim.,
+  data = filter(pop_irx, type == "SX")
+  ),
+  data = filter(pop_irx, type == "SX")
+)
+
+ind_claims <- ind_claims %>%
+  bind_rows(summary(poplar_psem)[["dTable"]][, c(1, 4, 5)] %>%
+    mutate(
+      model = "SX",
+      species = "Populus",
+      fishC = summary(poplar_psem)[["Cstat"]][["Fisher.C"]],
+      fishP = summary(poplar_psem)[["Cstat"]][["P.Value"]]
+    ))
+
+coefs <- coefs %>%
+  bind_rows(summary(poplar_psem)[["coefficients"]][, c(1:8)] %>%
+    mutate(
+      model = "SX",
+      species = "Populus"
+    ))
+plot(poplar_psem)
+```
+
+#### Interactions 
+```{r}
+find_interactions <- function(x) {
+  pop_irx <- filter(pop_irx, type == x) %>%
+    select(
+      convexity,
+      Perim.,
+      Mean,
+      # n_f,
+      # n_p,
+      n_v,
+      Distance
+    ) %>%
+    drop_na()
+
+  model.null <- lm(convexity ~ 1,
+    data = pop_irx
+  )
+  model.full <- lm(convexity ~ (.)^2,
+    data = pop_irx
+  )
+
+  best_model <- step(model.null,
+    scope = list(upper = model.full),
+    direction = "both",
+    data = pop_irx
+  )
+
+  print(tidy(best_model) %>%
+    select(term) %>%
+    filter(str_detect(term, fixed(":"))))
+
+  best_model
+}
+
+#### protoxylem ####
+best_model <- find_interactions("S")
+
+Distance_n_v <- interact_plot(best_model,
+  pred = Distance, modx = n_v,
+  colors = c("white", "white", "white"),
+  x.label = "Distance [µm]",
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = "none",
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  )
+Distance_n_v$layers[[1]]$aes_params$size <- 0.2
+
+Mean_n_v <- interact_plot(best_model,
+  pred = n_v, modx = Mean,
+  colors = c("white", "white", "white"),
+  x.label = "Adjacent vessels",
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = "none",
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  )
+Mean_n_v$layers[[1]]$aes_params$size <- 0.2
+
+Mean_Distance <- interact_plot(best_model,
+  pred = Distance, modx = Mean,
+  colors = c("white", "white", "white"),
+  x.label = "Distance [µm]",
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = "none",
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  )
+Mean_Distance$layers[[1]]$aes_params$size <- 0.2
+
+pdf("pop_interactions.pdf", width = onecol, height = onecol / 3)
+plot_grid(Distance_n_v,
+  Mean_Distance,
+  Mean_n_v,
+  nrow = 1
+)
+dev.off()
+```
+
+
+### Bending
+
+#### Curves
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+bending_data_supp <- bending_data_complete %>%
+  mutate(genotype = recode(genotype,
+                           "fah1" = "<i>fah1</i>",
+                           "cad4xcad5" = "<i>cad4</i>x<i>5</i>"))
+curves <- ggplot(
+  data = bending_data_supp,
+  aes(x = strain, y = stress)
+) +
+  stat_smooth(aes(group = interaction(genotype, replicate, section)),
+    geom = "line",
+    size = 0.2,
+    alpha = 0.15,
+    colour = "black",
+    se = F
+  ) +
+  geom_smooth(aes(colour = genotype),
+    size = 0.4
+  ) +
+  # geom_smooth(
+  #   data = filter(
+  #     bending_data_complete,
+  #     genotype == "WT" &
+  #       strain < 0.25
+  #   ),
+  #   aes(
+  #     x = strain,
+  #     y = stress
+  #   ),
+  #   method = "lm",
+  #   se = F,
+  #   fullrange = T,
+  #   colour = "black",
+  #   linetype = 2,
+  #   size = 0.2
+  # ) +
+  # geom_line(
+  #   data = filter(bending_data_complete, genotype == "WT"),
+  #   aes(x = strain, y = 14),
+  #   linetype = 1,
+  #   colour = "black",
+  #   size = 0.2
+  # ) +
+  # geom_segment(
+  #   data = filter(bending_data_complete, genotype == "WT")[1, ],
+  #   aes(x = 0.75, xend = 0.75, y = 0, yend = 50),
+  #   linetype = 3,
+  #   colour = "black",
+  #   size = 0.2
+  # ) +
+  # geom_text(
+  #   data = filter(bending_data_complete, genotype == "WT")[1, ],
+  #   aes(x = 0.71, y = 45, label = br),
+  #   hjust = 1,
+  #   vjust = 0,
+  #   angle = 90,
+  #   family = "Helvetica",
+  #   size = ggtext_size
+  # ) +
+  # geom_text(
+  #   data = filter(bending_data_complete, genotype == "WT")[1, ],
+  #   aes(x = 3, y = 15.5, label = str),
+  #   hjust = 1,
+  #   vjust = 0,
+  #   family = "Helvetica",
+  #   size = ggtext_size
+  # ) +
+  # geom_text(
+  #   data = filter(bending_data_complete, genotype == "WT")[1, ],
+  #   aes(x = 1.53, y = 45, label = stiff),
+  #   hjust = 1,
+  #   vjust = 0,
+  #   angle = 52,
+  #   family = "Helvetica",
+  #   size = ggtext_size
+  # ) +
+  scale_colour_manual(values = c(
+    pal_ostwald_disc[1],
+    pal_ostwald_disc[3],
+    pal_ostwald_disc[3]
+  )) +
+  coord_cartesian(ylim = c(0, 45)) +
+  theme_leo() +
+  theme(strip.text = ggtext::element_markdown()) +
+  xlim(0, 3) +
+  labs(
+    x = "Strain [%]",
+    y = "Stress [MPa]"
+  ) +
+  facet_wrap(~genotype, nrow = 3)
+
+medium_curves <- medium_curves %>%
+  mutate(
+    stiff = "Stiffness",
+    str = "Strength",
+    br = "Breaking"
+  )
+
+curves_media <- ggplot(
+  data = medium_curves,
+  aes(x = strain, y = stress)
+) +
+  stat_smooth(aes(group = interaction(medium, replicate, section)),
+    geom = "line",
+    size = 0.2,
+    alpha = 0.15,
+    colour = "black",
+    se = F
+  ) +
+  geom_smooth(
+    colour = pal_ostwald_disc[1],
+    size = 0.4
+  ) +
+  coord_cartesian(ylim = c(0, 20)) +
+  theme_leo() +
+  xlim(0, 3) +
+  labs(
+    x = "Strain [%]",
+    y = "Stress [MPa]"
+  ) +
+  geom_smooth(
+    data = filter(
+      medium_curves,
+      medium == "Water" &
+        strain < 0.25
+    ),
+    aes(
+      x = strain,
+      y = stress
+    ),
+    method = "lm",
+    se = F,
+    fullrange = T,
+    colour = "black",
+    linetype = 2,
+    size = 0.2
+  ) +
+  geom_line(
+    data = filter(medium_curves, medium == "Water"),
+    aes(x = strain, y = 9),
+    linetype = 1,
+    colour = "black",
+    size = 0.2
+  ) +
+  geom_segment(
+    data = filter(medium_curves, medium == "Water")[1, ],
+    aes(x = 0.675, xend = 0.675, y = 0, yend = 50),
+    linetype = 3,
+    colour = "black",
+    size = 0.2
+  ) +
+  geom_text(
+    data = filter(medium_curves, medium == "Water")[1, ],
+    aes(x = 0.6, y = 20.5, label = br),
+    hjust = 1,
+    vjust = 0,
+    angle = 90,
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  geom_text(
+    data = filter(medium_curves, medium == "Water")[1, ],
+    aes(x = 3, y = 10, label = str),
+    hjust = 1,
+    vjust = 0,
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  geom_text(
+    data = filter(medium_curves, medium == "Water")[1, ],
+    aes(x = 1.3, y = 20, label = stiff),
+    hjust = 1,
+    vjust = 0,
+    angle = 61,
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  facet_wrap(~medium, nrow = 3)
+
+# pdf("media_curves.pdf", width = 2, height = 4)
+# curves_media
+# dev.off()
+```
+
+#### Hydration influence
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+medium_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/WT_medium.csv")) %>%
+  pivot_longer(cols = c(stiffness, strength), values_to = "value", names_to = "variable") %>%
+  mutate(variable = recode(variable,
+    "stiffness" = "Stiffness",
+    "strength" = "Strength"
+  )) %>%
+  mutate(medium = ordered(medium, levels = c("Water", "Air", "Sorbitol")))
+
+medium_diameter_line <- ggplot(medium_data) +
+  geom_point(aes(x = d.microscope, y = value, fill = medium),
+    shape = 21,
+    alpha = 0.75,
+    size = 1.5,
+    stroke = 0.2
+  ) +
+  geom_smooth(aes(x = d.microscope, y = value, fill = medium, linetype = medium),
+    method = "lm",
+    colour = "black",
+    size = 0.2
+  ) +
+  labs(
+    y = "MPa",
+    x = "Stem diameter [mm]"
+  ) +
+  scale_fill_grey(start = 0.9, end = 0.1) +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank()
+  ) +
+  facet_wrap(~variable, scales = "free_y")
+
+letters <- letter_groups(medium_data %>% filter(variable == "Stiffness"),
+  d.microscope,
+  medium,
+  "tukey",
+  print_position = "below",
+  print_adjust = 1
+)
+
+medium_diameter_box <- ggplot(
+  data = medium_data %>% filter(variable == "Stiffness"),
+  aes(x = medium, y = d.microscope)
+) +
+  # geom_line(aes(group = interaction(cell.type, variable, cell, measurement)),
+  #           size = 0.2,
+  #           alpha = 0.25) +
+  geom_quasirandom(
+    aes(fill = medium),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2
+  ) +
+  # geom_boxplot(
+  #   aes(group = interaction(cell.type, variable), fill = cell.type),
+  #   # fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   position = position_dodge2(width = 1),
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_violin(
+    # aes(group = interaction(days, cell.type),
+    # fill = cell.type
+    # ),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica",
+    position = position_dodge(width = 0.6)
+  ) +
+  # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
+  # scale_fill_manual(values = pal_flame_disc) +
+  scale_fill_grey(start = 0.9, end = 0.1) +
+  expand_limits(y = 0) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+  labs(y = "Stem diameter [mm]") +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none",
+    axis.title.x = element_blank()
+  )
+```
+
+#### Coniferaldehyde position
+
+```{r}
+position <- read_csv(paste0(datapath, "PhD/IRX/Bending/coniferaldehyde_position.csv")) %>%
+  mutate(total = internal + terminal,
+         ratio = terminal / total * 100,
+         genotype = ordered(genotype, levels = c("WT", "fah1", "cad4xcad5")))
+
+letters <- letter_groups(position,
+                         ratio,
+                         genotype,
+                         "tukey",
+                         print_position = "below")
+
+position_violin <- ggplot(
+  position,
+  aes(x = genotype, y = ratio)
+) +
+  geom_quasirandom(
+    aes(fill = genotype),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2
+  ) +
+  stat_summary(geom = "crossbar", 
+               fun = "mean",
+               fatten = 1,
+               size = 0.2,
+               width = 0.3) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica",
+    position = position_dodge(width = 0.6)
+  ) +
+  scale_fill_manual(values = c(
+    pal_ostwald_disc[1],
+    pal_ostwald_disc[3],
+    pal_ostwald_disc[3]
+  )) +
+  expand_limits(y = 0) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05)),
+                     breaks = c(0, 20, 40)) +
+  scale_x_discrete(labels = c(
+    "WT",
+    expression(italic("fah1")),
+    expression(paste(italic("cad4"), "x", italic("cad5")))
+  )) +
+  labs(y = "Terminal <b>G</b><sub>CHO</sub> [%]") +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none",
+    axis.title.y = ggtext::element_textbox_simple(orientation = "left-rotated",
+                                                  halign = 0.5),
+    axis.title.x = element_blank()
+  )
+```
+
+
+#### Composition influence
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+s_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/stiffness_s.csv")) %>%
+  bind_rows(read_csv(paste0(datapath, "PhD/IRX/Bending/cad_diameters.csv"))) %>%
+  tidyr::fill(everything()) %>%
+  mutate(
+    genotype = recode(genotype, "cad4xcad5" = "cad4x5"),
+    genotype = ordered(genotype, levels = c("WT", "fah1", "cad4x5"))
+  )
+
+heights <- read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
+  select(genotype, height) %>%
+  mutate(genotype = recode(genotype, "cad4xcad5" = "cad4x5")) %>% 
+  filter(genotype %in% c("col-0", "fah1", "cad4x5")) %>%
+  mutate(
+    genotype = recode(genotype, "col-0" = "WT"),
+    genotype = ordered(genotype, levels = c("WT", "fah1", "cad4x5"))
+  )
+
+heights_fold <- heights %>%
+  group_by(genotype) %>% 
+  summarise(height = median(height)) %>%
+  ungroup() %>%
+  mutate(height_fold = height / height[genotype == "WT"])
+
+widths_fold <- s_data %>%
+  group_by(genotype) %>% 
+  summarise(d.microscope = median(d.microscope)) %>%
+  ungroup() %>%
+  mutate(d.microscope_fold = d.microscope / d.microscope[genotype == "WT"])
+
+letters <- letter_groups(s_data,
+  d.microscope,
+  genotype,
+  "tukey",
+  print_position = "below",
+  print_adjust = 1
+)
+
+
+mutant_diameter_box <- ggplot(
+  data = s_data,
+  aes(x = genotype, y = d.microscope)
+) +
+  # geom_line(aes(group = interaction(cell.type, variable, cell, measurement)),
+  #           size = 0.2,
+  #           alpha = 0.25) +
+  geom_quasirandom(
+    aes(fill = genotype),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2
+  ) +
+  # geom_boxplot(
+  #   aes(group = interaction(cell.type, variable), fill = cell.type),
+  #   # fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   position = position_dodge2(width = 1),
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_violin(
+    # aes(group = interaction(days, cell.type),
+    # fill = cell.type
+    # ),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica",
+    position = position_dodge(width = 0.6)
+  ) +
+  scale_x_discrete(labels = c(
+    "WT",
+    expression(italic("fah1")),
+    expression(paste(italic("cad4"), "x", italic("5")))
+  )) +
+  # scale_fill_manual(values = pal_flame_disc) +
+  scale_fill_manual(values = c(
+    pal_ostwald_disc[1],
+    pal_ostwald_disc[3],
+    pal_ostwald_disc[3]
+  )) +
+  expand_limits(y = 0) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+  labs(y = "Stem diameter [mm]") +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none",
+    axis.title.x = element_blank()
+  )
+
+letters <- letter_groups(heights,
+  height,
+  genotype,
+  "tukey",
+  print_position = "below",
+  print_adjust = 2
+)
+
+
+mutant_height_box <- ggplot(
+  data = heights,
+  aes(x = genotype, y = height)
+) +
+  # geom_line(aes(group = interaction(cell.type, variable, cell, measurement)),
+  #           size = 0.2,
+  #           alpha = 0.25) +
+  geom_quasirandom(
+    aes(fill = genotype),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2
+  ) +
+  # geom_boxplot(
+  #   aes(group = interaction(cell.type, variable), fill = cell.type),
+  #   # fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   position = position_dodge2(width = 1),
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_violin(
+    # aes(group = interaction(days, cell.type),
+    # fill = cell.type
+    # ),
+    draw_quantiles = 0.5,
+    adjust = 2,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica",
+    position = position_dodge(width = 0.6)
+  ) +
+  scale_x_discrete(labels = c(
+    "WT",
+    expression(italic("fah1")),
+    expression(paste(italic("cad4"), "x", italic("5")))
+  )) +
+  # scale_fill_manual(values = pal_flame_disc) +
+  scale_fill_manual(values = c(
+    pal_ostwald_disc[1],
+    pal_ostwald_disc[3],
+    pal_ostwald_disc[3]
+  )) +
+  expand_limits(y = 0) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+  labs(y = "Plant height [cm]") +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none",
+    axis.title.x = element_blank()
+  )
+
+right <- plot_grid(medium_diameter_box,
+  mutant_diameter_box,
+  mutant_height_box,
+  labels = c("B", "C", "D"),
+  align = "v",
+  axis = "l",
+  label_fontfamily = "Helvetica",
+  label_size = 10,
+  nrow = 3
+)
+
+```
+
+#### Assemble figure
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
+# pdf("bending_supplemental.pdf", width = onecol, height = onecol)
+# bending_supp <- plot_grid(
+#   curves,
+#   right,
+#   labels = c("A", ""),
+#   # vjust = 1,
+#   nrow = 1,
+#   align = "v",
+#   axis = "lb",
+#   label_size = 10,
+#   label_fontfamily = "Helvetica"
+# )
+# bending_supp
+# dev.off()
+
+# patch <- curves | (medium_diameter_box / mutant_diameter_box / mutant_height_box)
+
+patch <- 
+  curves_media |
+  (medium_strength / medium_diameter_box / position_violin) |
+  curves | 
+  (violin_strength / mutant_diameter_box / mutant_height_box)
+
+pdf("bending_supplemental.pdf", width = twocol, height = onecol)
+patch + plot_annotation(tag_levels = 'A') & 
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
+dev.off()
+```
+
+### Drought experiment conditions
+
+```{r} 
+transpiration <- read_csv(
+  paste0(datapath, "PhD/IRX/Drought/evapotranspiration.csv")
+) %>%
+  pivot_longer(-c(medium, time), names_to = "plant", values_to = "transp_rate") %>%
+  mutate(
+    genotype = unlist(str_extract_all(plant, "[:alpha:]+")),
+    genotype = ordered(recode(genotype, "CAD" = "<i>cad4</i>x<i>5</i>"),
+      levels = c("WT", "<i>cad4</i>x<i>5</i>")
+    ),
+    replicate = unlist(str_extract_all(plant, "[:digit:]+")),
+    medium = ordered(medium,
+      levels = c("Water", "10% PEG", "20% PEG")
+    ),
+    transp_rate = transp_rate * 1000
+  ) %>%
+  select(-plant) %>%
+  group_by(medium, genotype, time) %>%
+  mutate(mean_transp = mean(transp_rate))
+
+conditions <- read_csv(
+  paste0(datapath, "PhD/IRX/Drought/chamber_conditions.csv")
+) %>%
+  fill(everything()) %>%
+  group_by(genotype) %>%
+  mutate(
+    genotype = ordered(recode(genotype, "CAD" = "<i>cad4</i>x<i>5</i>"),
+      levels = c("WT", "<i>cad4</i>x<i>5</i>")
+    ),
+    time = row_number()
+  ) %>%
+  pivot_longer(-c(time, genotype))
+
+
+transp <- ggplot(
+  transpiration,
+  aes(
+    x = time,
+    y = transp_rate,
+    linetype = medium,
+    colour = genotype
+  )
+) +
+  geom_line(aes(group = interaction(medium, replicate, genotype)),
+    size = 0.1,
+    alpha = 0.25
+  ) +
+  # geom_line(aes(y = mean_transp)) +
+  geom_smooth(aes(
+    group = interaction(medium, genotype),
+    fill = genotype
+  ),
+  size = 0.2,
+  se = T,
+  alpha = 0.25
+  ) +
+  labs(
+    y = "Evapotranspiration [mg min<sup>-1</sup>]",
+    x = "Time [min]"
+  ) +
+  expand_limits(x = 0) +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    legend.text = ggtext::element_textbox(),
+    legend.title = element_blank(),
+    axis.title.y = ggtext::element_textbox_simple(
+      orientation = "left-rotated",
+      maxwidth = unit(0.5, "npc"),
+      halign = 0.5,
+      vjust = 0
+    ),
+    strip.text = element_blank()
+  ) +
+  scale_x_continuous(breaks = c(0, 5, 10, 15, 20)) +
+  scale_colour_brewer(palette = "Set2") +
+  # scale_fill_brewer(palette = "Set2") +
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
+  scale_fill_manual(values = pal_ostwald_disc[c(1,3)]) +
+  # scale_colour_grey(start = 0.9, end = 0.1) +
+  guides(linetype = guide_legend(override.aes = list(colour = "black",
+                                                     fill = "white",
+                                                     size = 0.4))) 
+  # facet_wrap(~genotype,
+  #   ncol = 2
+  # )
+
+hum <- ggplot(conditions %>% filter(name == "humidity"),
+                aes(x = time,
+                    y = value,
+                    colour = genotype)) +
+  geom_line(size = 0.2) +
+  expand_limits(y = 0) +
+  theme_leo() +
+  labs(y = "Humidity [%]") +
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = ggtext::element_textbox_simple(
+          orientation = "left-rotated",
+          maxwidth = unit(0.25, "npc"),
+          halign = 0.5,
+          vjust = 0
+          )) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) 
+  # facet_wrap(~genotype, ncol = 2)
+
+ill <- ggplot(conditions %>% filter(name == "illumination"),
+                aes(x = time,
+                    y = value,
+                    colour = genotype)) +
+  geom_line(size = 0.2) +
+  expand_limits(y = 0) +
+  theme_leo() +
+  labs(y = "Illumination [cm<sup>-2</sup> s<sup>-1</sup>]") +
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = ggtext::element_textbox_simple(
+          orientation = "left-rotated",
+          halign = 0.5,
+          vjust = 0
+          ),
+        strip.text = element_blank()) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) 
+  # facet_wrap(~genotype, ncol = 2)
+
+temp <- ggplot(conditions %>% filter(name == "temperature"),
+                aes(x = time,
+                    y = value,
+                    colour = genotype)) +
+  geom_line(size = 0.2) +
+  expand_limits(y = 0) +
+  theme_leo() +
+  labs(y = "Temperature [°C]") +
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = ggtext::element_textbox_simple(
+          orientation = "left-rotated",
+          halign = 0.5,
+          vjust = 0
+          ),
+        strip.text = element_blank()) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) 
+  # facet_wrap(~genotype, ncol = 2)
+
+
+pdf("transpiration_supplement.pdf", width = onecol, height = onecol)
+hum / ill / temp / transp + plot_layout(heights = c(0.5, 0.5, 0.5 , 1))
+dev.off()
+
+```
+
+#### Combined figure
+
+```{r}
+
+bending_grid <- 
+  curves_media | 
+  (medium_strength / medium_diameter_box / position_violin) |
+  curves | 
+  (violin_strength / mutant_diameter_box / mutant_height_box)
+
+
+evapo_grid <- hum / ill / temp / transp + plot_layout(heights = c(0.5, 0.5, 0.5 , 1))
+
+pdf("bending_evapo_supplement.pdf", width = twocol, height = twocol)
+bending_grid / evapo_grid + 
+  plot_annotation(tag_levels = 'A') & 
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
+dev.off()
+
+```
+
+# Export complete data
+
+```{r}
+# EDS ####
+eds_data
+# EM ####
+em_data
+# AFM ####
+afm_data <- read_csv(paste0(datapath, "PhD/IRX/AFM/afm_PX.csv")) %>%
+  tidyr::fill(everything()) %>%
+  mutate(days = as.character(days)) %>%
+  pivot_longer(cols = c(modulus, deformation, adhesion), names_to = "variable", values_to = "value") %>%
+  group_by(cell.type, days, cell, measurement, variable) %>%
+  mutate(
+    ratio = value[layer == "SCW"] / value[layer == "PCW"]) %>%
+  filter(!(variable == "adhesion" & # remove > 20-fold outlier
+    cell == "Cell 4" &
+    measurement == 6 &
+    cell.type == "PX" &
+    days == "50")) %>% 
+  ungroup() %>% 
+  pivot_wider(names_from = c("layer", "variable"), values_from = c("value", "ratio")) %>% 
+  select(1:10,
+         "ratio_modulus" = 11,
+         "ratio_deformation" = 12,
+         "ratio_adhesion" = 13,
+         -c(14:16))
+# Arabidopsis collapse model data ####
+At_model_data <- rmn_irx %>% 
+  select(
+    c(genotype:Area),
+    "Perimeter" = Perim.,
+    "Circularity" = Circ.,
+    "Adj. vessels" = n_v,
+    total_lignin:cellulose,
+    "S/G" = S.G,
+    "Benzaldehydes_rel" = Benz_rel,
+    "Wiesner" = mean.OD1,
+    "Convexity" = convexity,
+    "G-CHO_term/G-CHO_tot" = GCHO_term.GCHO_tot,
+    "G-CHO/G-CHOH" = GCHO.GOH
+  )
+# Poplar collapse model data ####
+Pt_model_data <- model_data_pop %>% 
+  select(
+    c(genotype:TE),
+    Distance,
+    "Perimeter" = Perim.,
+    "Circularity" = Circ.,
+    "Adj. vessels" = n_v,
+    total_lignin,
+    G_rel,
+    GOH_rel,
+    GCHO_rel,
+    S_rel,
+    P_rel,
+    cellulose,
+    "S/G" = S.G,
+    "Benzaldehydes_rel" = Benz_rel,
+    "Wiesner" = wiesner_avg,
+    "Convexity" = Solidity,
+    "G-CHO_term/G-CHO_tot" = GCHO_term.GCHO_tot,
+    "G-CHO/G-CHOH" = GCHO.GOH
+  )
+# Three-point bending turgor ####
+bending_turgor <- medium_data %>% 
+  pivot_wider(names_from = variable, values_from = value) %>% 
+  rename("replicate" = stem) %>% 
+  group_by(replicate, medium) %>% 
+  mutate(section = row_number()) %>% 
+  select(replicate, medium, section, stiffness) %>% 
+  left_join(medium_breaking) %>% 
+  drop_na() %>% 
+  pivot_wider(names_from = variable, values_from = value)
+# Three-point bending mutants ####
+bending_mutants <- stiffness_complete %>% 
+  pivot_wider(names_from = variable, values_from = value) %>% 
+  select(genotype, "stiffness" = modulus)
+breaking_mutants <- bending_pre %>% 
+  ungroup() %>% 
+  pivot_wider(names_from = variable, values_from = value) %>% 
+  select(genotype, break_point, strength)
+# Mutant biochemistry ####
+biochem_data
+# Drought rosette area ####
+rosettes <- read_csv(paste0(datapath, "PhD/IRX/Drought/drought_area.csv")) %>%
+  mutate(
+    image = str_remove(image, fixed(".JPG")),
+    mean_hue = (mean_hue / 255) * 360
+  ) %>%
+  separate(image, c("genotype", "medium", "replicate"), sep = "-") %>%
+  mutate(
+    medium = ordered(recode(medium,
+      "0%" = "Water",
+      "10%" = "10% PEG",
+      "20%" = "20% PEG"
+    ),
+    levels = c("Water", "10% PEG", "20% PEG")
+    ))
+# Drought evapotranspiration ####
+transpiration <- read_csv(
+  paste0(datapath, "PhD/IRX/Drought/evapotranspiration.csv")
+) %>%
+  pivot_longer(-c(medium, time), names_to = "plant", values_to = "transp_rate") %>%
+  mutate(
+    genotype = unlist(str_extract_all(plant, "[:alpha:]+")),
+    genotype = ordered(recode(genotype, "CAD" = "cad4xcad5"),
+      levels = c("WT", "cad4xcad5")
+    ),
+    replicate = unlist(str_extract_all(plant, "[:digit:]+")),
+    medium = ordered(medium,
+      levels = c("Water", "10% PEG", "20% PEG")
+    ),
+    transp_rate = transp_rate * 1000
+  ) %>% 
+  select(-plant)
+# Drought recovery ####
+recovery_data <- read_csv(paste0(datapath, "PhD/IRX/Drought/recovery.csv")) %>%
+  mutate(
+    state = ordered(state, levels = rev(c("Recovered", "Partly recovered", "Dead"))),
+    medium = ordered(medium, levels = c("Water", "10% PEG", "20% PEG")),
+    genotype = ordered(recode(genotype, "cad4x5" = "<i>cad4</i>x<i>5</i>"),
+                       levels = c("WT", "<i>cad4</i>x<i>5</i>"))
+  ) %>%
+  group_by(genotype, medium) %>%
+  mutate(sum = sum(count)) %>%
+  group_by(genotype, medium, state) %>%
+  mutate(proportion = (count / sum) * 100)
+
+writexl::write_xlsx(list(
+  "EDS data" = eds_data,
+  "EM data" = em_data,
+  "AFM data" = afm_data,
+  "Arabidopsis model data" = At_model_data,
+  "Poplar model data" = Pt_model_data,
+  "Turgor bending" = bending_turgor,
+  "Mutant stiffness" = bending_mutants,
+  "Mutant breaking" = breaking_mutants,
+  "Mutant biochemistry" = biochem_data,
+  "Drought area" = rosettes,
+  "Drought evapotranspiration" = transpiration,
+  "Drought recovery" = recovery_data
+),
+path = "Menard2021_data.xlsx",
+col_names = TRUE,
+format_headers = TRUE,
+use_zip64 = FALSE
+)
+
+```
+# Export Raman spectra
+```{r}
+# Arabidopsis Raman ####
+spectra_export.switch <- left_join(read_tsv(paste0(datapath, "PhD/IRX/PMX_which_SMX.tsv"),
+  col_types = "cccc"
+), rmn_data_corrected) %>%
+  mutate(
+    technical = str_c(technical, "switched", sep = "_"),
+    cell.type = "SMX"
+  )
+
+spectra_export <- rmn_data_corrected %>%
+  anti_join(read_tsv(paste0(datapath, "PhD/IRX/PMX_which_SMX.tsv"),
+    col_types = "cccc"
+  )) %>%
+  bind_rows(spectra_export.switch)
+
+At_spectra_filled <- spectra_export %>%
+  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
+  complete(wavenumber = seq(300, 1800)) %>%
+  arrange(genotype, cell.type, replicate, technical, wavenumber) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(raw_full = zoo::na.approx(corrected.intensity, na.rm = F),
+         scaled_full = zoo::na.approx(scaled, na.rm = F),
+         scaled_lig_full = zoo::na.approx(scaled_lig, na.rm = F))
+
+# collect raw (unscaled) spectra
+At_export_raw <- At_spectra_filled %>%
+  select(genotype, cell.type, replicate, technical, wavenumber, raw_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>% 
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical),
+    names_from = wavenumber,
+    values_from = raw_full
+  ) %>%
+  select(genotype, cell.type, replicate, technical, order(as.numeric(colnames(.))))
+
+# collect spectra normalised to AUC
+At_export_scaled <- At_spectra_filled %>%
+  select(genotype, cell.type, replicate, technical, wavenumber, scaled_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>% 
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical),
+    names_from = wavenumber,
+    values_from = scaled_full
+  ) %>%
+  select(genotype, cell.type, replicate, technical, order(as.numeric(colnames(.))))
+
+# collect spectra normalised to total lignin
+At_export_scaled_lig <- At_spectra_filled %>%
+  select(genotype, cell.type, replicate, technical, wavenumber, scaled_lig_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>% 
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical),
+    names_from = wavenumber,
+    values_from = scaled_lig_full
+  ) %>%
+  select(genotype, cell.type, replicate, technical, order(as.numeric(colnames(.))))
+
+writexl::write_xlsx(list(
+  "Raw spectra" = At_export_raw,
+  "AUC scaled spectra" = At_export_scaled,
+  "Lignin scaled spectra" = At_export_scaled_lig
+),
+path = "At_Raman_spectra.xlsx",
+col_names = TRUE,
+format_headers = TRUE,
+use_zip64 = FALSE
+)
+
+# Poplar Raman ####
+Pt_spectra_filled <- rmn_pop_scaled %>%
+  left_join(celltypes) %>% 
+  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
+  group_by(genotype, cell_type, replicate, technical, TE, repeat_of) %>% 
+  complete(wavenumber = seq(300, 1800)) %>%
+  arrange(genotype, cell_type, replicate, technical, TE, wavenumber) %>%
+  mutate(raw_full = zoo::na.approx(corrected.intensity, na.rm = F),
+         scaled_full = zoo::na.approx(scaled, na.rm = F),
+         scaled_lig_full = zoo::na.approx(scaled_lig, na.rm = F))
+
+# collect raw (unscaled) spectra
+Pt_export_raw <- Pt_spectra_filled %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, wavenumber, raw_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>% 
+  pivot_wider(
+    id_cols = c(genotype, cell_type, replicate, technical, TE, repeat_of),
+    names_from = wavenumber,
+    values_from = raw_full
+  ) %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, order(as.numeric(colnames(.))))
+
+# collect spectra normalised to AUC
+Pt_export_scaled <- Pt_spectra_filled %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, wavenumber, scaled_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>% 
+  pivot_wider(
+    id_cols = c(genotype, cell_type, replicate, technical, TE, repeat_of),
+    names_from = wavenumber,
+    values_from = scaled_full
+  ) %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, order(as.numeric(colnames(.))))
+
+# collect spectra normalised to total lignin
+Pt_export_scaled_lig <- Pt_spectra_filled %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, wavenumber, scaled_lig_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>% 
+  pivot_wider(
+    id_cols = c(genotype, cell_type, replicate, technical, TE, repeat_of),
+    names_from = wavenumber,
+    values_from = scaled_lig_full
+  ) %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, order(as.numeric(colnames(.))))
+
+writexl::write_xlsx(list(
+  "Raw spectra" = Pt_export_raw,
+  "AUC scaled spectra" = Pt_export_scaled,
+  "Lignin scaled spectra" = Pt_export_scaled_lig
+),
+path = "Pt_Raman_spectra.xlsx",
+col_names = TRUE,
+format_headers = TRUE,
+use_zip64 = FALSE
+)
+```
+
+
+
+
