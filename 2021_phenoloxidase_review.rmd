@@ -805,10 +805,13 @@ pocket <- pocket_atm %>%
   left_join(pocket_residues) %>%
   drop_na() %>%
   filter(!(str_detect(model, "IL"))) %>% # remove low_quality initial models
-  group_by(paralog, model, `6klg`) %>%
-  summarise(pocket = mode(pocket)) %>%
-  group_by(paralog, model) %>%
-  summarise(pocket = mode(pocket)) %>%
+  # group_by(paralog, model, `6klg`) %>%
+  # summarise(pocket = mode(pocket)) %>%
+  # group_by(paralog, model) %>%
+  # summarise(pocket = mode(pocket)) %>%
+  filter(`6klg` == "HIS_519") %>% 
+  group_by(paralog) %>% 
+  summarise(pocket = mode(pocket)) %>% 
   left_join(pocket_info) %>%
   pivot_wider(names_from = variable, values_from = value) %>% 
   mutate(
@@ -1069,6 +1072,7 @@ write_csv(best_models, "best_fpocket_models.csv")
 
 clust_data <- model_data %>%
   group_by(paralog, parameter) %>%
+  filter(paralog != "AtLAC16") %>% 
   summarise(value = median(value, na.rm = T)) %>%
   pivot_wider(names_from = parameter, values_from = value) %>%
   column_to_rownames(var = "paralog")
@@ -1082,6 +1086,7 @@ clust <- reorder(
 gg_clust <- dendro_data(as.dendrogram(clust))
 
 model_data <- model_data %>%
+  filter(paralog != "AtLAC16") %>% 
   mutate(paralog = ordered(paralog, levels = gg_clust[["labels"]][["label"]]))
 
 dendrogram <- ggplot(gg_clust$segments) +
