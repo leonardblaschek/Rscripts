@@ -98,65 +98,130 @@ pal_ylgnbu <- c(
   "#253494",
   "#081d58"
 )
+morgenstemning <- c(
+  "#000000ff",
+  "#051d2eff",
+  "#18355fff",
+  "#6f2b74ff",
+  "#c21b70ff",
+  "#f48139ff",
+  "#fae400ff",
+  "#fefe93ff",
+  "#ffffffff"
+)
 
 
-#### import Helvetica ####
+# #### import Helvetica ####
+# font_add(
+#   "Helvetica",
+#   regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+#   italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+#   bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+#   bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+# )
+# showtext_auto()
+# 
+# #### generating plot theme ####
+# theme_leo <- function(base_size = 6,
+#                       base_family = "Helvetica") {
+#   theme_minimal(
+#     base_size = base_size,
+#     base_family = base_family
+#   ) %+replace%
+#     theme(
+#       strip.text = element_text(hjust = 0, 
+#                                 # face = "italic"
+#                                 ),
+#       axis.ticks = element_line(
+#         size = 0.125,
+#         lineend = "square",
+#         color = "black"
+#       ),
+#       axis.text.x = element_text(
+#         size = 6,
+#         colour = "black", # flipped coords
+#         margin = margin(1, 1, 1, 1)
+#       ),
+#       axis.text.y = element_text(
+#         colour = "black",
+#         size = 6,
+#         angle = 0,
+#         vjust = 0.5,
+#         hjust = 1,
+#         margin = margin(1, 1, 1, 1)
+#       ),
+#       axis.title = element_text(
+#         colour = "black",
+#         size = 6
+#       ),
+#       panel.grid.major = element_blank(),
+#       panel.grid.minor = element_blank(),
+#       panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+#       panel.spacing = unit(1.5, "mm"),
+#       legend.position = "none",
+#       legend.text = element_text(size = 6),
+#       legend.key.height = unit(4, "mm"),
+#       plot.title = element_text(
+#         size = 6,
+#         hjust = 0
+#       ),
+#       complete = TRUE
+#     )
+# }
+
+#### import IBMPlexSans ####
 font_add(
-  "Helvetica",
-  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
-  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
-  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
-  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+  "IBMPlexSans",
+  regular = "/OFL_fonts/IBMPlexSans-Light.otf",
+  italic = "/OFL_fonts/IBMPlexSans-LightItalic.otf",
+  bold = "/OFL_fonts/IBMPlexSans-SemiBold.otf",
+  bolditalic = "/OFL_fonts/IBMPlexSans-SemiBoldItalic.otf"
 )
 showtext_auto()
 
 #### generating plot theme ####
-theme_leo <- function(base_size = 6,
-                      base_family = "Helvetica") {
+theme_leo <- function(base_size = 11,
+                      base_family = "IBMPlexSans") {
   theme_minimal(
     base_size = base_size,
     base_family = base_family
   ) %+replace%
     theme(
-      strip.text = element_text(hjust = 0, 
-                                # face = "italic"
-                                ),
-      axis.ticks = element_line(
-        size = 0.125,
-        lineend = "square",
-        color = "black"
-      ),
+      panel.background = element_rect(
+        # fill = "#00cffdff",
+        fill = "white",
+        colour = "black",
+        size = 0.2),
+      strip.text = element_text(hjust = 0),
+      # axis.ticks = element_line(
+      #   size = 0.25,
+      #   lineend = "square",
+      #   color = "black"
+      # ),
       axis.text.x = element_text(
-        size = 6,
         colour = "black", # flipped coords
         margin = margin(1, 1, 1, 1)
       ),
       axis.text.y = element_text(
         colour = "black",
-        size = 6,
         angle = 0,
         vjust = 0.5,
         hjust = 1,
         margin = margin(1, 1, 1, 1)
       ),
-      axis.title = element_text(
-        colour = "black",
-        size = 6
-      ),
+      axis.ticks = element_blank(),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      # panel.border = element_rect(fill = NA, color = "black", size = 0.2),
       panel.spacing = unit(1.5, "mm"),
       legend.position = "none",
-      legend.text = element_text(size = 6),
+      legend.text = element_text(size = rel(0.8)),
       legend.key.height = unit(4, "mm"),
-      plot.title = element_text(
-        size = 6,
-        hjust = 0
-      ),
       complete = TRUE
     )
 }
+
+ggtext_size <- 11 / (14 / 5)
 
 scale_range <- function(x) {
   (x) / (max(x))
@@ -306,30 +371,23 @@ pdf("eds_plots.pdf", width = onecol * 0.7, height = onecol * 0.7)
 eds
 dev.off()
 
-eds_data_PCW <- read_csv(paste0(datapath, "PhD/IRX/EDS/eds_data.csv"),
-  col_types = "ccnnn",
-  col_names = c("layer", "days", "PCW_C", "PCW_O", "PCW_Cr")
-) %>% 
-  filter(layer == "PCW") %>% 
-  select(-layer) %>% 
+eds_data_ratio <- eds_data %>% 
   group_by(days) %>% 
-  mutate(point = row_number())
-
-eds_data_SCW <- read_csv(paste0(datapath, "PhD/IRX/EDS/eds_data.csv"),
-  col_types = "ccnnn",
-  col_names = c("layer", "days", "SCW_C", "SCW_O", "SCW_Cr")
-) %>% 
+  mutate(PCW_C = mean(C[layer == "PCW"]),
+         PCW_O = mean(O[layer == "PCW"])) %>% 
   filter(layer == "SCW") %>% 
-  select(-layer) %>% 
-  group_by(days) %>% 
-  mutate(point = row_number())
+  mutate("C/O" = C / O,
+         "PCW_C/O" = PCW_C / PCW_O,
+         "SCW/PCW" = `C/O` / `PCW_C/O`) %>% 
+  ungroup() %>% 
+  add_row(tibble(layer = "SCW", days = "0", "SCW/PCW" = 1))
 
-eds_data_ratio <- eds_data_SCW %>% 
-  full_join(eds_data_PCW) %>% 
+eds_data_avg <- eds_data_ratio %>% 
   group_by(days) %>% 
-  mutate("C/O" = (SCW_C / SCW_O) / (PCW_C / PCW_O))
+  summarise("EDS_mean" = mean(`SCW/PCW`),
+            "EDS_mean" = mean(`SCW/PCW`))
 
-ggplot(eds_data_ratio, aes(x = days, y = `C/O`)) +
+ggplot(eds_data_ratio, aes(x = days, y = `SCW/PCW`)) +
   geom_quasirandom() +
   geom_violin(draw_quantiles = 0.5)
 ```
@@ -530,6 +588,51 @@ eds / (deformation | modulus | adhesion) +
   plot_layout(heights = c(0.5, 0.5, 1))
 dev.off()
 ```
+
+## Presentation figure 1
+
+```{r}
+ipsc <- eds_data_ratio %>% 
+  select(days, `SCW/PCW`) %>% 
+  pivot_longer(`SCW/PCW`, names_to = "variable", values_to = "value") %>% 
+  add_row(em_data %>% filter(treatment == "AD" &
+                                 state == "Intact") %>%
+              ungroup() %>% 
+              select(days, proportion) %>% 
+              add_row(tibble(days = "0", proportion = 0)) %>% 
+              pivot_longer(proportion, names_to = "variable", values_to = "value")) %>% 
+  add_row(afm_data %>% filter(cell.type == "MX" & variable == "modulus") %>% 
+              ungroup() %>% 
+              select(days, ratio) %>% 
+              add_row(tibble(days = "0", ratio = 1)) %>% 
+              pivot_longer(ratio, names_to = "variable", values_to = "value")) %>%
+  mutate(variable = ordered(recode(variable,
+                                   "SCW/PCW" = "C/O ratio",
+                                   "ratio" = "Stiffness",
+                                   "proportion" = "Resistance [%]"),
+                            levels = 
+                              c("C/O ratio", "Stiffness", "Resistance [%]"))) %>%
+  group_by(variable) %>% 
+  mutate(scaled = value / max(value))
+
+pdf("ipsc_fig.pdf", width = onecol, height = onecol)
+ggplot(ipsc, aes(x = days, y = value)) +
+  stat_summary(aes(group = 1), geom = "line", fun = "median", linetype = 2) +
+  geom_quasirandom(aes(fill = scaled),
+                   size = 2,
+                   width = 0.1,
+                   shape = 21,
+                   stroke = 0.1) +
+  scale_fill_gradientn(colours = morgenstemning) +
+  labs(x = "Days past induction") +
+  theme_leo() +
+  theme(axis.title.y = element_blank(),
+        strip.text = element_text(hjust = 0.5),
+        strip.placement = "outside") +
+  facet_wrap(~ variable, ncol = 1, scales = "free_y", strip.position = "left")
+dev.off()
+```
+
 
 ## Wild type vessel overview
 
@@ -3006,7 +3109,7 @@ flex_violin <- function(x, dat = stiffness_complete) {
       # width = 0.1,
       # colour = NA,
       alpha = 0.75,
-      size = 1,
+      size = 2,
       stroke = 0.2
     ) +
     # geom_boxplot(
@@ -3076,8 +3179,8 @@ violin_strength <- flex_violin("max.stress") +
   ) + theme(axis.title.x = element_blank()) +
   scale_x_discrete(
     labels = c(
-      "WT",
-      expression(italic("fah1")),
+      "Wild type",
+      expression(paste(Increased~G[CHOH]~italic("fah1"))),
       expression(paste(italic("cad4"), "x", italic("5")))
     ),
     limits = levels(stiffness_complete$genotype)
@@ -3089,11 +3192,20 @@ violin_stiffness <- flex_violin("modulus") +
     expand = expand_scale(mult = c(0.1, 0.05)),
     breaks = c(0, 3000, 6000)
   ) +
-  theme(axis.title.y = element_blank()) +
+  scale_x_discrete(
+    labels = rev(c(
+      "Wild type",
+      "Increased <b>G</b><sub>CHOH</sub><br><i>(fah1)</i>",
+      "Increased <b>G</b><sub>CHO</sub><br><i>(cad4</i>x<i>5)</i>"
+    )),
+    limits = rev(levels(stiffness_complete$genotype))
+  ) +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = ggtext::element_markdown(hjust = 0.5)) +
   coord_flip()
 
 violin_breakpoint <- flex_violin("break_point", bending_pre) +
-  labs(y = "Strain [%] at breaking") +
+  labs(y = "Flexibility [%]") +
   theme(
     axis.text.y = element_blank(),
     axis.ticks.y = element_blank(),
@@ -3102,9 +3214,11 @@ violin_breakpoint <- flex_violin("break_point", bending_pre) +
   theme(axis.title.y = element_blank()) +
   coord_flip()
 
-pdf("breaking_point.pdf", width = 2, height = 2)
+pdf("bending_fig.pdf", width = onecol, height = onecol)
+violin_stiffness |
 violin_breakpoint
 dev.off()
+
 
 ```
 
@@ -3563,8 +3677,13 @@ recovery_data <- read_csv(paste0(datapath, "PhD/IRX/Drought/recovery.csv")) %>%
   mutate(
     state = ordered(state, levels = rev(c("Recovered", "Partly recovered", "Dead"))),
     medium = ordered(medium, levels = c("Water", "10% PEG", "20% PEG")),
-    genotype = ordered(recode(genotype, "cad4x5" = "<i>cad4</i>x<i>5</i>"),
-                       levels = c("WT", "<i>cad4</i>x<i>5</i>"))
+    genotype = 
+      ordered(recode(genotype, 
+                     "WT" = "Wild type",
+                     "cad4x5" = "Increased <b>G</b><sub>CHO</sub><i> (cad4</i>x<i>5)</i>"),
+              levels = c(
+                "Wild type", 
+                "Increased <b>G</b><sub>CHO</sub><i> (cad4</i>x<i>5)</i>"))
   ) %>%
   group_by(genotype, medium) %>%
   mutate(sum = sum(count)) %>%
@@ -3594,18 +3713,19 @@ recovery_collapse <- ggplot(recovery_data, aes(
     axis.title.y = ggtext::element_textbox_simple(
       orientation = "left-rotated",
       halign = 0.5,
+      padding = unit(3, "mm"),
       width = grid::unit(1.1, "npc")
     ),
     axis.text.x = element_text(vjust = 1),
     strip.text = ggtext::element_markdown(),
     legend.key.height = unit(2, "mm"),
     legend.key.width = unit(2, "mm"),
-    legend.spacing = unit(c(0, 0, 0, 0), "mm"),
-    plot.margin = unit(c(0.5, 6, 0.5, 6), "pt")
+    legend.spacing = unit(c(0, 0, 0, 0), "mm")
+    # plot.margin = unit(c(0.5, 6, 0.5, 6), "pt")
   ) +
   coord_cartesian(ylim = c(0, 100))
 
-pdf("recovery.pdf", width = onecol, height = onecol * 0.5)
+pdf("recovery.pdf", width = onecol * 1.5, height = onecol * 0.65)
 recovery_collapse
 dev.off()
 ```

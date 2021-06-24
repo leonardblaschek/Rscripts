@@ -711,7 +711,8 @@ model_dope <- read_table("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Mode
   separate(model, into = c("paralog", "model"))
 
 # equivalent residues forming the pocket (manually taken from alignment)
-pocket_residues <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/pocket_residues.csv") %>%
+pocket_residues <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/pocket_residues.csv") %>%
+  select(-c(2:4)) %>% 
   pivot_longer(-paralog, names_to = "6klg", values_to = "ID") %>%
   separate(ID, into = c("aa", "position")) %>%
   mutate(position = as.numeric(position))
@@ -747,10 +748,10 @@ read_info <- function(flnm) {
 pocket_info <- map(info_files, read_info) %>%
   bind_rows()
 
-# load _atm.csv files made from the fpocket _atm.pdb files
-path1 <- "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-04_described_laccases/fpocket"
-path2 <- "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/fpocket"
-
+# # load _atm.csv files made from the fpocket _atm.pdb files
+# path1 <- "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-04_described_laccases/fpocket"
+# path2 <- "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/fpocket"
+# 
 # atm_files <-
 #   list.files(
 #     path = c(
@@ -761,10 +762,10 @@ path2 <- "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_al
 #     recursive = TRUE,
 #     full.names = TRUE
 #   )
-#
+# 
 # read_atm <- function(flnm) {
 #   vroom::vroom(flnm,
-#     altrep = FALSE, # otherwise can't deal with the amount of files
+#     # altrep = FALSE, # otherwise can't deal with the amount of files
 #     comment = "HEADER",
 #     col_names = c(
 #       "type", "atmn_no", "atm_type",
@@ -775,11 +776,11 @@ path2 <- "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_al
 #   ) %>%
 #     mutate(file = flnm)
 # }
-
+# 
 # pocket_atm <- map(atm_files, read_atm) %>%
 #   # bind_rows()
 #   data.table::rbindlist() # better performance
-#
+
 # write_csv(
 #   pocket_atm,
 #   "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/fpocket_results.csv"
@@ -805,13 +806,8 @@ pocket <- pocket_atm %>%
   left_join(pocket_residues) %>%
   drop_na() %>%
   filter(!(str_detect(model, "IL"))) %>% # remove low_quality initial models
-  # group_by(paralog, model, `6klg`) %>%
-  # summarise(pocket = mode(pocket)) %>%
-  # group_by(paralog, model) %>%
-  # summarise(pocket = mode(pocket)) %>%
-  filter(`6klg` == "HIS_519") %>% 
-  group_by(paralog) %>% 
-  summarise(pocket = mode(pocket)) %>% 
+  group_by(paralog, model) %>%
+  summarise(pocket = mode(pocket)) %>%
   left_join(pocket_info) %>%
   pivot_wider(names_from = variable, values_from = value) %>% 
   mutate(
@@ -1072,7 +1068,6 @@ write_csv(best_models, "best_fpocket_models.csv")
 
 clust_data <- model_data %>%
   group_by(paralog, parameter) %>%
-  filter(paralog != "AtLAC16") %>% 
   summarise(value = median(value, na.rm = T)) %>%
   pivot_wider(names_from = parameter, values_from = value) %>%
   column_to_rownames(var = "paralog")
@@ -1086,7 +1081,6 @@ clust <- reorder(
 gg_clust <- dendro_data(as.dendrogram(clust))
 
 model_data <- model_data %>%
-  filter(paralog != "AtLAC16") %>% 
   mutate(paralog = ordered(paralog, levels = gg_clust[["labels"]][["label"]]))
 
 dendrogram <- ggplot(gg_clust$segments) +
