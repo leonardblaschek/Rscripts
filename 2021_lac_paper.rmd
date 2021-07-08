@@ -3203,7 +3203,7 @@ data_daf <- data_daf %>%
   )) %>%
   group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
   mutate(
-    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "BG"])
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
   ) %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
   mutate(
@@ -3438,6 +3438,308 @@ slopes <- ggplot(
   facet_wrap(~cell_type, ncol = 5)
 
 pdf("DAF_pH5.pdf", width = twocol, height = twocol)
+raw_absorbance /
+  activity_grid /
+  slopes
+dev.off()
+
+# pdf("DAF_pH5_diagnostics.pdf", width = onecol, height = onecol)
+# slope_dist
+# dev.off()
+
+# pdf("bulk_DAF.pdf", width = 0.5 * onecol, height = 0.5 * onecol)
+# bulk_bars
+# dev.off()
+```
+
+## DAF pH 6
+
+```{r}
+# start and stop of the time-window for linear regressions
+lm_start <- 80
+lm_stop <- 160
+
+reps <- tibble(
+  date = c("2021-05-27", "2021-06-07", "2021-06-08", "2021-06-09", "2021-06-10"),
+  replicate = c("6", "7", "8", "9", "10")
+)
+
+daf6_files <-
+  list.files(
+    path = paste0(datapath, "PhD/Laccase_activity/2021-06_DAF_pH6/ROIs/Measurements/"),
+    pattern = "*.csv$",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+daf6_data <- map_dfr(daf6_files, read_csv) %>%
+  mutate(
+    time = slice * interval,
+    image = str_remove(image, fixed(".tiff"))
+  ) %>%
+  separate(image,
+    into = c("date", "substrate", "pH", "genotype"),
+    sep = "_"
+  ) %>%
+  left_join(reps) %>%
+  mutate(
+    genotype = ordered(genotype, levels = c(
+      "WT",
+      "Q-4",
+      "Q-5",
+      "Q-10",
+      "Q-12",
+      "Q-17",
+      "Q"
+    )),
+    cell_type = ordered(cell_type, levels = c(
+      "IF",
+      "CML",
+      "LP",
+      "XF",
+      "PX",
+      "MX",
+      "PH",
+      "BG"
+    ))
+  ) %>% 
+group_by(genotype, replicate, substrate, pH, date, cell_type, time) %>%
+  mutate(point = row_number()) %>%
+  select(-slice, -interval)
+  
+
+#### subtract water column and background ####
+daf6_data <- daf6_data %>%
+  group_by(time, genotype, replicate, substrate, pH, date) %>%
+  mutate(
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
+  ) %>%
+  group_by(genotype, replicate, substrate, pH, date, cell_type, point) %>%
+  mutate(
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == lm_start]
+  )
+
+nested_daf6_data <- daf6_data %>%
+  filter(time >= lm_start & time <= lm_stop) %>%
+  select(-mean_absorbance, -corrected_absorbance) %>%
+  nest(data = c(time, zeroed_absorbance, median_hue)) %>%
+  mutate(
+    fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "time")
+# %>%
+#   group_by(genotype, date, substrate, treatment, pH, cell_type) %>%
+#   mutate(mean_estimate = mean(estimate)) %>%
+#   group_by(date, substrate, treatment, pH, cell_type) %>%
+#   mutate(rel_estimate = estimate / mean_estimate[genotype == "WT"])
+
+
+daf6_data <- daf6_data %>%
+  left_join(select(nested_daf6_data, c(genotype:point, adj.r.squared)))
+
+slope_dist <- ggplot(nested_daf6_data) +
+  geom_density(aes(
+    x = adj.r.squared,
+    fill = genotype
+  ),
+  # binwidth = 0.01,
+  # position = "identity",
+  alpha = 0.25,
+  size = 0.1
+  ) +
+  geom_vline(
+    xintercept = 0.85,
+    colour = "black",
+    linetype = 2
+  ) +
+  theme_leo() +
+  facet_wrap(~cell_type, ncol = 1)
+
+
+daf6_data <- daf6_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX", "CML"))
+nested_daf6_data <- nested_daf6_data %>% filter(cell_type %in% c("IF", "XF", "MX", "PX", "CML"))
+
+avg_slopes <- nested_daf6_data %>%
+  group_by(genotype, replicate, substrate, pH, date, cell_type) %>%
+  summarise(mean_estimate = mean(estimate))
+
+bulk_activity <- avg_slopes %>%
+  group_by(genotype, substrate, pH, cell_type) %>%
+  # summarise(mean = mean(mean_estimate)) %>%
+  pivot_wider(names_from = cell_type, values_from = mean_estimate) %>%
+  summarise(mean = 0.5 * IF + 0.25 * XF + 0.23 * MX + 0.02 * PX)
+
+bulk_bars <- ggplot(bulk_activity, aes(x = genotype, y = mean)) +
+  stat_summary(
+    fun = mean, color = NA,
+    fill = pal_ostwald_disc[1],
+    alpha = 0.5,
+    geom = "bar",
+    aes(group = 1), size = 5,
+    show.legend = FALSE
+  ) +
+  geom_jitter(width = 0.1) +
+  labs(y = "Stem activity towards DAF") +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+
+activity_grid <- ggplot(
+  daf6_data,
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = genotype
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = lm_start,
+    xmax = lm_stop,
+    fill = "grey95"
+  ) +
+  # geom_line(aes(group = interaction(genotype, replicate, point, date, treatment)),
+  #   alpha = 0.1,
+  #   size = 0.2
+  # ) +
+  geom_smooth(
+    aes(group = interaction(genotype, replicate, date)),
+    size = 0.2,
+    se = F,
+    # method = "loess",
+    # fullrange = T
+  ) +
+  labs(
+    x = "Time [min]",
+    y = "Corrected & zeroed abs."
+  ) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  coord_cartesian(xlim = c(0, 400),
+                  ylim = c(-0.2, 1)) +
+  facet_grid(~ cell_type)
+
+raw_absorbance <- ggplot(
+  daf6_data,
+  aes(
+    x = time,
+    y = mean_absorbance,
+    colour = genotype
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = lm_start,
+    xmax = lm_stop,
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(genotype, replicate, point, date)),
+    alpha = 0.1,
+    size = 0.2
+  ) +
+  # geom_smooth(size = 0.2,
+  #             se = F) +
+  labs(
+    x = "Time [min]",
+    y = "Raw absorbance"
+  ) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  coord_cartesian(xlim = c(0, 400),
+                  ylim = c(-0.2, 1.5)) +
+  facet_wrap(~cell_type, ncol = 5)
+
+
+# letters_tech <- letter_groups(nested_daf6_data,
+#   estimate,
+#   genotype,
+#   "tukey",
+#   cell_type,
+#   print_position = "above",
+#   print_adjust = 1
+# )
+# 
+# letters <- letter_groups(avg_slopes,
+#   mean_estimate,
+#   genotype,
+#   "tukey",
+#   cell_type,
+#   print_position = "above",
+#   print_adjust = 1
+# ) %>%
+#   select(-mean_estimate) %>%
+#   left_join(select(letters_tech, -Letters))
+
+
+slopes <- ggplot(
+  nested_daf6_data,
+  aes(
+    x = genotype,
+    y = estimate,
+    fill = genotype
+  )
+) +
+  geom_quasirandom(aes(
+    shape = replicate,
+    group = genotype,
+    fill = genotype
+  ),
+  colour = "black",
+  # fill = "grey90",
+  dodge.width = 0.5,
+  alpha = 0.5,
+  stroke = 0.1,
+  size = 0.5
+  ) +
+  geom_violin(
+    aes(group = genotype),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.4,
+    position = position_dodge(width = 0.5),
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_point(
+    data = avg_slopes,
+    aes(
+      y = mean_estimate,
+      shape = replicate
+    ),
+    colour = "black",
+    alpha = 0.75,
+    stroke = 0.1,
+    size = 1
+  ) +
+  # geom_text(
+  #   data = letters,
+  #   aes(label = Letters),
+  #   size = ggtext_size,
+  #   family = "Helvetica"
+  # ) +
+  labs(y = "DAF oxidation rate") +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    legend.position = "bottom",
+    axis.title.x = element_blank()
+  ) +
+  facet_wrap(~cell_type, ncol = 5)
+
+pdf("DAF_pH6.pdf", width = twocol, height = twocol)
 raw_absorbance /
   activity_grid /
   slopes
