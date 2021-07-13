@@ -6994,7 +6994,7 @@ expression_plot <- ggplot(expression,
         legend.position = "bottom",
         legend.title = element_blank()) 
 
-pdf("lac_expression.pdf", width = onecol, height = onecol * 0.65)
+pdf("lac_expression.pdf", width = onecol * 0.3, height = onecol * 0.65)
 expression_plot
 dev.off()
 ```
