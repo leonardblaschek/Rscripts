@@ -3156,7 +3156,6 @@ dev.off()
 lm_start <- 80
 lm_stop <- 160
 
-
 data_daf <- read_csv(paste0(
   datapath,
   "PhD/Laccase_activity/2020-09_activity/2020-09_lac_activity.csv"
@@ -3192,15 +3191,51 @@ col_types = "ccDcccdcddd"
     replicate = as.character(replicate)
   )
 
+daf_IF_files <-
+  list.files(
+    path = paste0(
+      datapath, "PhD/Laccase_activity/2020-09_activity/DAF_pH5_IF/ROIs/Measurements/"
+    ),
+    pattern = "*.csv$",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+reps <- read_csv(paste0(
+  datapath, "PhD/Laccase_activity/2020-09_activity/DAF_pH5_IF/to_measure_IF.csv")
+) %>% 
+  select(1:3) %>% 
+  mutate(replicate = as.character(replicate))
+
+daf_IF_data <- map_dfr(daf_IF_files, read_csv) %>%
+  mutate(
+    time = slice * interval,
+    image = str_remove(image, fixed(".tiff"))
+  ) %>%
+  mutate(
+    date = as.Date(ymd(
+      str_extract(image, "[:digit:]{4}-[:digit:]{2}-[:digit:]{2}")
+    )),
+    genotype = str_extract(image, "WT|Q-4|Q-5|Q-10|Q-12|Q-17|Q$"),
+    treatment = "none",
+    pH = "5",
+    substrate = "DAF"
+  ) %>%
+  group_by(date, genotype, cell_type, time) %>% 
+  mutate(point = row_number()) %>% 
+  select(-image, -slice, -interval) %>% 
+  left_join(reps)
+
 #### subtract water column and background ####
 data_daf <- data_daf %>%
-  filter(substrate == "DAF") %>%
+  filter(substrate == "DAF" & cell_type != "IF") %>%
   anti_join(read_csv(paste0(
     datapath,
     "PhD/Laccase_activity/2020-09_activity/excluded_sections.csv"
   ),
   col_type = "ccDccc"
   )) %>%
+  bind_rows(daf_IF_data) %>% 
   group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
   mutate(
     corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
@@ -3252,12 +3287,12 @@ slope_dist <- ggplot(nested_data_daf) +
   facet_wrap(~cell_type, ncol = 1)
 
 
-data_daf <- data_daf %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+data_daf <- data_daf %>% filter(cell_type %in% c("IF", "CML", "XF", "MX", "PX") &
   pH == 5 &
   treatment == "none" 
   # adj.r.squared > 0.85
   )
-nested_data_daf <- nested_data_daf %>% filter(cell_type %in% c("IF", "XF", "MX", "PX") &
+nested_data_daf <- nested_data_daf %>% filter(cell_type %in% c("IF", "CML", "XF", "MX", "PX") &
   pH == 5 &
   treatment == "none" 
   # adj.r.squared > 0.85
@@ -3359,25 +3394,25 @@ raw_absorbance <- ggplot(
   facet_wrap(~cell_type, ncol = 5)
 
 
-letters_tech <- letter_groups(nested_data_daf,
-  estimate,
-  genotype,
-  "tukey",
-  cell_type,
-  print_position = "above",
-  print_adjust = 1
-)
-
-letters <- letter_groups(avg_slopes,
-  mean_estimate,
-  genotype,
-  "tukey",
-  cell_type,
-  print_position = "above",
-  print_adjust = 1
-) %>%
-  select(-mean_estimate) %>%
-  left_join(select(letters_tech, -Letters))
+# letters_tech <- letter_groups(nested_data_daf,
+#   estimate,
+#   genotype,
+#   "tukey",
+#   cell_type,
+#   print_position = "above",
+#   print_adjust = 1
+# )
+# 
+# letters <- letter_groups(avg_slopes,
+#   mean_estimate,
+#   genotype,
+#   "tukey",
+#   cell_type,
+#   print_position = "above",
+#   print_adjust = 1
+# ) %>%
+#   select(-mean_estimate) %>%
+#   left_join(select(letters_tech, -Letters))
 
 
 slopes <- ggplot(
@@ -3422,12 +3457,12 @@ slopes <- ggplot(
     stroke = 0.1,
     size = 1
   ) +
-  geom_text(
-    data = letters,
-    aes(label = Letters),
-    size = ggtext_size,
-    family = "Helvetica"
-  ) +
+  # geom_text(
+  #   data = letters,
+  #   aes(label = Letters),
+  #   size = ggtext_size,
+  #   family = "Helvetica"
+  # ) +
   labs(y = "DAF oxidation rate") +
   scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
@@ -3661,25 +3696,25 @@ raw_absorbance <- ggplot(
   facet_wrap(~cell_type, ncol = 5)
 
 
-# letters_tech <- letter_groups(nested_daf6_data,
-#   estimate,
-#   genotype,
-#   "tukey",
-#   cell_type,
-#   print_position = "above",
-#   print_adjust = 1
-# )
-# 
-# letters <- letter_groups(avg_slopes,
-#   mean_estimate,
-#   genotype,
-#   "tukey",
-#   cell_type,
-#   print_position = "above",
-#   print_adjust = 1
-# ) %>%
-#   select(-mean_estimate) %>%
-#   left_join(select(letters_tech, -Letters))
+letters_tech <- letter_groups(nested_daf6_data,
+  estimate,
+  genotype,
+  "tukey",
+  cell_type,
+  print_position = "above",
+  print_adjust = 1
+)
+
+letters <- letter_groups(avg_slopes,
+  mean_estimate,
+  genotype,
+  "tukey",
+  cell_type,
+  print_position = "above",
+  print_adjust = 1
+) %>%
+  select(-mean_estimate) %>%
+  left_join(select(letters_tech, -Letters))
 
 
 slopes <- ggplot(
@@ -3724,12 +3759,12 @@ slopes <- ggplot(
     stroke = 0.1,
     size = 1
   ) +
-  # geom_text(
-  #   data = letters,
-  #   aes(label = Letters),
-  #   size = ggtext_size,
-  #   family = "Helvetica"
-  # ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
   labs(y = "DAF oxidation rate") +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
