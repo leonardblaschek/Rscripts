@@ -527,11 +527,14 @@ model_dope <- read_table("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Mode
   bind_rows(read_table("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-04_described_laccases/model_quality/normalized_DOPE.txt",
     col_names = c("model", "DOPE")
   )) %>%
+  bind_rows(read_table("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/AlphaFold2/models/normalized_DOPE.txt",
+    col_names = c("model", "DOPE")
+  )) %>%
   mutate(model = str_remove(model, fixed(".pdb"))) %>%
   separate(model, into = c("paralog", "model"))
 
 # CASTp job codes
-CASTp_codes <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/job_codes.csv",
+CASTp_codes <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/job_codes.csv",
   col_names = c("model", "code")
 ) %>%
   mutate(
@@ -544,12 +547,14 @@ CASTp_codes <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Model
 pocket_residues <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/pocket_residues.csv") %>%
   pivot_longer(-paralog, names_to = "6klg", values_to = "ID") %>%
   separate(ID, into = c("aa", "position")) %>%
-  mutate(position = as.numeric(position))
+  mutate(position = as.numeric(position),
+         position = case_when(paralog == "LcLAC" & position > 323 ~ position - 1,
+                              TRUE ~ position))
 
 # load .poc files from CASTp
 poc_files <-
   list.files(
-    path = "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/extracted/",
+    path = "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/extracted/",
     pattern = ".poc$",
     recursive = FALSE,
     full.names = TRUE
@@ -567,17 +572,24 @@ read_poc <- function(flnm) {
       "x",
       "y",
       "z",
-      "who_knows",
+      "who_knows_1",
+      "who_knows_2",
       "pocket",
       "pocket_type"
-    )
+    ),
+     col_types = "cncccnnnnnnnc"
   ) %>%
     mutate(
+      pocket = case_when(is.na(pocket_type) ~ who_knows_2,
+                         TRUE ~ pocket),
       code = str_remove(basename(flnm), fixed(".poc"))
-    )
+    ) %>%
+    select(-who_knows_1, -who_knows_2, -pocket_type)
 }
 
-CASTp_poc <- map(poc_files, read_poc) %>%
+# test <- read_poc("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/extracted/j_60f2fb54e839a.poc")
+
+CASTp_poc <- map_dfr(poc_files, read_poc) %>%
   bind_rows() %>%
   left_join(CASTp_codes) %>%
   left_join(pocket_residues)
@@ -596,7 +608,7 @@ CASTp_poc_id <- CASTp_poc %>%
 # load .pocInfo files from CASTp
 pocInfo_files <-
   list.files(
-    path = "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/extracted/",
+    path = "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/extracted/",
     pattern = ".pocInfo",
     recursive = FALSE,
     full.names = TRUE
@@ -612,7 +624,7 @@ read_pocInfo <- function(flnm) {
 pocInfo <- map(pocInfo_files, read_pocInfo) %>%
   bind_rows()
 
-zmlac3_pocInfo <- read_tsv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/ZmLAC3/j_6065d2c555ed5.pocInfo") %>%
+zmlac3_pocInfo <- read_tsv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/ZmLAC3/j_6065d2c555ed5.pocInfo") %>%
   mutate(
     paralog = "ZmLAC3",
     model = "6klg",
@@ -623,7 +635,7 @@ zmlac3_pocInfo <- read_tsv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Mo
 # load .mouthInfo files from CASTp
 mouthInfo_files <-
   list.files(
-    path = "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/extracted/",
+    path = "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/extracted/",
     pattern = ".mouthInfo",
     recursive = FALSE,
     full.names = TRUE
@@ -640,7 +652,7 @@ mouthInfo <- map(mouthInfo_files, read_mouthInfo) %>%
   bind_rows() %>%
   select(Molecule, ID, "mouth_area_sa" = Area_sa)
 
-zmlac3_mouthInfo <- read_tsv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/ZmLAC3/j_6065d2c555ed5.mouthInfo") %>%
+zmlac3_mouthInfo <- read_tsv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/ZmLAC3/j_6065d2c555ed5.mouthInfo") %>%
   mutate(
     paralog = "ZmLAC3",
     model = "6klg",
@@ -649,15 +661,30 @@ zmlac3_mouthInfo <- read_tsv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/
   filter(ID == consensus_pocket) %>%
   rename("mouth_area_sa" = Area_sa)
 
+ref_pocket <- zmlac3_pocInfo %>% 
+  left_join(select(zmlac3_mouthInfo, paralog, mouth_area_sa), by = "paralog") %>% 
+  mutate(
+    compactness = ((pi^(1/3)) * ((6 * `Vol_sa`)^(2/3))) / `Area_sa`
+  )
+
 pocket_data <- pocInfo %>%
   left_join(mouthInfo) %>%
   left_join(CASTp_codes) %>%
   left_join(CASTp_poc_id) %>%
   left_join(model_dope) %>%
   filter(ID == consensus_pocket) %>%
-  filter(!(str_detect(model, "IL"))) # remove low_quality initial models
+  filter(!(str_detect(model, "IL"))) %>%  # remove low_quality initial models
+  mutate(
+    compactness = ((pi^(1/3)) * ((6 * `Vol_sa`)^(2/3))) / `Area_sa`
+  )
 
-ggplot(
+best_models_castp <- pocket_data %>% 
+  group_by(paralog) %>% 
+  filter(DOPE == min(DOPE))
+
+write_csv(best_models_castp, "best_models_CASTp.csv")
+
+vol <- ggplot(
   pocket_data,
   aes(
     x = paralog,
@@ -668,12 +695,22 @@ ggplot(
     data = zmlac3_pocInfo,
     aes(yintercept = Vol_sa)
   ) +
-  geom_quasirandom(aes(colour = DOPE)) +
+  geom_quasirandom(
+    data = filter(pocket_data, model != "relaxed"),
+    aes(colour = DOPE),
+    size = 0.5,
+    alpha = 0.5) +
   geom_violin(
     draw_quantiles = 0.5,
     alpha = 0.25
   ) +
-  scale_colour_gradientn(colours = rev(morgenstemning)) +
+  geom_point(data = filter(pocket_data, model == "relaxed"),
+             aes(fill = DOPE),
+             shape = 23,
+             stroke = 0.2,
+             size = 1.5) +
+  scale_colour_gradientn(colours = rev(morgenstemning), limits = c(-2.1, -0.4)) +
+  scale_fill_gradientn(colours = rev(morgenstemning), limits = c(-2.1, -0.4), guide = "none") +
   theme_leo() +
   theme(legend.position = "right") +
   coord_flip()
@@ -698,7 +735,52 @@ ggplot(
   theme_leo() +
   theme(legend.position = "right") +
   coord_flip()
+
+pdf("volume_alphafold.pdf", width = 3, height = 4)
+vol
+dev.off()
 ```
+
+#### Create .pqr files
+
+```{r}
+best_models <- read_csv("/home/leonard/R/PhD/best_alphafold_models.csv")
+
+for(i in 1:nrow(best_models)) {
+  model <- best_models[i, "Molecule"]
+  pocket <- as.numeric(best_models[i, "pocket"])
+  paralog <- best_models[i, "paralog"]
+  
+  sphere <- jsonlite::fromJSON(paste0("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/extracted/", model, ".sphere.json")) # import .sphere.json file
+  
+  sphere <- tibble(sphere[[pocket]]) %>%  # select correct pocket
+    mutate("RecordName" = "ATOM",
+           "Serial" = case_when(row_number() < 10 ~ paste0("     ", row_number()),
+                                row_number() < 100  ~ paste0("    ", row_number()),
+                                TRUE ~ paste0("   ", row_number())),
+           "AtomName" = "   O",
+           "ResidueName" = "STP",
+           # "ChainID" = "A",
+           "ResidueNumber" = case_when(pocket < 10 ~ paste0("    ", pocket, "    "),
+                                       pocket < 100 ~ paste0("   ", pocket, "    "),
+                                       pocket < 1000 ~ paste0("  ", pocket, "    "),
+                                       TRUE ~ paste0("  ", pocket, "    ")),
+           "X" = format(round(center$x, 3), width = 7),
+           "Y" = format(round(center$y, 3), width = 7),
+           "Z" = format(round(center$z, 3), width = 7),
+           "Charge" = "0.00",
+           "Radius" = round(radius, 2)) %>% 
+    select(-c(1, 2)) %>% 
+    add_row("RecordName" = "TER") %>% 
+    add_row("RecordName" = "END")
+  
+  write_delim(sphere, 
+              paste0(paralog, ".pqr"), 
+              col_names = FALSE, na = "", delim = " ", quote = "none")
+}
+```
+
+
 
 ### fpocket
 
@@ -899,7 +981,7 @@ plotly::ggplotly(ggplot(
 
 ```
 
-## CASTp vs fpocket
+#### CASTp vs fpocket
 
 ```{r}
 comp <- pocket_data %>% 
@@ -918,55 +1000,53 @@ ggplot(comp,
 ### DEPTH
 
 ```{r}
-# # load model quality
-# model_dope <- read_table("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/model_quality/normalized_DOPE.txt",
-#                          col_names = c("model", "DOPE")) %>%
-#   bind_rows(read_table("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-04_described_laccases/model_quality/normalized_DOPE.txt",
-#                          col_names = c("model", "DOPE"))) %>%
-#   mutate(model = str_remove(model, fixed(".pdb"))) %>%
-#   separate(model, into = c("paralog", "model"))
-#
-# # T1 coordinating histidines (manually taken from alignment)
-# coord_his <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/CASTp/pocket_residues.csv") %>%
-#   pivot_longer(-paralog, names_to = "6klg", values_to = "ID") %>%
-#   filter(`6klg` %in% c("HIS_451", "HIS_519")) %>%
-#   separate(ID, into = c("aa", "position")) %>%
-#   mutate(position = as.numeric(position))
-#
-# # load atom.depth files from DEPTH
-# depth_files <-
-#   list.files(
-#     path = c("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/DEPTH/",
-#              "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-04_described_laccases/DEPTH/"),
-#     pattern = "atom.depth",
-#     recursive = FALSE,
-#     full.names = TRUE
-#   )
-#
-# read_depth <- function(flnm) {
-#   read_tsv(flnm) %>%
-#     mutate(
-#       model = str_remove(basename(flnm), fixed(".pdb-atom.depth"))
-#     ) %>%
-#     separate(model, into = c("paralog", "model"))
-# }
-#
-# zmlac3_depth <- read_depth("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/DEPTH/ZmLAC3/6klg.pdb-atom.depth") %>%
-#   mutate(paralog = "ZmLAC3",
-#          model = "6klg")
-#
-# depth <- map(depth_files, read_depth) %>%
-#   bind_rows() %>%
-#   bind_rows(zmlac3_depth) %>%
-#   left_join(coord_his) %>%
-#   left_join(model_dope)
-#
-# his_depth <- depth %>%
-#   separate(residue, into = c("chain", "residue")) %>%
-#   filter(!(str_detect(model, "IL"))) %>% # remove low_quality initial models
-#   filter(residue == position & `atom-type` == "NE2")
-#
-# write_csv(his_depth, "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/his_depths.csv")
+# T1 coordinating histidines (manually taken from alignment)
+coord_his <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/pocket_residues.csv") %>%
+  pivot_longer(-paralog, names_to = "6klg", values_to = "ID") %>%
+  filter(`6klg` %in% c("HIS_451", "HIS_519")) %>%
+  separate(ID, into = c("aa", "position")) %>%
+  mutate(position = as.numeric(position),
+         # because I removed an X from the LcLAC sequence for alphafold
+         position = case_when(paralog == "LcLAC" & position > 323 ~ position - 1,
+                              TRUE ~ position)) 
+
+# load atom.depth files from DEPTH
+depth_files <-
+  list.files(
+    path = c(
+      "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/DEPTH/",
+      "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-04_described_laccases/DEPTH/",
+      "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/AlphaFold2/DEPTH/"
+      ),
+    pattern = "atom.depth",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_depth <- function(flnm) {
+  read_tsv(flnm) %>%
+    mutate(
+      model = str_remove(basename(flnm), fixed(".pdb-atom.depth"))
+    ) %>%
+    separate(model, into = c("paralog", "model"))
+}
+
+zmlac3_depth <- read_depth("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/2021-03_all_paralogs/DEPTH/ZmLAC3/6klg.pdb-atom.depth") %>%
+  mutate(paralog = "ZmLAC3",
+         model = "6klg")
+
+depth <- map(depth_files, read_depth) %>%
+  bind_rows() %>%
+  bind_rows(zmlac3_depth) %>%
+  left_join(coord_his) %>%
+  left_join(model_dope)
+
+his_depth <- depth %>%
+  separate(residue, into = c("chain", "residue")) %>%
+  filter(!(str_detect(model, "IL"))) %>% # remove low_quality initial models
+  filter(residue == position & `atom-type` == "NE2")
+
+write_csv(his_depth, "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/his_depths.csv")
 
 his_depth <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/his_depths.csv")
 
@@ -1027,34 +1107,127 @@ ggplot(
   coord_flip(clip = "off", xlim = c(1, 22))
 ```
 
-### Combine data
+### Combine data (fpocket)
+
+```{r}
+# model_data <- his_depth %>%
+#   select(paralog, model, `6klg`, `mean(depth)`, DOPE) %>%
+#   pivot_wider(names_from = `6klg`, values_from = `mean(depth)`) %>%
+#   left_join(pocket %>%
+#     select(
+#       paralog,
+#       model,
+#       Volume,
+#       compactness,
+#       `Charge score`,
+#       `Hydrophobicity score`,
+#       `Polarity score`
+#     )) %>%
+#   pivot_longer(c(
+#     HIS_451,
+#     HIS_519,
+#     Volume,
+#     compactness,
+#     `Charge score`,
+#     `Hydrophobicity score`,
+#     `Polarity score`
+#   ),
+#   names_to = "parameter", values_to = "value"
+#   ) %>%
+#   mutate(paralog = recode(paralog, "LcLAC" = "ADE/LAC"))
+# 
+# corr_data <- model_data %>%
+#   pivot_wider(names_from = parameter, values_from = value) %>%
+#   drop_na() %>%
+#   select(-paralog, -model, -DOPE) %>%
+#   cor() %>%
+#   corrplot::corrplot()
+# 
+# ref_data <- zmlac3_depth %>%
+#   select(paralog, model, `6klg`, `mean(depth)`) %>%
+#   pivot_wider(names_from = `6klg`, values_from = `mean(depth)`) %>%
+#   left_join(ref_pocket %>%
+#     select(
+#       paralog,
+#       model,
+#       Volume,
+#       compactness,
+#       `Charge score`,
+#       `Hydrophobicity score`,
+#       `Polarity score`
+#     )) %>%
+#   pivot_longer(c(
+#     HIS_451,
+#     HIS_519,
+#     Volume,
+#     compactness,
+#     `Charge score`,
+#     `Hydrophobicity score`,
+#     `Polarity score`
+#   ),
+#   names_to = "parameter", values_to = "value"
+#   )
+# 
+# model_data <- model_data %>%
+#   mutate(
+#     parameter = ordered(parameter, levels = c(
+#       "HIS_451",
+#       "HIS_519",
+#       "Volume",
+#       "compactness",
+#       "Charge score",
+#       "Polarity score",
+#       "Hydrophobicity score"
+#     ))
+#   )
+# 
+# ref_data <- ref_data %>%
+#   mutate(parameter = ordered(parameter, levels = c(
+#     "HIS_451",
+#     "HIS_519",
+#     "Volume",
+#     "compactness",
+#     "Charge score",
+#     "Polarity score",
+#     "Hydrophobicity score"
+#   )))
+# 
+# best_models <- model_data %>% 
+#   mutate(paralog = recode(paralog, "ADE/LAC" = "LcLAC")) %>% 
+#   group_by(paralog) %>% 
+#   filter(DOPE == max(DOPE)) %>% 
+#   left_join(pocket) %>% 
+#   filter(parameter == "compactness")
+# 
+# write_csv(best_models, "best_fpocket_models.csv")
+```
+
+
+### Combine data (CASTp)
 
 ```{r}
 model_data <- his_depth %>%
   select(paralog, model, `6klg`, `mean(depth)`, DOPE) %>%
   pivot_wider(names_from = `6klg`, values_from = `mean(depth)`) %>%
-  left_join(pocket %>%
+  left_join(pocket_data %>%
     select(
       paralog,
       model,
-      Volume,
+      Vol_sa,
       compactness,
-      `Charge score`,
-      `Hydrophobicity score`,
-      `Polarity score`
+      mouth_area_sa
     )) %>%
   pivot_longer(c(
     HIS_451,
     HIS_519,
-    Volume,
+    Vol_sa,
     compactness,
-    `Charge score`,
-    `Hydrophobicity score`,
-    `Polarity score`
+    mouth_area_sa
   ),
   names_to = "parameter", values_to = "value"
   ) %>%
-  mutate(paralog = recode(paralog, "LcLAC" = "ADE/LAC"))
+  mutate(paralog = recode(paralog, "LcLAC" = "ADE/LAC")) %>%
+  filter(model == "relaxed")
 
 corr_data <- model_data %>%
   pivot_wider(names_from = parameter, values_from = value) %>%
@@ -1070,20 +1243,16 @@ ref_data <- zmlac3_depth %>%
     select(
       paralog,
       model,
-      Volume,
+      Vol_sa,
       compactness,
-      `Charge score`,
-      `Hydrophobicity score`,
-      `Polarity score`
+      mouth_area_sa
     )) %>%
   pivot_longer(c(
     HIS_451,
     HIS_519,
-    Volume,
+    Vol_sa,
     compactness,
-    `Charge score`,
-    `Hydrophobicity score`,
-    `Polarity score`
+    mouth_area_sa
   ),
   names_to = "parameter", values_to = "value"
   )
@@ -1091,42 +1260,34 @@ ref_data <- zmlac3_depth %>%
 model_data <- model_data %>%
   mutate(
     parameter = ordered(parameter, levels = c(
-      "HIS_451",
-      "HIS_519",
-      "Volume",
+      "Vol_sa",
       "compactness",
-      "Charge score",
-      "Polarity score",
-      "Hydrophobicity score"
+      "mouth_area_sa",
+      "HIS_451",
+      "HIS_519"
     ))
-  )
+  ) %>%
+  mutate(kingdom = "plantae")
 
 ref_data <- ref_data %>%
   mutate(parameter = ordered(parameter, levels = c(
-    "HIS_451",
-    "HIS_519",
-    "Volume",
+    "Vol_sa",
     "compactness",
-    "Charge score",
-    "Polarity score",
-    "Hydrophobicity score"
+    "mouth_area_sa",
+    "HIS_451",
+    "HIS_519"
   )))
 
-best_models <- model_data %>% 
-  mutate(paralog = recode(paralog, "ADE/LAC" = "LcLAC")) %>% 
+best_models <- pocket_data %>% 
   group_by(paralog) %>% 
-  filter(DOPE == max(DOPE)) %>% 
-  left_join(pocket) %>% 
-  filter(parameter == "compactness")
+  filter(DOPE == min(DOPE))
 
-write_csv(best_models, "best_fpocket_models.csv")
+write_csv(best_models, "best_alphafold_models.csv")
 ```
-
 
 ### Assemble figure
 
 ```{r}
-
 clust_data <- model_data %>%
   group_by(paralog, parameter) %>%
   summarise(value = median(value, na.rm = T)) %>%
@@ -1135,7 +1296,7 @@ clust_data <- model_data %>%
 
 clust <- reorder(
   hclust(dist(clust_data), method = "average"),
-  -clust_data$HIS_451,
+  -clust_data$Vol_sa,
   agglo.FUN = "mean"
 )
 
@@ -1155,13 +1316,37 @@ dendrogram <- ggplot(gg_clust$segments) +
   theme_void()
 
 axis_titles <- c(
-  HIS_451 = "Depth of His 451 [Å]",
-  HIS_519 = "Depth of His 519 [Å]",
-  Volume = "Volume [Å<sup>3</sup>]",
+  Vol_sa = "Volume [Å<sup>3</sup>]",
   compactness = "Compactness",
-  `Charge score` = "Charge",
-  `Polarity score` = "Polarity",
-  `Hydrophobicity score` = "Hydrophobicity"
+  mouth_area_sa = "Mouth area [Å<sup>2</sup>]",
+  HIS_451 = "Depth of His 451 [Å]",
+  HIS_519 = "Depth of His 519 [Å]"
+)
+
+facet_limits <- tibble(
+  parameter = ordered(
+    c(
+      "Vol_sa",
+      "compactness",
+      "mouth_area_sa",
+      "HIS_451",
+      "HIS_519"
+    ),
+    levels = c(
+      "Vol_sa",
+      "compactness",
+      "mouth_area_sa",
+      "HIS_451",
+      "HIS_519"
+    )
+  ),
+  limits = c(
+    300,
+    0.7,
+    34,
+    20,
+    14
+  )
 )
 
 violins <- ggplot(
@@ -1177,34 +1362,52 @@ violins <- ggplot(
     size = 0.2,
     linetype = 2
   ) +
-  geom_quasirandom(aes(colour = DOPE, group = model),
-    shape = 16,
-    alpha = 0.75,
-    size = 1
+  geom_point(aes(fill = DOPE, group = model),
+    shape = 21,
+    alpha = 1,
+    size = 2,
+    stroke = 0.2
   ) +
-  geom_violin(
-    draw_quantiles = 0.5,
-    alpha = 0.25,
-    colour = "black",
-    size = 0.2
+  geom_point(
+    data = tibble(
+      "paralog" = "ChLAC8",
+      "parameter" = ordered(
+        "mouth_area_sa",
+        levels = c(
+          "Vol_sa",
+          "compactness",
+          "mouth_area_sa",
+          "HIS_451",
+          "HIS_519"
+        )
+      ),
+      "value" = 70.924
+    ),
+    alpha = 0
   ) +
+  # geom_violin(
+  #   draw_quantiles = 0.5,
+  #   alpha = 0.25,
+  #   colour = "black",
+  #   size = 0.2
+  # ) +
   geom_curve(
-    data = ref_data %>% filter(parameter == "HIS_451"),
+    data = ref_data %>% filter(parameter == "Vol_sa"),
     aes(
       xend = 22.75,
       yend = value + 0.1,
       x = 23.5,
-      y = value + 1.25
+      y = value + 20
     ),
     curvature = 0.4,
     size = 0.2,
     arrow = arrow(length = unit(0.03, "npc"))
   ) +
   geom_text(
-    data = ref_data %>% filter(parameter == "HIS_451"),
+    data = ref_data %>% filter(parameter == "Vol_sa"),
     aes(
       x = 23.5,
-      y = value + 1.35
+      y = value + 25
     ),
     label = "ZmLAC3",
     hjust = 0,
@@ -1214,61 +1417,62 @@ violins <- ggplot(
   geom_text(
     data = tibble(
       parameter =
-        ordered(c("Polarity score", "Hydrophobicity score"),
+        ordered(c("HIS_519", "HIS_519"),
           levels = c(
-            "HIS_451",
-            "HIS_519",
-            "Volume",
+            "Vol_sa",
             "compactness",
-            "Charge score",
-            "Polarity score",
-            "Hydrophobicity score"
+            "mouth_area_sa",
+            "HIS_451",
+            "HIS_519"
           )
         )
     ),
     x = 25,
-    y = c(10, 45),
+    y = c(0, 13),
     label = c("better", "worse"),
-    hjust = 0,
+    hjust = 1,
     family = "Helvetica",
     size = ggtext_size
   ) +
   # geom_segment(
-  #   data = tibble(parameter = ordered(c("Polarity score", "Hydrophobicity score"),
+  #   data = tibble(parameter = ordered(c("compactness", "mouth_area_sa"),
   #     levels = c(
   #       "HIS_451",
   #       "HIS_519",
-  #       "Volume",
-  #       "Total SASA",
-  #       "Charge score",
-  #       "Polarity score",
-  #       "Hydrophobicity score"
+  #       "Vol_sa",
+  #       "compactness",
+  #       "mouth_area_sa"
   #     )
   #   )),
   #   aes(
   #     xend = 24,
-  #     yend = c(14, 50),
+  #     yend = c(0.7, 25),
   #     x = 24,
-  #     y = c(16, 0)
+  #     y = c(0.9, 15)
   #   ),
   #   size = 0.2,
   #   arrow = arrow(length = unit(0.03, "npc"))
   # ) +
-  scale_colour_gradientn(colours = rev(morgenstemning)) +
-  labs(colour = "Model quality\n(DOPE Z-score)") +
+  scale_fill_gradientn(colours = rev(morgenstemning), limits = c(-2.1, -1.2)) +
+  expand_limits(y = 0) +
+  labs(fill = "Model quality\n(DOPE Z-score)") +
   theme_leo() +
   theme(
     legend.position = c(0.83, 1.05),
+    # legend.position = "none",
     legend.direction = "horizontal",
     legend.key.height = unit(2, "mm"),
     legend.title = element_text(vjust = 1),
-    plot.margin = unit(c(7.5, 1, 1, 1), "mm"),
+    plot.margin = unit(c(5.5, 1, 0, 1), "mm"),
     axis.title = element_blank(),
     strip.placement = "outside",
-    strip.text = ggtext::element_markdown(
-      hjust = 0.5, face = "plain",
-      margin = unit(c(1, 1, 1, 1), "mm")
-    )
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_blank(),
+    strip.text = element_blank()
+    # strip.text = ggtext::element_markdown(
+    #   hjust = 0.5, face = "plain",
+    #   margin = unit(c(1, 1, 1, 1), "mm")
+    # )
   ) +
   coord_flip(clip = "off", xlim = c(1, 22)) +
   facet_wrap(~parameter,
@@ -1285,6 +1489,445 @@ dendrogram + violins +
   plot_layout(widths = c(1, 5))
 dev.off()
 ```
+
+### Fungal laccases
+
+#### CASTp
+
+```{r}
+
+# load model quality
+model_dope <- read_table(
+  "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/Fungal/models/normalized_DOPE.txt",
+  col_names = c("model", "DOPE")
+  ) %>% 
+  mutate(model = str_remove(model, fixed(".pdb")))
+
+# CASTp job codes
+CASTp_codes <- read_csv(
+  "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/Fungal/CASTp/job_codes.csv",
+  col_names = c("model", "code")
+  ) %>%
+  mutate(
+    model = str_remove(basename(model), fixed(".pdb")),
+    code = str_remove(basename(code), fixed(".zip"))
+  )
+
+# equivalent residues forming the pocket (manually taken from alignment)
+pocket_residues <- read_csv(
+  "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/Fungal/pocket_residues.csv"
+  ) %>% 
+  mutate(comment = "pocket residue") %>% 
+  # select(aa, comment)
+  filter(aa %in% c("HIS", "ASP", "LEU"))
+
+# load .poc files from CASTp
+poc_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/Fungal/CASTp/",
+    pattern = ".poc$",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_poc <- function(flnm) {
+  read_table(flnm,
+    col_names = c(
+      "type",
+      "atom_no",
+      "atom",
+      "aa",
+      "chain",
+      "position",
+      "x",
+      "y",
+      "z",
+      "who_knows_1",
+      "who_knows_2",
+      "pocket",
+      "pocket_type"
+    ),
+     col_types = "cncccnnnnnnnc"
+  ) %>%
+    mutate(
+      pocket = case_when(is.na(pocket_type) ~ who_knows_2,
+                         TRUE ~ pocket),
+      code = str_remove(basename(flnm), fixed(".poc"))
+    ) %>%
+    select(-who_knows_1, -who_knows_2, -pocket_type)
+}
+
+# test <- read_poc("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/extracted/j_60f2fb54e839a.poc")
+
+CASTp_poc <- map_dfr(poc_files, read_poc) %>%
+  left_join(CASTp_codes) %>%
+  left_join(pocket_residues)
+
+# identify correct pocket
+CASTp_poc_id <- CASTp_poc %>%
+  group_by(model, pocket) %>%
+  summarise(contact_atoms = n(),
+            contact_residues = length(unique(comment))) %>% 
+  group_by(model) %>% 
+  filter(contact_residues == max(contact_residues)) %>% # select only the pocket with contact to the maximum number of pocket residues
+  filter(contact_atoms == max(contact_atoms)) %>% # if still > 1 pocket, select the one with contact to maximum atoms of pocket residues
+  mutate(consensus_pocket = pocket)
+
+# load .pocInfo files from CASTp
+pocInfo_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/Fungal/CASTp/",
+    pattern = ".pocInfo",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_pocInfo <- function(flnm) {
+  read_tsv(flnm) %>%
+    mutate(
+      code = str_remove(basename(flnm), fixed(".pocInfo"))
+    )
+}
+
+pocInfo <- map_dfr(pocInfo_files, read_pocInfo)
+
+# load .mouthInfo files from CASTp
+mouthInfo_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/Fungal/CASTp/",
+    pattern = ".mouthInfo",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_mouthInfo <- function(flnm) {
+  read_tsv(flnm) %>%
+    mutate(
+      code = str_remove(basename(flnm), fixed(".mouthInfo"))
+    )
+}
+
+mouthInfo <- map_dfr(mouthInfo_files, read_mouthInfo) %>%
+  select(Molecule, ID, "mouth_area_sa" = Area_sa)
+
+pocket_data_fungus <- pocInfo %>%
+  left_join(mouthInfo) %>%
+  left_join(CASTp_codes) %>%
+  left_join(CASTp_poc_id) %>%
+  left_join(model_dope) %>%
+  filter(ID == consensus_pocket) %>%
+  mutate(
+    compactness = ((pi^(1/3)) * ((6 * `Vol_sa`)^(2/3))) / `Area_sa`
+  ) %>% 
+  drop_na()
+
+vol <- ggplot(
+  pocket_data_fungus,
+  aes(
+    x = model,
+    y = Vol_sa
+  )
+) +
+  geom_point(aes(fill = DOPE),
+             shape = 23,
+             stroke = 0.2,
+             size = 1.5) +
+  scale_colour_gradientn(colours = rev(morgenstemning), limits = c(-2.1, -0.4)) +
+  scale_fill_gradientn(colours = rev(morgenstemning), limits = c(-2.1, -0.4), guide = "none") +
+  theme_leo() +
+  theme(legend.position = "right") +
+  coord_flip()
+
+mouth <- ggplot(
+  pocket_data_fungus,
+  aes(
+    x = model,
+    y = mouth_area_sa
+  )
+) +
+  geom_point(aes(fill = DOPE),
+             shape = 23,
+             stroke = 0.2,
+             size = 1.5) +
+  scale_colour_gradientn(colours = rev(morgenstemning), limits = c(-2.1, -0.4)) +
+  scale_fill_gradientn(colours = rev(morgenstemning), limits = c(-2.1, -0.4), guide = "none") +
+  theme_leo() +
+  theme(legend.position = "right") +
+  coord_flip()
+
+pdf("volume_alphafold.pdf", width = 6, height = 4)
+vol + mouth
+dev.off()
+
+```
+
+#### Create .pqr files
+
+```{r}
+best_models <- pocket_data
+
+for(i in 1:nrow(best_models)) {
+  model <- best_models[i, "code"]
+  pocket <- as.numeric(best_models[i, "pocket"])
+  paralog <- best_models[i, "model"]
+  
+  # import .sphere.json file
+  sphere <- jsonlite::fromJSON(
+    paste0(
+      "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/Fungal/CASTp/",
+      model,
+      ".sphere.json"
+      )
+    )
+  
+  sphere <- tibble(sphere[[pocket]]) %>%  # select correct pocket
+    mutate("RecordName" = "ATOM",
+           "Serial" = case_when(row_number() < 10 ~ paste0("     ", row_number()),
+                                row_number() < 100  ~ paste0("    ", row_number()),
+                                TRUE ~ paste0("   ", row_number())),
+           "AtomName" = "   O",
+           "ResidueName" = "STP",
+           # "ChainID" = "A",
+           "ResidueNumber" = case_when(pocket < 10 ~ paste0("    ", pocket, "    "),
+                                       pocket < 100 ~ paste0("   ", pocket, "    "),
+                                       pocket < 1000 ~ paste0("  ", pocket, "    "),
+                                       TRUE ~ paste0("  ", pocket, "    ")),
+           "X" = format(round(center$x, 3), width = 7),
+           "Y" = format(round(center$y, 3), width = 7),
+           "Z" = format(round(center$z, 3), width = 7),
+           "Charge" = "0.00",
+           "Radius" = round(radius, 2)) %>% 
+    select(-c(1, 2)) %>% 
+    add_row("RecordName" = "TER") %>% 
+    add_row("RecordName" = "END")
+  
+  write_delim(sphere, 
+              paste0(paralog, ".pqr"), 
+              col_names = FALSE, na = "", delim = " ", quote = "none")
+}
+```
+
+#### DEPTH
+
+```{r}
+# load atom.depth files from DEPTH
+depth_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/Fungal/DEPTH/",
+    pattern = "atom.depth",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_depth <- function(flnm) {
+  read_tsv(flnm) %>%
+    mutate(
+      model = str_remove(basename(flnm), fixed(".pdb-atom.depth"))
+    )
+}
+
+depth <- map_dfr(depth_files, read_depth) %>%
+  left_join(model_dope) %>% 
+  filter(!str_detect(model, "unrelaxed"))
+
+his_depth_fungus <- depth %>%
+  separate(residue, into = c("chain", "residue")) %>%
+  filter(residue %in% c(458, 395) & `atom-type` == "NE2")
+
+ggplot(
+  his_depth_fungus,
+  aes(
+    x = reorder(model, -`mean(depth)`),
+    y = `mean(depth)`
+  )
+) +
+  geom_point() +
+  scale_colour_gradientn(colours = rev(morgenstemning)) +
+  theme_leo() +
+  theme(
+    legend.position = "right",
+    plot.margin = unit(c(5, 1, 1, 1), "mm")
+  ) +
+  facet_wrap(~residue,
+    ncol = 2
+  ) +
+  coord_flip(clip = "off")
+```
+
+#### figure
+
+```{r}
+model_data_fungus <- his_depth_fungus %>%
+  select(model, residue, `mean(depth)`, DOPE) %>%
+  pivot_wider(names_from = residue, values_from = `mean(depth)`) %>%
+  rename("HIS_451" = `395`,
+         "HIS_519" = `458`) %>% 
+  left_join(pocket_data_fungus %>%
+    select(
+      model,
+      Vol_sa,
+      compactness,
+      mouth_area_sa
+    )) %>%
+  pivot_longer(c(
+    HIS_451,
+    HIS_519,
+    Vol_sa,
+    compactness,
+    mouth_area_sa
+  ),
+  names_to = "parameter", values_to = "value"
+  ) %>% 
+  mutate(
+    parameter = ordered(parameter, levels = c(
+      "Vol_sa",
+      "compactness",
+      "mouth_area_sa",
+      "HIS_451",
+      "HIS_519"
+    )),
+    paralog = recode(
+      str_remove(model, fixed("_relaxed_model_1")),
+      "1kya_1" = "1KYA (X-ray)",
+      "1KYA_AP2" = "1KYA (AF2)",
+      "F162A_F332A" = "F162A/F332A"),
+    model = "relaxed",
+    kingdom = "fungi"
+  )
+
+clust_data <- model_data_fungus %>%
+  group_by(paralog, parameter) %>%
+  summarise(value = median(value, na.rm = T)) %>%
+  pivot_wider(names_from = parameter, values_from = value) %>%
+  column_to_rownames(var = "paralog")
+
+clust <- reorder(
+  hclust(dist(clust_data), method = "average"),
+  -clust_data$Vol_sa,
+  agglo.FUN = "mean"
+)
+
+gg_clust <- dendro_data(as.dendrogram(clust))
+
+model_data_fungus <- model_data_fungus %>%
+  mutate(paralog = ordered(paralog, levels = gg_clust[["labels"]][["label"]]))
+
+dendrogram_fungi <- ggplot(gg_clust$segments) +
+  geom_segment(aes(x = x, y = y, xend = xend, yend = yend),
+    lineend = "square",
+    size = 0.2
+  ) +
+  scale_y_reverse() +
+  scale_x_continuous(expand = c(0.09, 0.09)) +
+  coord_flip() +
+  theme_void()
+
+axis_titles <- c(
+  Vol_sa = "Volume [Å<sup>3</sup>]",
+  compactness = "Compactness",
+  mouth_area_sa = "Mouth area [Å<sup>2</sup>]",
+  HIS_451 = "Depth of His 451 [Å]",
+  HIS_519 = "Depth of His 519 [Å]"
+)
+
+violins_fungi <- ggplot(
+  model_data_fungus,
+  aes(
+    x = paralog,
+    y = value
+  )
+) +
+  geom_hline(
+    data = ref_data,
+    aes(yintercept = value),
+    size = 0.2,
+    linetype = 2
+  ) +
+  geom_point(aes(fill = DOPE, group = model),
+    shape = 21,
+    alpha = 1,
+    size = 2,
+    stroke = 0.2
+  ) +
+  geom_point(
+    data = tibble(
+      paralog = "1KYA (X-ray)",
+      parameter = ordered(c(
+        "Vol_sa",
+        "compactness",
+        "mouth_area_sa",
+        "HIS_451",
+        "HIS_519"
+      ),
+      levels = c(
+        "Vol_sa",
+        "compactness",
+        "mouth_area_sa",
+        "HIS_451",
+        "HIS_519"
+      )
+      ),
+      value = c(
+        max(model_data$value[model_data$parameter == "Vol_sa"]),
+        max(model_data$value[model_data$parameter == "compactness"]),
+        max(model_data$value[model_data$parameter == "mouth_area_sa"]),
+        max(model_data$value[model_data$parameter == "HIS_451"]),
+        max(model_data$value[model_data$parameter == "HIS_519"])
+      )
+    ),
+    alpha = 0
+  ) +
+  scale_fill_gradientn(colours = rev(morgenstemning), limits = c(-2.1, -1.2)) +
+  expand_limits(y = 0) +
+  labs(fill = "Model quality\n(DOPE Z-score)") +
+  theme_leo() +
+  theme(
+    # legend.position = c(0.83, 1.05),
+    legend.position = "none",
+    legend.direction = "horizontal",
+    legend.key.height = unit(2, "mm"),
+    legend.title = element_text(vjust = 1),
+    plot.margin = unit(c(0, 1, 1, 1), "mm"),
+    axis.title = element_blank(),
+    strip.placement = "outside",
+    strip.text = ggtext::element_markdown(
+      hjust = 0.5, face = "plain",
+      margin = unit(c(1, 1, 1, 1), "mm")
+    )
+  ) +
+  coord_flip() +
+  facet_wrap(~parameter,
+    nrow = 1,
+    scales = "free_x",
+    strip.position = "bottom",
+    labeller = as_labeller(axis_titles)
+  )
+
+# plotly::ggplotly(violins)
+
+pdf("homology_model_fig_fungus.pdf", height = onecol * 0.5, width = twocol)
+dendrogram_fungi + violins_fungi +
+  plot_layout(widths = c(1, 5))
+dev.off()
+```
+
+### Combined figure
+
+```{r}
+layout <- "
+ABBBBB
+ABBBBB
+ABBBBB
+CDDDDD
+"
+
+pdf("homology_model_fig_complete.pdf", height = onecol * 0.8, width = twocol)
+dendrogram + violins + dendrogram_fungi + violins_fungi +
+  plot_layout(design = layout)
+dev.off()
+
+```
+
 
 ## Phylogeny
 

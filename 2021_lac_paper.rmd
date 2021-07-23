@@ -124,7 +124,10 @@ onecol <- 9 / 2.54
 
 #### machine dependent paths ####
 ## "/data/" in the office, "/home/leonard/Documents/Uni/" on my laptops
-datapath <- ifelse(dir.exists("/data/"), "/data/", "/home/leonard/Documents/Uni/")
+datapath <- ifelse(dir.exists("/data/"), "/data/", 
+                   ifelse(dir.exists("/run/media/leonard/data/"),
+                          "/run/media/leonard/data/","/home/leonard/Documents/Uni/")
+)
 ```
 
 # Phenotyping
@@ -451,13 +454,13 @@ print("Area in cm² = pixels² * 1.5² / space²")
 #     rep = pcv_data$entities$metadata$frame$value,
 #     genotype = pcv_data$entities$metadata$id$value
 #   )
-#
+# 
 # scale_factor <- read_csv("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/front/output/2020-05-11_lab_segmentation/size_marker.csv",
 #   col_names = c("id", "space")
 # ) %>%
 #   mutate(id = str_remove(id, fixed(".jpg"))) %>%
 #   separate(id, into = c("date", "genotype", "rep"), sep = "_")
-#
+# 
 # heights <- heights %>%
 #   left_join(scale_factor) %>%
 #   mutate(
@@ -475,7 +478,7 @@ print("Area in cm² = pixels² * 1.5² / space²")
 #   left_join(pheno_data %>% select(genotype, rep, apparent.height, stretched.height),
 #     by = c("genotype", "rep")
 #   )
-#
+# 
 # height_validation <- ggplot(
 #   data = heights,
 #   aes(
@@ -485,11 +488,11 @@ print("Area in cm² = pixels² * 1.5² / space²")
 # ) +
 #   geom_point() +
 #   geom_smooth(method = "lm")
-#
+# 
 # height_validation
-#
+# 
 # summary(lm(heights$scaled_height ~ heights$apparent.height))
-#
+# 
 # height_validation <- ggplot(
 #   data = heights,
 #   aes(
@@ -503,9 +506,9 @@ print("Area in cm² = pixels² * 1.5² / space²")
 #     method = "lm",
 #     colour = "blue"
 #   )
-#
+# 
 # height_validation
-#
+# 
 # summary(lm(heights$scaled_path ~ heights$stretched.height))
 ```
 
@@ -3193,17 +3196,13 @@ col_types = "ccDcccdcddd"
 
 daf_IF_files <-
   list.files(
-    path = paste0(
-      datapath, "PhD/Laccase_activity/2020-09_activity/DAF_pH5_IF/ROIs/Measurements/"
-    ),
+    path = "/home/leonard/Dropbox/DAF_pH5_IF/ROIs/Measurements/",
     pattern = "*.csv$",
     recursive = FALSE,
     full.names = TRUE
   )
 
-reps <- read_csv(paste0(
-  datapath, "PhD/Laccase_activity/2020-09_activity/DAF_pH5_IF/to_measure_IF.csv")
-) %>% 
+reps <- read_csv("/home/leonard/Dropbox/DAF_pH5_IF/to_measure_IF.csv") %>% 
   select(1:3) %>% 
   mutate(replicate = as.character(replicate))
 
@@ -3216,7 +3215,7 @@ daf_IF_data <- map_dfr(daf_IF_files, read_csv) %>%
     date = as.Date(ymd(
       str_extract(image, "[:digit:]{4}-[:digit:]{2}-[:digit:]{2}")
     )),
-    genotype = str_extract(image, "WT|Q-4|Q-5|Q-10|Q-12|Q-17|Q$"),
+    genotype = str_remove(str_extract(image, "WT|Q-4|Q-5|Q-10|Q-12|Q-17|Q$|Q_"), "_"),
     treatment = "none",
     pH = "5",
     substrate = "DAF"
