@@ -621,13 +621,15 @@ read_pocInfo <- function(flnm) {
     )
 }
 
-pocInfo <- map(pocInfo_files, read_pocInfo) %>%
-  bind_rows()
+pocInfo <- map_dfr(pocInfo_files, read_pocInfo)
 
-zmlac3_pocInfo <- read_tsv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/ZmLAC3/j_6065d2c555ed5.pocInfo") %>%
+zmlac3_pocInfo <- map_dfr(c(
+  "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/ZmLAC3/6klg.pocInfo",
+  "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/ZmLAC3/6klj.pocInfo"),
+  read_pocInfo) %>% 
   mutate(
     paralog = "ZmLAC3",
-    model = "6klg",
+    model = code,
     consensus_pocket = 1
   ) %>%
   filter(ID == consensus_pocket)
@@ -650,19 +652,24 @@ read_mouthInfo <- function(flnm) {
 
 mouthInfo <- map(mouthInfo_files, read_mouthInfo) %>%
   bind_rows() %>%
-  select(Molecule, ID, "mouth_area_sa" = Area_sa)
+  select(Molecule, ID, "mouth_area_sa" = Area_sa, "mouth_diameter" = Len_sa)
 
-zmlac3_mouthInfo <- read_tsv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/ZmLAC3/j_6065d2c555ed5.mouthInfo") %>%
+zmlac3_mouthInfo <- map_dfr(c(
+  "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/ZmLAC3/6klg.mouthInfo",
+  "/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelling/CASTp/ZmLAC3/6klj.mouthInfo"),
+  read_mouthInfo) %>%
   mutate(
     paralog = "ZmLAC3",
-    model = "6klg",
+    model = code,
     consensus_pocket = 1
   ) %>%
   filter(ID == consensus_pocket) %>%
   rename("mouth_area_sa" = Area_sa)
 
 ref_pocket <- zmlac3_pocInfo %>% 
-  left_join(select(zmlac3_mouthInfo, paralog, mouth_area_sa), by = "paralog") %>% 
+  left_join(select(zmlac3_mouthInfo, paralog, model, mouth_area_sa), 
+            by = c("paralog" ,"model")) %>% 
+  filter(model == "6klg") %>% 
   mutate(
     compactness = ((pi^(1/3)) * ((6 * `Vol_sa`)^(2/3))) / `Area_sa`
   )
@@ -692,8 +699,15 @@ vol <- ggplot(
   )
 ) +
   geom_hline(
-    data = zmlac3_pocInfo,
-    aes(yintercept = Vol_sa)
+    data = zmlac3_pocInfo[1, ],
+    aes(yintercept = Vol_sa),
+    size = 0.1
+  ) +
+  geom_hline(
+    data = zmlac3_pocInfo[2, ],
+    aes(yintercept = Vol_sa),
+    size = 0.1,
+    linetype = 3
   ) +
   geom_quasirandom(
     data = filter(pocket_data, model != "relaxed"),
@@ -709,6 +723,7 @@ vol <- ggplot(
              shape = 23,
              stroke = 0.2,
              size = 1.5) +
+  ylim(0, 300) +
   scale_colour_gradientn(colours = rev(morgenstemning), limits = c(-2.1, -0.4)) +
   scale_fill_gradientn(colours = rev(morgenstemning), limits = c(-2.1, -0.4), guide = "none") +
   theme_leo() +
@@ -740,6 +755,7 @@ pdf("volume_alphafold.pdf", width = 3, height = 4)
 vol
 dev.off()
 ```
+
 
 #### Create .pqr files
 
@@ -1005,10 +1021,7 @@ coord_his <- read_csv("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Modelli
   pivot_longer(-paralog, names_to = "6klg", values_to = "ID") %>%
   filter(`6klg` %in% c("HIS_451", "HIS_519")) %>%
   separate(ID, into = c("aa", "position")) %>%
-  mutate(position = as.numeric(position),
-         # because I removed an X from the LcLAC sequence for alphafold
-         position = case_when(paralog == "LcLAC" & position > 323 ~ position - 1,
-                              TRUE ~ position)) 
+  mutate(position = as.numeric(position))
 
 # load atom.depth files from DEPTH
 depth_files <-
@@ -1035,14 +1048,19 @@ zmlac3_depth <- read_depth("/home/leonard/Dropbox/2018_PO_review/2020_rewrite/Mo
   mutate(paralog = "ZmLAC3",
          model = "6klg")
 
-depth <- map(depth_files, read_depth) %>%
-  bind_rows() %>%
+depth <- map_dfr(depth_files, read_depth) %>% 
   bind_rows(zmlac3_depth) %>%
   left_join(coord_his) %>%
   left_join(model_dope)
 
 his_depth <- depth %>%
   separate(residue, into = c("chain", "residue")) %>%
+  mutate(
+    residue = as.numeric(residue),
+    # because I removed an X from the LcLAC sequence for alphafold
+    residue = case_when(
+      paralog == "LcLAC" & model ==  "relaxed" & residue > 323 ~ residue + 1,
+      TRUE ~ residue)) %>% 
   filter(!(str_detect(model, "IL"))) %>% # remove low_quality initial models
   filter(residue == position & `atom-type` == "NE2")
 
@@ -1206,6 +1224,37 @@ ggplot(
 ### Combine data (CASTp)
 
 ```{r}
+model_data_modeller <- his_depth %>%
+  select(paralog, model, `6klg`, `mean(depth)`, DOPE) %>%
+  pivot_wider(names_from = `6klg`, values_from = `mean(depth)`) %>%
+  left_join(pocket_data %>%
+    select(
+      paralog,
+      model,
+      Vol_sa,
+      compactness,
+      mouth_area_sa
+    )) %>%
+  pivot_longer(c(
+    HIS_451,
+    HIS_519,
+    Vol_sa,
+    compactness,
+    mouth_area_sa
+  ),
+  names_to = "parameter", values_to = "value"
+  ) %>%
+  mutate(paralog = recode(paralog, "LcLAC" = "ADE/LAC")) %>% 
+  mutate(
+    parameter = ordered(parameter, levels = c(
+      "Vol_sa",
+      "compactness",
+      "mouth_area_sa",
+      "HIS_451",
+      "HIS_519"
+    ))
+  )
+
 model_data <- his_depth %>%
   select(paralog, model, `6klg`, `mean(depth)`, DOPE) %>%
   pivot_wider(names_from = `6klg`, values_from = `mean(depth)`) %>%
@@ -1303,6 +1352,9 @@ clust <- reorder(
 gg_clust <- dendro_data(as.dendrogram(clust))
 
 model_data <- model_data %>%
+  mutate(paralog = ordered(paralog, levels = gg_clust[["labels"]][["label"]]))
+
+model_data_modeller <- model_data_modeller %>%
   mutate(paralog = ordered(paralog, levels = gg_clust[["labels"]][["label"]]))
 
 dendrogram <- ggplot(gg_clust$segments) +
@@ -1482,10 +1534,138 @@ violins <- ggplot(
     labeller = as_labeller(axis_titles)
   )
 
+violins_modeller <- ggplot(
+  model_data_modeller,
+  aes(
+    x = paralog,
+    y = value
+  )
+) +
+  geom_hline(
+    data = ref_data,
+    aes(yintercept = value),
+    size = 0.2,
+    linetype = 2
+  ) +
+  geom_quasirandom(
+    data = model_data_modeller %>% filter(model != "relaxed"),
+    aes(fill = DOPE, group = model),
+    shape = 21,
+    width = 0.2,
+    alpha = 1,
+    size = 1,
+    stroke = 0.2
+  ) +
+  geom_point(
+    data = model_data,
+    aes(fill = DOPE, group = model),
+    shape = 23,
+    alpha = 1,
+    size = 2,
+    stroke = 0.2
+  ) +
+  # geom_violin(
+  #   data = model_data_modeller %>% filter(model != "relaxed"),
+  #   draw_quantiles = 0.5,
+  #   alpha = 0.25,
+  #   colour = "black",
+  #   size = 0.2
+  # ) +
+  # geom_curve(
+  #   data = ref_data %>% filter(parameter == "Vol_sa"),
+  #   aes(
+  #     xend = 22.75,
+  #     yend = value + 0.1,
+  #     x = 23.5,
+  #     y = value + 20
+  #   ),
+  #   curvature = 0.4,
+  #   size = 0.2,
+  #   arrow = arrow(length = unit(0.03, "npc"))
+  # ) +
+  # geom_text(
+  #   data = ref_data %>% filter(parameter == "Vol_sa"),
+  #   aes(
+  #     x = 23.5,
+  #     y = value + 25
+  #   ),
+  #   label = "ZmLAC3",
+  #   hjust = 0,
+  #   family = "Helvetica",
+  #   size = ggtext_size
+  # ) +
+  # geom_text(
+  #   data = tibble(
+  #     parameter =
+  #       ordered(c("HIS_519", "HIS_519"),
+  #         levels = c(
+  #           "Vol_sa",
+  #           "compactness",
+  #           "mouth_area_sa",
+  #           "HIS_451",
+  #           "HIS_519"
+  #         )
+  #       )
+  #   ),
+  #   x = 25,
+  #   y = c(0, 13),
+  #   label = c("better", "worse"),
+  #   hjust = 1,
+  #   family = "Helvetica",
+  #   size = ggtext_size
+  # ) +
+  # geom_segment(
+  #   data = tibble(parameter = ordered(c("compactness", "mouth_area_sa"),
+  #     levels = c(
+  #       "HIS_451",
+  #       "HIS_519",
+  #       "Vol_sa",
+  #       "compactness",
+  #       "mouth_area_sa"
+  #     )
+  #   )),
+  #   aes(
+  #     xend = 24,
+  #     yend = c(0.7, 25),
+  #     x = 24,
+  #     y = c(0.9, 15)
+  #   ),
+  #   size = 0.2,
+  #   arrow = arrow(length = unit(0.03, "npc"))
+  # ) +
+  scale_fill_gradientn(colours = rev(morgenstemning), limits = c(-2.1, -0.4)) +
+  expand_limits(y = 0) +
+  labs(fill = "Model quality\n(DOPE Z-score)") +
+  theme_leo() +
+  theme(
+    legend.position = c(0.83, 1.05),
+    # legend.position = "none",
+    legend.direction = "horizontal",
+    legend.key.height = unit(2, "mm"),
+    legend.title = element_text(vjust = 1),
+    plot.margin = unit(c(5.5, 1, 0, 1), "mm"),
+    axis.title = element_blank(),
+    strip.placement = "outside",
+    # axis.ticks.x = element_blank(),
+    # axis.text.x = element_blank(),
+    # strip.text = element_blank()
+    strip.text = ggtext::element_markdown(
+      hjust = 0.5, face = "plain",
+      margin = unit(c(1, 1, 1, 1), "mm")
+    )
+  ) +
+  coord_flip(clip = "off", xlim = c(1, 22)) +
+  facet_wrap(~parameter,
+    nrow = 1,
+    scales = "free_x",
+    strip.position = "bottom",
+    labeller = as_labeller(axis_titles)
+  )
+
 # plotly::ggplotly(violins)
 
 pdf("homology_model_fig.pdf", height = onecol, width = twocol)
-dendrogram + violins +
+dendrogram + violins_modeller +
   plot_layout(widths = c(1, 5))
 dev.off()
 ```
@@ -1927,6 +2107,25 @@ dendrogram + violins + dendrogram_fungi + violins_fungi +
 dev.off()
 
 ```
+
+### Export data
+
+```{r}
+exp_data <- model_data_modeller %>% 
+  bind_rows(model_data_fungus, ref_data) %>% 
+  mutate(kingdom = case_when(is.na(kingdom) ~ "plantae",
+                             TRUE ~ kingdom),
+         model = case_when(paralog == "1KYA (X-ray)" ~ "crystallography",
+                           model == "relaxed" ~ "AlphaFold 2",
+                           model == "6klg" ~ "crystallography",
+                           TRUE ~ model),
+         DOPE = case_when(paralog == "ZmLAC3" ~ -1.740,
+                          TRUE ~ DOPE)) %>% 
+  pivot_wider(names_from = parameter, values_from = value)
+
+write_csv(exp_data, "model_data.csv")
+```
+
 
 
 ## Phylogeny
