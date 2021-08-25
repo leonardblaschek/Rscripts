@@ -43,9 +43,10 @@ theme_leo <- function(base_size = 6,
     base_family = base_family
   ) %+replace%
     theme(
-      strip.text = element_text(hjust = 0, 
-                                # face = "italic"
-                                ),
+      strip.text = element_text(
+        hjust = 0,
+        # face = "italic"
+      ),
       axis.ticks = element_line(
         size = 0.125,
         lineend = "square",
@@ -116,6 +117,17 @@ pal_pedersen_disc <- c(
   "#e76f51"
 )
 
+# convenience vectors of mutant types
+Q <- "Q"
+quad <- c("Q-4", "Q-5", "Q-10", "Q-12", "Q-17")
+triple <- c("Q-4/10", "Q-4/12", "Q-4/17", "Q-5/10", "Q-5/12", "Q-5/17", "Q-10/12", "Q-12/17")
+WT <- "WT"
+
+Q_it <- "<i>Q</i>"
+quad_it <- c("<i>Q-4</i>", "<i>Q-5</i>", "<i>Q-10</i>", "<i>Q-12</i>", "<i>Q-17</i>")
+triple_it <- c("<i>Q-4/10</i>", "<i>Q-4/12</i>", "<i>Q-4/17</i>", "<i>Q-5/10</i>", "<i>Q-5/12</i>", "<i>Q-5/17</i>", "<i>Q-10/12</i>", "<i>Q-12/17</i>")
+
+# convenience figure size functions
 ggtext_size <- 6 / (14 / 5)
 cm_size <- function(x) x / 2.54
 twocol <- 18 / 2.54
@@ -124,9 +136,10 @@ onecol <- 9 / 2.54
 
 #### machine dependent paths ####
 ## "/data/" in the office, "/home/leonard/Documents/Uni/" on my laptops
-datapath <- ifelse(dir.exists("/data/"), "/data/", 
-                   ifelse(dir.exists("/run/media/leonard/data/"),
-                          "/run/media/leonard/data/","/home/leonard/Documents/Uni/")
+datapath <- ifelse(dir.exists("/data/"), "/data/",
+  ifelse(dir.exists("/run/media/leonard/data/"),
+    "/run/media/leonard/data/", "/home/leonard/Documents/Uni/"
+  )
 )
 ```
 
@@ -134,7 +147,22 @@ datapath <- ifelse(dir.exists("/data/"), "/data/",
 
 ## End point phenotyping
 
+### Load data
+
 ```{r message=FALSE}
+# format silique data from growth instance III
+sil_III <- read_csv(paste0(
+  datapath, "PhD/Phenotyping/2021-04_lac_mutants/2021-07_harvesting.csv"
+)) %>%
+  left_join(read_csv(paste0(datapath, "PhD/Phenotyping/2021-04_lac_mutants/plant_order.csv"))) %>%
+  select(genotype, genotype, "rep" = replicate, "length" = sil.length) %>%
+  separate_rows(length, sep = ",") %>%
+  mutate(
+    length = as.numeric(length),
+    rep = as.character(rep)
+  )
+
+# combine silique data
 siliques <- read_csv(paste0(
   datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_siliques.csv"
 )) %>%
@@ -144,30 +172,9 @@ siliques <- read_csv(paste0(
     select(-plant)) %>%
   mutate(rep = as.character(rep)) %>%
   pivot_longer(-c(genotype, rep), names_to = "sil", values_to = "length") %>%
-  mutate(genotype = ordered(recode(genotype,
-    "lac4/5/10/12/17" = "Q",
-    "lac5/10/12/17" = "Q-4",
-    "lac4/10/12/17" = "Q-5",
-    "lac4/5/12/17" = "Q-10",
-    "lac4/5/10/17" = "Q-12",
-    "lac4/5/10/12" = "Q-17"
-  ),
-  levels = c("Col-0", "Q-4", "Q-5", "Q-10", "Q-12", "Q-17", "Q")
-  ))
-
-pheno_data <- read_csv(paste0(
-  datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_harvesting.csv"
-)) %>%
-  rename("stem.weight" = stem.w) %>%
-  bind_rows(read_csv(paste0(
-    datapath, "PhD/Phenotyping/2020-09_lac_mutants/2020-11-05_harvesting.csv"
-  )) %>%
-    select(-plant)) %>%
-  mutate(rep = as.character(rep)) %>%
-  left_join(siliques %>%
-    group_by(genotype, rep) %>%
-    summarise(mean.sil.length = mean(length))) %>%
-  mutate(genotype = ordered(recode(genotype,
+  select(-sil) %>%
+  bind_rows(sil_III) %>%
+  mutate(genotype = recode(genotype,
     "Col-0" = "WT",
     "lac4/5/10/12/17" = "Q",
     "lac5/10/12/17" = "Q-4",
@@ -175,94 +182,90 @@ pheno_data <- read_csv(paste0(
     "lac4/5/12/17" = "Q-10",
     "lac4/5/10/17" = "Q-12",
     "lac4/5/10/12" = "Q-17"
-  ),
-  levels = c("WT", "Q-4", "Q-5", "Q-10", "Q-12", "Q-17", "Q")
   )) %>%
-  select(-mat.sil, -green.sil, -fl.stands) %>% 
-  mutate(genotype = recode(genotype,
-                           "Q-4" = "<i>Q-4</i>",
-                           "Q-5" = "<i>Q-5</i>",
-                           "Q-10" = "<i>Q-10</i>",
-                           "Q-12" = "<i>Q-12</i>",
-                           "Q-17" = "<i>Q-17</i>",
-                           "Q" = "<i>Q</i>"))
-
-ggplot(
-  pheno_data,
-  aes(
-    y = genotype,
-    x = stretched.height
-  )
-) +
-  # geom_violin() +
-  # ggbeeswarm::geom_quasirandom() +
-  ggridges::geom_density_ridges_gradient(aes(fill = stat(x)),
-    bandwidth = 2.5,
-    quantile_lines = TRUE, quantiles = 2
-  ) +
-  scale_fill_gradientn(colours = wesanderson::wes_palette("Zissou1", n = 5)) +
-  theme_leo()
-
-ggplot(siliques) +
-  # geom_violin() +
-  # ggbeeswarm::geom_quasirandom(aes(x = genotype,
-  #                                  y = length)) +
-  ggridges::geom_density_ridges_gradient(aes(
-    x = length,
-    y = genotype,
-    fill = stat(x)
+  mutate(genotype = ordered(case_when(
+    genotype == "WT" ~ genotype,
+    TRUE ~ paste0("<i>", genotype, "</i>")
   ),
-  bandwidth = 0.05,
-  quantile_lines = TRUE, quantiles = 2
-  ) +
-  scale_fill_gradientn(colours = wesanderson::wes_palette("Zissou1", n = 5)) +
-  theme_leo()
+  levels = c(WT, triple_it, quad_it, Q_it)
+  ))
 
+
+# format stem data from growth instance III
+stems_III <- read_csv(paste0(
+  datapath, "PhD/Phenotyping/2021-04_lac_mutants/2021-07_harvesting.csv"
+)) %>%
+  left_join(read_csv(paste0(datapath, "PhD/Phenotyping/2021-04_lac_mutants/plant_order.csv"))) %>%
+  select(-sil.length, -stem.weight) %>%
+  rename("rep" = replicate)
+
+# combine stem data
+pheno_data <- read_csv(paste0(
+  datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_harvesting.csv"
+)) %>%
+  rename("stem.weight" = stem.w) %>%
+  bind_rows(read_csv(paste0(
+    datapath, "PhD/Phenotyping/2020-09_lac_mutants/2020-11-05_harvesting.csv"
+  )) %>%
+    bind_rows(stems_III) %>%
+    select(-plant)) %>%
+  mutate(genotype = recode(genotype,
+    "Col-0" = "WT",
+    "lac4/5/10/12/17" = "Q",
+    "lac5/10/12/17" = "Q-4",
+    "lac4/10/12/17" = "Q-5",
+    "lac4/5/12/17" = "Q-10",
+    "lac4/5/10/17" = "Q-12",
+    "lac4/5/10/12" = "Q-17"
+  )) %>%
+  mutate(rep = as.character(rep)) %>%
+  mutate(genotype = ordered(case_when(
+    genotype == "WT" ~ genotype,
+    TRUE ~ paste0("<i>", genotype, "</i>")
+  ),
+  levels = c(WT, triple_it, quad_it, Q_it)
+  )) %>%
+  left_join(siliques %>%
+    group_by(genotype, rep) %>%
+    summarise(mean.sil.length = mean(length))) %>%
+  select(-mat.sil, -green.sil, -fl.stands) %>%
+  filter(genotype %in% c(WT, quad_it, Q_it))
+```
+
+### Height
+
+```{r}
 letters <- letter_groups(pheno_data,
   stretched.height,
   genotype,
   "tukey",
   print_position = "below",
   print_adjust = 1
-) %>% 
-  mutate(genotype = ordered(genotype, levels = c(
-      "WT",
-      "<i>Q-4</i>",
-      "<i>Q-5</i>",
-      "<i>Q-10</i>",
-      "<i>Q-12</i>",
-      "<i>Q-17</i>",
-      "<i>Q</i>"
-    )))
+) %>%
+  mutate(genotype = ordered(genotype, levels = c(WT, triple_it, quad_it, Q_it)))
 
-rect_data = pheno_data %>% 
-  group_by(genotype) %>% 
+rect_data <- pheno_data %>%
+  group_by(genotype) %>%
   summarise(genotype = unique(genotype))
 
-height <- ggplot(
+final_height <- ggplot(
   pheno_data,
   aes(
-    x = 0.5,
+    x = genotype,
     y = stretched.height,
     fill = genotype
   )
 ) +
-  geom_rect(data = rect_data,
-            aes(fill = genotype, y = 1),
-            xmin = -Inf,
-            xmax = Inf,
-            ymin = -Inf,
-            ymax = Inf,
-            alpha = 0.5) +
   geom_quasirandom(
-  shape = 16,
-  alpha = 0.5,
-  size = 0.5,
-  width = 0.5
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
   ) +
   geom_violin(
+    aes(fill = genotype),
     draw_quantiles = 0.5,
-    fill = "white",
+    # fill = "white",
     colour = "black",
     alpha = 0.75,
     width = 0.5,
@@ -276,337 +279,555 @@ height <- ggplot(
     family = "Helvetica"
   ) +
   labs(y = "Stem height [cm]") +
-  scale_x_discrete(limits = c(0,1)) +
+  # scale_x_discrete(limits = c(0, 1)) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
-  theme(axis.title.x = element_blank(),
-        axis.title.y = element_textbox_simple(
-          orientation = "left-rotated",
-          halign = 0.5,
-          width = unit(15, "mm")
-          ),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        strip.text = element_markdown(hjust = 0.5),
-        panel.spacing = unit(0.75, "mm")) +
-  facet_wrap(~ genotype, nrow = 1)
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(18, "mm")
+    ),
+    axis.text.x = element_markdown()
+  ) 
 
-pdf("lac_height.pdf", width = onecol, height = onecol * 0.15)
-# raw_absorbance /
-#   activity_grid /
-height
-dev.off()
+final_height
 ```
+
+### Siliques
+
+```{r}
+ggplot(siliques) +
+  # geom_violin() +
+  # ggbeeswarm::geom_quasirandom(aes(x = genotype,
+  #                                  y = length)) +
+  ggridges::geom_density_ridges_gradient(aes(
+    x = length,
+    y = genotype,
+    fill = stat(x)
+  ),
+  bandwidth = 0.05,
+  quantile_lines = TRUE, quantiles = 2
+  ) +
+  scale_fill_gradientn(colours = wesanderson::wes_palette("Zissou1", n = 5)) +
+  theme_leo() +
+  theme(axis.text.y = element_markdown())
+```
+
 
 ## Image based phenotyping
 
 ### Calibration
 
 ```{r}
-size_marker <- read_csv(paste0(datapath, "PhD/Phenotyping/2021-05_plantCV_calibration/calibration.csv")) 
+size_marker <- read_csv(paste0(datapath, "PhD/Phenotyping/2021-05_plantCV_calibration/calibration.csv"))
 
-ggplot(size_marker,
-       aes(x = pixels,
-           y = space)) +
+ggplot(
+  size_marker,
+  aes(
+    x = pixels,
+    y = space
+  )
+) +
   geom_point() +
   geom_smooth(method = "lm") +
   theme_leo()
 
 summary(lm(pixels ~ space, data = size_marker))
 
-size_marker <- size_marker %>% 
-  mutate(space_rel = space / pixels,
-         space_cm = space_rel * 5)
-
 print("The spacing of the colour card is equivalent to 1.5 cm.")
 print("Length in cm = pixels * 1.5 / space")
 print("Area in cm² = pixels² * 1.5² / space²")
 ```
 
-
-### Hue
-
-```{r message=FALSE}
-# pcv_data <- fromJSON(paste0(
-#   datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/images/front/output/2020-05-11_lab_segmentation/results.json"))
-# hues <- pcv_data$entities$observations$hue_frequencies %>%
-#   mutate(
-#     date = pcv_data$entities$metadata$timestamp$value,
-#     replicate = pcv_data$entities$metadata$frame$value,
-#     genotype = pcv_data$entities$metadata$id$value
-#   ) %>%
-#   select(genotype, replicate, date, "count" = value, "hue" = label, ) %>%
-#   unnest(cols = c(count, hue))
-#
-# circular_mean_hue <- pcv_data$entities$observations$hue_circular_mean %>%
-#   mutate(
-#     date = pcv_data$entities$metadata$timestamp$value,
-#     replicate = pcv_data$entities$metadata$frame$value,
-#     genotype = pcv_data$entities$metadata$id$value
-#   ) %>%
-#   select(genotype, replicate, date, "mean_hue" = value)
-#
-# hues <- hues %>%
-#   filter(hue != 1) %>%
-#   group_by(genotype, replicate) %>%
-#   left_join(circular_mean_hue) %>%
-#   mutate(
-#     pixel_count = sum(count),
-#     count_scaled = count / pixel_count,
-#     rolling_count = slide_dbl(count_scaled, mean, .before = 3)
-#   )
-#
-# hues_avg <- hues %>%
-#   ungroup() %>%
-#   mutate(genotype = ordered(genotype,
-#                             levels = c(
-#                               "Col-0",
-#                               "Q",
-#                               "Q-4",
-#                               "Q-5",
-#                               "Q-10",
-#                               "Q-12",
-#                               "Q-17"
-#                             ))) %>%
-#   group_by(genotype, hue) %>%
-#   summarise(count_mean = mean(count_scaled),
-#             mean_mean = mean(mean_hue)) %>%
-#   group_by(genotype) %>%
-#   mutate(rolling_mean = slide_dbl(count_mean, mean, .before = 3))
-#
-# H <- round(((1:20) / 20), digits = 2)
-# S <- 0.7
-# V <- 0.85
-#
-# hue_values <- NULL
-# for (i in H) {
-#   hue_values[i * 20] <- (hsv(i, S, V))
-# }
-#
-#
-# pheno_avg <- pheno_data %>%
-#   group_by(genotype) %>%
-#   summarise_if(is.numeric, mean) %>%
-#   mutate(genotype = recode(genotype,
-#       "lac4/5/10/12/17" = "Q",
-#       "lac5/10/12/17" = "Q-4",
-#       "lac4/10/12/17" = "Q-5",
-#       "lac4/5/12/17" = "Q-10",
-#       "lac4/5/10/17" = "Q-12",
-#       "lac4/5/10/12" = "Q-17"
-#     ))
-#
-# hue_dens <- ggplot() +
-#   geom_density_ridges_gradient(
-#     data = hues_avg,
-#     aes(
-#       x = hue,
-#       height = rolling_mean,
-#       y = reorder(genotype, mean_mean),
-#       # y = genotype,
-#       fill = hue
-#     ),
-#     # scale = 10,
-#     stat = "identity",
-#     size = 0.2
-#   ) +
-#   # geom_density_ridges(
-#   #   data = hues,
-#   #   aes(
-#   #     x = hue,
-#   #     height = rolling_count,
-#   #     y = genotype,
-#   #     group = interaction(genotype, replicate)
-#   #   ),
-#   #   # scale = 10,
-#   #   fill = NA,
-#   #   colour = rgb(0, 0, 0, 0.25),
-#   #   stat = "identity",
-#   #   size = 0.2
-#   # ) +
-#   # geom_text(data = pheno_avg,
-#   #           aes(label = paste("Senescence index =", round(senescence, digits = 2)),
-#   #               y = genotype),
-#   #           x = 100,
-#   #           family = "Helvetica",
-#   #           size = ggtext_size,
-#   #           hjust = 0,
-#   #           vjust = 1.1) +
-#   scale_fill_gradientn(colors = hue_values) +
-#   scale_x_continuous(limits = c(0, 150)) +
-#   labs(x = "Hue",
-#        y = "") +
-#   theme_leo()
-#
-# pdf("harvest_hue.pdf", width = cm_size(10), height = cm_size(10))
-# hue_dens
-# dev.off()
-```
-
-### Height
-
-```{r message=FALSE}
-# pcv_data <- fromJSON("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/front/output/2020-05-11_lab_segmentation/results.json")
-# heights <- as.tibble(pcv_data$entities$observations$height$value) %>%
-#   mutate(
-#     longest_path = pcv_data$entities$observations$longest_path$value,
-#     date = pcv_data$entities$metadata$timestamp$value,
-#     rep = pcv_data$entities$metadata$frame$value,
-#     genotype = pcv_data$entities$metadata$id$value
-#   )
-# 
-# scale_factor <- read_csv("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/front/output/2020-05-11_lab_segmentation/size_marker.csv",
-#   col_names = c("id", "space")
-# ) %>%
-#   mutate(id = str_remove(id, fixed(".jpg"))) %>%
-#   separate(id, into = c("date", "genotype", "rep"), sep = "_")
-# 
-# heights <- heights %>%
-#   left_join(scale_factor) %>%
-#   mutate(
-#     scaled_height = value / space,
-#     scaled_path = longest_path / space,
-#     genotype = recode(genotype,
-#       Q = "lac4/5/10/12/17",
-#       `Q-4` = "lac5/10/12/17",
-#       `Q-5` = "lac4/10/12/17",
-#       `Q-10` = "lac4/5/12/17",
-#       `Q-12` = "lac4/5/10/17",
-#       `Q-17` = "lac4/5/10/12"
-#     )
-#   ) %>%
-#   left_join(pheno_data %>% select(genotype, rep, apparent.height, stretched.height),
-#     by = c("genotype", "rep")
-#   )
-# 
-# height_validation <- ggplot(
-#   data = heights,
-#   aes(
-#     x = scaled_height,
-#     y = apparent.height
-#   )
-# ) +
-#   geom_point() +
-#   geom_smooth(method = "lm")
-# 
-# height_validation
-# 
-# summary(lm(heights$scaled_height ~ heights$apparent.height))
-# 
-# height_validation <- ggplot(
-#   data = heights,
-#   aes(
-#     x = scaled_path,
-#     y = stretched.height,
-#     colour = genotype
-#   )
-# ) +
-#   geom_point() +
-#   geom_smooth(
-#     method = "lm",
-#     colour = "blue"
-#   )
-# 
-# height_validation
-# 
-# summary(lm(heights$scaled_path ~ heights$stretched.height))
-```
-
 ### Rosette growth
 
+#### Load data
+
 ```{r message=FALSE}
-# #### read-in function ###
-# read_plus <- function(flnm) {
-#   json <- fromJSON(flnm)
-#   json$observations$area$value %>%
-#     as_tibble() %>%
-#     mutate(filename = basename(flnm))
-# }
-#
-# #### load data ###
-# rosette_files <-
-#   list.files(
-#     path = "/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/top/renamed/nikon_images/",
-#     pattern = "*.json",
-#     recursive = FALSE,
-#     full.names = TRUE
-#   )
-#
-# tray_id <- read_csv("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/top/renamed/tray_id.csv",
-#   col_types = "cccc"
-# )
-#
-# size_marker <- read_csv("/home/leonard/Dropbox/2020-01_LAC_phenotyping/images/top/renamed/nikon_images/output/size_marker_trays.csv",
-#   col_names = c("filename", "space")
-# ) %>%
-#   separate(filename, into = c("date", "tray"), sep = "_") %>%
-#   mutate(
-#     date = ymd(date),
-#     tray = str_remove(tray, fixed(".jpg"))
-#   )
-#
-# rosette_area <- lapply(rosette_files, read_plus) %>%
-#   bind_rows() %>%
-#   separate(filename, into = c("date", "tray", "plant"), sep = "_") %>%
-#   mutate(
-#     date = ymd(date),
-#     tray = str_remove(tray, fixed(".jpg")),
-#     plant = str_remove(plant, fixed(".json"))) %>%
-#   left_join(tray_id) %>%
-#   left_join(size_marker) %>%
-#   mutate(area = value / space,
-#          mutation = case_when(genotype == "Col-0" ~ "WT",
-#                               TRUE ~ "mutant")) %>%
-#   group_by(genotype, date) %>%
-#   mutate(area_avg = mean(area)) %>%
-#   group_by(genotype) %>%
-#   mutate(max = max(area_avg)) %>%
-#   filter(date > "2020-01-27")
-#
-# rosette_growth <- ggplot(
-#   data = rosette_area,
-#   aes(
-#     x = date,
-#     y = area
-#   )
-# ) +
-#   geom_line(aes(
-#     colour = mutation,
-#     group = interaction(genotype, replicate)
-#   ),
-#   size = 0.2,
-#   alpha = 0.25
-#   ) +
-#   geom_line(aes(
-#     colour = mutation,
-#     group = genotype,
-#     y = area_avg
-#   )) +
-#   theme_leo() +
-#   coord_cartesian(clip = "off") +
-#   scale_x_date(limits = c(ymd("20200127"), ymd("20200214"))) +
-#   geom_text_repel(
-#     data = distinct(rosette_area, max),
-#     x = ymd("20200212"),
-#     aes(
-#       y = max,
-#       label = genotype
-#     ),
-#     family = "Helvetica",
-#     segment.colour = "grey75",
-#     hjust = 0,
-#     direction = "y",
-#     nudge_x = 0.5,
-#     min.segment.length = 0
-#   ) +
-#   labs(x = "Date",
-#        y = "Rosette Area [scaled px]") +
-#   scale_colour_manual(values = pal_ostwald_disc[c(3,1)])
-#
-# pdf("rosette_growth.pdf", width = cm_size(10), height = cm_size(10))
-# rosette_growth
-# dev.off()
+#### read-in function ###
+read_plus <- function(flnm) {
+  json <- fromJSON(flnm)
+  json$observations$default$area$value %>%
+    as_tibble() %>%
+    mutate(filename = basename(flnm))
+}
+
+#### growth instance I ####
+rosette_files <-
+  list.files(
+    path = paste0(datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/images/top/renamed/"),
+    pattern = "*.json$",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+tray_id <- read_csv(
+  paste0(datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/plant_order.csv")
+)
+
+size_marker <- read_csv(
+  paste0(datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/images/top/renamed/output/size_marker_trays.csv"),
+  col_names = c("filename", "space")
+) %>%
+  separate(filename, into = c("dpg", "tray"), sep = "_") %>%
+  mutate(
+    tray = str_remove(tray, fixed(".jpg"))
+  )
+
+rosette_area_I <- map_dfr(rosette_files, read_plus) %>%
+  separate(filename, into = c("dpg", "tray", "plant"), sep = "_") %>%
+  mutate(
+    tray = str_remove(tray, fixed(".jpg")),
+    plant = as.numeric(str_remove(plant, fixed(".json"))) + 1
+  ) %>%
+  left_join(size_marker) %>%
+  mutate(
+    dpg = as.numeric(dpg),
+    tray = as.numeric(tray),
+    instance = 1,
+    value = value / ((space / 1.5)^2)
+  ) %>%
+  # "space" from the size marker equals 1.5 cm
+  left_join(tray_id %>% select(genotype, replicate, tray, "plant" = plant_tray)) %>%
+  # anti_join(overlapping_plants) %>%
+  filter(dpg < 30 & dpg != 9) # numbering on day 9 is off
+
+#### growth instance II ####
+rosette_files <-
+  list.files(
+    path = paste0(datapath, "PhD/Phenotyping/2020-09_lac_mutants/top/"),
+    pattern = "*.json$",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+overlapping_plants <- read_csv(
+  paste0(datapath, "PhD/Phenotyping/2020-09_lac_mutants/excluded.csv")
+) %>%
+  mutate(plant = plant + 1) # numbering in .csv file is from 0-14
+
+tray_id <- read_csv(
+  paste0(datapath, "PhD/Phenotyping/2020-09_lac_mutants/plant_order.csv")
+)
+
+size_marker <- read_csv(
+  paste0(datapath, "PhD/Phenotyping/2020-09_lac_mutants/top/output/size_marker_trays.csv"),
+  col_names = c("filename", "space")
+) %>%
+  separate(filename, into = c("dpg", "tray"), sep = "_") %>%
+  mutate(
+    tray = str_remove(tray, fixed(".jpg"))
+  )
+
+rosette_area_II <- map_dfr(rosette_files, read_plus) %>%
+  separate(filename, into = c("dpg", "tray", "plant"), sep = "_") %>%
+  mutate(
+    tray = str_remove(tray, fixed(".jpg")),
+    plant = as.numeric(str_remove(plant, fixed(".json"))) + 1
+  ) %>%
+  left_join(size_marker) %>%
+  mutate(
+    dpg = as.numeric(dpg),
+    tray = as.numeric(tray),
+    instance = 2,
+    value = value / ((space / 1.5)^2)
+  ) %>%
+  # "space" from the size marker equals 1.5 cm
+  anti_join(overlapping_plants) %>%
+  left_join(tray_id %>% select(genotype, replicate, tray, "plant" = plant_tray)) %>%
+  filter(dpg < 30)
+
+#### growth instance III ####
+rosette_files <-
+  list.files(
+    path = paste0(datapath, "PhD/Phenotyping/2021-04_lac_mutants/top/renamed/"),
+    pattern = "*.json$",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+overlapping_plants <- read_csv(
+  paste0(datapath, "PhD/Phenotyping/2021-04_lac_mutants/excluded.csv")
+) %>%
+  mutate(plant = plant + 1) # numbering in .csv file is from 0-14
+
+tray_id <- read_csv(
+  paste0(datapath, "PhD/Phenotyping/2021-04_lac_mutants/plant_order.csv")
+)
+
+size_marker <- read_csv(
+  paste0(datapath, "PhD/Phenotyping/2021-04_lac_mutants/top/renamed/output/size_marker_trays.csv"),
+  col_names = c("filename", "space")
+) %>%
+  separate(filename, into = c("dpg", "tray"), sep = "_") %>%
+  mutate(
+    tray = str_remove(tray, fixed(".jpg"))
+  )
+
+rosette_area_III <- map_dfr(rosette_files, read_plus) %>%
+  separate(filename, into = c("dpg", "tray", "plant"), sep = "_") %>%
+  mutate(
+    tray = str_remove(tray, fixed(".jpg")),
+    plant = as.numeric(str_remove(plant, fixed(".json"))) + 1
+  ) %>%
+  left_join(size_marker) %>%
+  mutate(
+    dpg = as.numeric(dpg),
+    tray = as.numeric(tray),
+    instance = 3,
+    value = value / ((space / 1.5)^2)
+  ) %>%
+  # "space" from the size marker equals 1.5 cm
+  anti_join(overlapping_plants) %>%
+  left_join(tray_id %>% select(genotype, replicate, tray, "plant" = plant_tray)) %>%
+  filter(dpg < 30)
+
+rosette_area <- bind_rows(rosette_area_I, rosette_area_II, rosette_area_III) %>%
+  mutate(genotype = ordered(case_when(
+    genotype == "WT" ~ genotype,
+    TRUE ~ paste0("<i>", genotype, "</i>")
+  ),
+  levels = c(WT, triple_it, quad_it, Q_it)
+  )) %>%
+  filter(genotype != "<i>Q-4/12</i>")
 ```
+
+#### Area over time
+
+```{r}
+area_plot <- ggplot(
+  rosette_area %>% filter(genotype %in% c(WT, quad_it, Q_it)),
+  aes(
+    x = dpg,
+    y = value,
+    colour = genotype
+  )
+) +
+  geom_line(aes(group = interaction(genotype, replicate)),
+    size = 0.2,
+    alpha = 0.2
+  ) +
+  geom_smooth(
+    se = F,
+    size = 0.4,
+    linetype = 2,
+    span = 0.4
+  ) +
+  labs(x = "Days past germination",
+       y = "Rosette area [cm<sup>2</sup>]") +
+  theme_leo() +
+  theme(axis.title.y = element_markdown())
+
+area_plot
+```
+
+
+#### Growth rate
+
+```{r}
+# define linear phase
+lm_start <- 20
+lm_stop <- 30
+
+# calculate slopes
+nested_rosette_area <- rosette_area %>%
+  filter(dpg >= lm_start & dpg <= lm_stop & genotype %in% c(WT, quad_it, Q_it)) %>%
+  select(genotype, replicate, value, dpg) %>%
+  nest(data = c(dpg, value)) %>%
+  mutate(
+    fit = map(data, ~ lm(value ~ dpg, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "dpg")
+
+# calculate average R²
+avg_r_sq <- nested_rosette_area %>%
+  group_by(genotype) %>%
+  summarise(
+    mean_r_sq = mean(adj.r.squared, na.rm = TRUE),
+    sd_r_sq = sd(adj.r.squared, na.rm = TRUE)
+  )
+
+letters <- letter_groups(nested_rosette_area,
+  estimate,
+  genotype,
+  "tukey",
+  print_position = "below",
+  print_adjust = 0.5
+) %>%
+  mutate(genotype = ordered(genotype, levels = c(WT, triple_it, quad_it, Q_it)))
+
+# plot slopes
+rosette_growth_plot <- ggplot(
+  nested_rosette_area,
+  aes(
+    x = genotype,
+    y = estimate
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2
+    # scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Growth [cm<sup>2</sup> day<sup>-1</sup>]") +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(25, "mm")
+    ),
+    axis.text.x = element_markdown()
+  ) 
+
+rosette_growth_plot
+```
+
+### Stem growth
+
+#### Load data
+
+```{r}
+pcv_data_II <- fromJSON(paste0(
+  datapath,
+  "PhD/Phenotyping/2020-09_lac_mutants/front/renamed/output/results.json"
+))
+
+pcv_data_III <- fromJSON(paste0(
+  datapath,
+  "PhD/Phenotyping/2021-04_lac_mutants/front/renamed/output/results.json"
+))
+
+scale_II <- read_csv(paste0(
+  datapath,
+  "PhD/Phenotyping/2020-09_lac_mutants/size_marker.csv"
+),
+col_names = c("filename", "space")
+) %>%
+  mutate(image = str_remove(filename, fixed(".jpg"))) %>%
+  separate(image, into = c("dpg", "plant")) %>%
+  mutate(dpg = as.numeric(dpg)) %>%
+  distinct()
+
+scale_III <- read_csv(paste0(
+  datapath,
+  "PhD/Phenotyping/2021-04_lac_mutants/size_marker.csv"
+),
+col_names = c("filename", "space")
+) %>%
+  mutate(image = str_remove(filename, fixed(".jpg"))) %>%
+  separate(image, into = c("dpg", "plant")) %>%
+  mutate(dpg = as.numeric(dpg)) %>%
+  distinct()
+
+ID_II <- read_csv(paste0(
+  datapath,
+  "PhD/Phenotyping/2020-09_lac_mutants/plant_order.csv"
+)) %>%
+  select(genotype, replicate, plant) %>%
+  mutate(plant = as.character(plant))
+
+ID_III <- read_csv(paste0(
+  datapath,
+  "PhD/Phenotyping/2021-04_lac_mutants/plant_order.csv"
+)) %>%
+  select(genotype, replicate, plant) %>%
+  mutate(plant = as.character(plant))
+
+stem_data_II <- tibble(
+  plant = pcv_data_II$entities$metadata$id$value,
+  dpg = as.numeric(pcv_data_II$entities$metadata$timestamp$value),
+  height = pcv_data_II$entities$observations$default$height$value,
+  long_axis = pcv_data_II$entities$observations$default$ellipse_major_axis$value,
+  longest_path = pcv_data_II$entities$observations$default$longest_path$value,
+  hue = pcv_data_II$entities$observations$default$hue_circular_mean$value,
+  area = pcv_data_II$entities$observations$default$area$value,
+) %>%
+  left_join(ID_II) %>%
+  left_join(scale_II)
+
+stem_data_III <- tibble(
+  plant = pcv_data_III$entities$metadata$id$value,
+  dpg = as.numeric(pcv_data_III$entities$metadata$timestamp$value),
+  height = pcv_data_III$entities$observations$default$height$value,
+  long_axis = pcv_data_III$entities$observations$default$ellipse_major_axis$value,
+  longest_path = pcv_data_III$entities$observations$default$longest_path$value,
+  hue = pcv_data_III$entities$observations$default$hue_circular_mean$value,
+  area = pcv_data_III$entities$observations$default$area$value,
+) %>%
+  left_join(ID_III) %>%
+  left_join(scale_III)
+
+stem_data <- bind_rows(stem_data_II, stem_data_III) %>%
+  mutate(
+    genotype = ordered(case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    levels = c(WT, triple_it, quad_it, Q_it)
+    ),
+    height = height / space * 1.5,
+    long_axis = long_axis / space * 1.5,
+    longest_path = longest_path / space * 1.5,
+    area = area / ((space / 1.5)^2)
+  ) %>%
+  anti_join(
+    read_csv(paste0(datapath, "PhD/Phenotyping/2021-04_lac_mutants/excluded_stems.csv"))
+  ) %>%
+  filter(genotype != "<i>Q-4/12</i>") %>%
+  group_by(genotype, replicate) %>%
+  mutate(
+    flowering_start = dpg[height == min(height[height > 5])],
+    dpf = dpg - flowering_start
+  )
+```
+
+#### Height over time
+
+```{r}
+height_plot <- ggplot(
+  stem_data %>% filter(genotype %in% c(WT, quad_it, Q_it) &
+    dpf < 31),
+  aes(
+    x = dpf,
+    y = height,
+    colour = genotype
+  )
+) +
+  geom_line(aes(group = interaction(plant, replicate)),
+    size = 0.2,
+    alpha = 0.2
+  ) +
+  geom_smooth(
+    se = F,
+    size = 0.4,
+    linetype = 2,
+    span = 0.4
+  ) +
+  labs(x = "Days past first flower",
+       y = "Stem height [cm]") +
+  scale_y_continuous(position = "right") +
+  theme_leo() +
+  theme(axis.title.y = element_markdown())
+
+
+height_plot
+```
+
+#### Growth rate
+
+```{r}
+# define linear phase
+lm_start <- -3
+lm_stop <- 11
+
+# calculate slopes
+nested_stem_data <- stem_data %>%
+  filter(dpf >= lm_start & dpf <= lm_stop & genotype %in% c(WT, quad_it, Q_it)) %>%
+  select(genotype, replicate, height, dpf) %>%
+  nest(data = c(dpf, height)) %>%
+  mutate(
+    fit = map(data, ~ lm(height ~ dpf, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "dpf")
+
+# calculate average R²
+avg_r_sq <- nested_stem_data %>%
+  group_by(genotype) %>%
+  summarise(
+    mean_r_sq = mean(adj.r.squared, na.rm = TRUE),
+    sd_r_sq = sd(adj.r.squared, na.rm = TRUE)
+  )
+
+letters <- letter_groups(nested_stem_data,
+  estimate,
+  genotype,
+  "tukey",
+  print_position = "below",
+  print_adjust = 0.5
+) %>%
+  mutate(genotype = ordered(genotype, levels = c(WT, triple_it, quad_it, Q_it)))
+
+# plot slopes
+stem_growth_plot <- ggplot(
+  nested_stem_data,
+  aes(
+    x = genotype,
+    y = estimate
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1
+    # scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Growth [cm day<sup>-1</sup>]") +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(25, "mm")
+    ),
+    axis.text.x = element_markdown()
+  ) 
+
+stem_growth_plot
+```
+
 
 ### Root growth
 
@@ -624,6 +845,28 @@ ggplot(root_data, aes(
   theme_leo()
 ```
 
+## Pheno figure
+
+```{r}
+pdf("Blaschek2022_figure1.pdf", height = onecol * 0.8, width = twocol)
+area_plot +
+  inset_element(rosette_growth_plot,
+    left = 0.15, bottom = 0.55, right = 0.65, top = 0.85,
+    align_to = "full"
+  ) +
+  height_plot + 
+  inset_element(stem_growth_plot,
+    left = 0.025, bottom = 0.675, right = 0.525, top = 0.975,
+    align_to = "full"
+  ) +
+  inset_element(final_height,
+    left = 0.425, bottom = 0.075, right = 0.925, top = 0.375,
+    align_to = "full"
+  )
+dev.off()
+```
+
+
 # Wiesner
 
 ## Point measurements
@@ -640,8 +883,8 @@ Wiesner_files <-
   )
 
 Wiesner_data <- map_dfr(Wiesner_files, read_csv) %>%
-  separate(image, into = c("date", "genotype", "replicate", "first_image"), sep = "_") %>% 
-  mutate(date = str_replace(date, "^021", "2021")) %>% 
+  separate(image, into = c("date", "genotype", "replicate", "first_image"), sep = "_") %>%
+  mutate(date = str_replace(date, "^021", "2021")) %>%
   mutate(
     cell_type = ordered(cell_type,
       levels = c(
@@ -669,24 +912,26 @@ Wiesner_data <- map_dfr(Wiesner_files, read_csv) %>%
       replicate %in% c(1:5) ~ "1",
       TRUE ~ "2"
     )
-  ) 
-  # filter(cell_type %in% c("IF", "XF", "PX", "MX", "PH", "BG"))
+  ) %>%
+  filter(cell_type %in% c("IF", "XF", "PX", "MX", "PH", "BG"))
 
-if(any(Wiesner_data$first_image != "unstained")) warning("Stained and unstained values might be inverted in some images.")
+if (any(Wiesner_data$first_image != "unstained")) warning("Stained and unstained values might be inverted in some images.")
 
-Wiesner_data <- Wiesner_data %>% 
-  mutate(absorbance = stained_absorbance - unstained_absorbance) %>% 
-  group_by(date, genotype, replicate) %>% 
-  mutate(tissue_clearing = mean(absorbance[cell_type == "PH"]),
-         corrected_absorbance = absorbance - tissue_clearing) %>% 
+Wiesner_data <- Wiesner_data %>%
+  mutate(absorbance = stained_absorbance - unstained_absorbance) %>%
+  group_by(date, genotype, replicate) %>%
+  mutate(
+    tissue_clearing = mean(absorbance[cell_type == "PH"]),
+    corrected_absorbance = absorbance - tissue_clearing
+  ) %>%
   filter(!(cell_type %in% c("PH", "BG")))
 
-Wiesner_avg <- Wiesner_data %>% 
-  group_by(genotype, replicate, cell_type, instance) %>% 
+Wiesner_avg <- Wiesner_data %>%
+  group_by(genotype, replicate, cell_type, instance) %>%
   summarise(corrected_absorbance = mean(corrected_absorbance))
 
-Wiesner_n <- Wiesner_data %>% 
-  group_by(genotype) %>% 
+Wiesner_n <- Wiesner_data %>%
+  group_by(genotype) %>%
   summarise(replicates = paste0(unique(replicate), collapse = ","))
 ```
 
@@ -694,47 +939,70 @@ Wiesner_n <- Wiesner_data %>%
 
 ```{r}
 letter_pos <- letter_groups(Wiesner_data,
-                         corrected_absorbance,
-                         genotype,
-                         "tukey",
-                         cell_type,
-                         print_position = "below") %>% 
+  corrected_absorbance,
+  genotype,
+  "tukey",
+  cell_type,
+  print_position = "below",
+  print_adjust = 0.5,
+) %>%
   select(-Letters)
 
 letters <- letter_groups(Wiesner_avg,
-                         corrected_absorbance,
-                         genotype,
-                         "tukey",
-                         cell_type,
-                         print_position = "below") %>% 
-  select(-corrected_absorbance) %>% 
+  corrected_absorbance,
+  genotype,
+  "tukey",
+  cell_type,
+  print_position = "below"
+) %>%
+  select(-corrected_absorbance) %>%
   left_join(letter_pos)
 
-Wiesner_plot <- ggplot(Wiesner_data,
-                       aes(x = genotype,
-                           y = corrected_absorbance)) +
-  geom_quasirandom(aes(colour = instance),
-                   shape = 16,
-                   alpha = 0.2,
-                   size = 1) +
-  stat_summary(geom = "crossbar",
-               fun = "median",
-               size = 0.2,
-               fatten = 1) +
-  # geom_beeswarm(data = Wiesner_avg,
-  #            aes(fill = instance),
-  #            shape = 21,
-  #            size = 1.5,
-  #            alpha = 0.8,
-  #            stroke = 0.2) +
-  geom_text(data = letters,
-            aes(label = Letters),
-            size = ggtext_size,
-            family = "Helvetica") +
-  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
+Wiesner_plot <- ggplot(
+  Wiesner_data,
+  aes(
+    x = genotype,
+    y = corrected_absorbance
+  ) 
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1
+    # scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Relative coniferaldehyde") +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
-  facet_wrap(~ cell_type, nrow = 1)
-  
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(25, "mm")
+    ),
+    axis.text.x = element_markdown()
+  ) +
+  facet_wrap(~cell_type, nrow = 1)
+
 pdf("lac_Wiesner.pdf", width = twocol, height = onecol * 0.5)
 Wiesner_plot
 dev.off()
@@ -754,21 +1022,25 @@ profile_files <-
   )
 
 read_profiles <- function(x) {
-  read_csv(x) %>% 
+  read_csv(x) %>%
     mutate(filename = basename(x))
 }
 
-profile_data <- map_dfr(profile_files, read_profiles) %>% 
-  group_by(filename) %>% 
-  mutate(pixel = row_number()) %>% 
-  pivot_longer(contains("ROI"), names_to = "profile", values_to = "absorbance") %>% 
-  mutate(profile = as.numeric(str_extract(profile, "[:digit:]+")) + 1,
-         absorbance = case_when(absorbance == 0 ~ NA_real_,
-                                TRUE ~ absorbance / 255)) %>% 
-  drop_na() %>% 
+profile_data <- map_dfr(profile_files, read_profiles) %>%
+  group_by(filename) %>%
+  mutate(pixel = row_number()) %>%
+  pivot_longer(contains("ROI"), names_to = "profile", values_to = "absorbance") %>%
+  mutate(
+    profile = as.numeric(str_extract(profile, "[:digit:]+")) + 1,
+    absorbance = case_when(
+      absorbance == 0 ~ NA_real_,
+      TRUE ~ absorbance / 255
+    )
+  ) %>%
+  drop_na() %>%
   group_by(filename, profile) %>%
-  mutate(pixel = pixel / max(pixel)) %>% 
-  separate(filename, into = c("date", "genotype", "replicate"), sep = "_", extra = "drop") %>% 
+  mutate(pixel = pixel / max(pixel)) %>%
+  separate(filename, into = c("date", "genotype", "replicate"), sep = "_", extra = "drop") %>%
   mutate(genotype = ordered(genotype, levels = c(
     "WT",
     "Q-4",
@@ -777,52 +1049,60 @@ profile_data <- map_dfr(profile_files, read_profiles) %>%
     "Q-12",
     "Q-17",
     "Q"
-  ))) %>% 
+  ))) %>%
   mutate(genotype = recode(genotype,
-                           "Q-4" = "<i>Q-4</i>",
-                           "Q-5" = "<i>Q-5</i>",
-                           "Q-10" = "<i>Q-10</i>",
-                           "Q-12" = "<i>Q-12</i>",
-                           "Q-17" = "<i>Q-17</i>",
-                           "Q" = "<i>Q</i>"))
-  
+    "Q-4" = "<i>Q-4</i>",
+    "Q-5" = "<i>Q-5</i>",
+    "Q-10" = "<i>Q-10</i>",
+    "Q-12" = "<i>Q-12</i>",
+    "Q-17" = "<i>Q-17</i>",
+    "Q" = "<i>Q</i>"
+  ))
 ```
 
 ### Plot profiles
 
 ```{r}
-rect_data = profile_data %>% 
-  group_by(genotype) %>% 
+rect_data <- profile_data %>%
+  group_by(genotype) %>%
   summarise(genotype = unique(genotype))
 
-profiles <- ggplot(profile_data,
-       aes(x = pixel,
-           y = absorbance)) +
-  geom_rect(data = rect_data,
-            aes(fill = genotype, x = 0, y = 0,),
-            xmin = -Inf,
-            xmax = Inf,
-            ymin = -Inf,
-            ymax = Inf,
-            alpha = 0.5) +
+profiles <- ggplot(
+  profile_data,
+  aes(
+    x = pixel,
+    y = absorbance
+  )
+) +
+  geom_rect(
+    data = rect_data,
+    aes(fill = genotype, x = 0, y = 0, ),
+    xmin = -Inf,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf,
+    alpha = 0.5
+  ) +
   geom_line(aes(group = interaction(genotype, profile)),
-            alpha = 0.25,
-            size = 0.1) +
+    alpha = 0.25,
+    size = 0.1
+  ) +
   geom_smooth(se = F, size = 0.2, colour = "black") +
   scale_fill_viridis_d() +
   scale_y_continuous(breaks = c(0, 0.2, 0.4)) +
   theme_leo() +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        strip.text = element_markdown(hjust = 0.5),
-        panel.spacing = unit(0.75, "mm")) +
-  facet_wrap(~ genotype, nrow = 1)
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    strip.text = element_markdown(hjust = 0.5),
+    panel.spacing = unit(0.75, "mm")
+  ) +
+  facet_wrap(~genotype, nrow = 1)
 
 pdf("Wiesner_profiles.pdf", width = onecol, height = onecol * 0.15)
 profiles
 dev.off()
-
 ```
 
 
@@ -841,8 +1121,8 @@ collapse_files <-
   )
 
 collapse_data <- vroom::vroom(collapse_files) %>%
-  separate(image, into = c("date", "genotype", "replicate", "stained", "size"), sep = "_") %>% 
-  mutate(date = str_replace(date, "^021", "2021")) %>% 
+  separate(image, into = c("date", "genotype", "replicate", "stained", "size"), sep = "_") %>%
+  mutate(date = str_replace(date, "^021", "2021")) %>%
   mutate(
     cell_type = ordered(cell_type,
       levels = c(
@@ -863,30 +1143,35 @@ collapse_data <- vroom::vroom(collapse_files) %>%
       replicate %in% c(1:5) ~ "1",
       TRUE ~ "2"
     )
-  ) %>% 
-  group_by(genotype, replicate, point) %>% 
-  mutate(cell = case_when(point == 0 ~ row_number(),
-                          TRUE ~ NA_integer_)) %>% 
-  ungroup() %>% 
+  ) %>%
+  group_by(genotype, replicate, point) %>%
+  mutate(cell = case_when(
+    point == 0 ~ row_number(),
+    TRUE ~ NA_integer_
+  )) %>%
+  ungroup() %>%
   fill(cell)
 
-collapse_stats <- collapse_data %>% 
-  group_by(genotype, replicate, cell_type, cell, instance) %>% 
-  summarise("Area" = unique(Area) * 4^2, # analysed images were scaled down to 0.25, this corrects the scale
-            "Perim." = unique(Perim.) * 4, # analysed images were scaled down to 0.25, this corrects the scale
-            "Circ." = unique(Circ.),
-            "Solidity" = unique(Solidity)) %>%
-  pivot_longer(c(Area:Solidity), names_to = "variable", values_to = "value") %>% 
+collapse_stats <- collapse_data %>%
+  group_by(genotype, replicate, cell_type, cell, instance) %>%
+  summarise(
+    "Area" = unique(Area) * 4^2, # analysed images were scaled down to 0.25, this corrects the scale
+    "Perim." = unique(Perim.) * 4, # analysed images were scaled down to 0.25, this corrects the scale
+    "Circ." = unique(Circ.),
+    "Solidity" = unique(Solidity)
+  ) %>%
+  pivot_longer(c(Area:Solidity), names_to = "variable", values_to = "value") %>%
   mutate(genotype = recode(genotype,
-                           "Q-4" =  "<i>Q-4</i>",
-                           "Q-5" =  "<i>Q-5</i>",
-                           "Q-10" = "<i>Q-10</i>",
-                           "Q-12" = "<i>Q-12</i>",
-                           "Q-17" = "<i>Q-17</i>",
-                           "Q" =    "<i>Q</i>"))
+    "Q-4" =  "<i>Q-4</i>",
+    "Q-5" =  "<i>Q-5</i>",
+    "Q-10" = "<i>Q-10</i>",
+    "Q-12" = "<i>Q-12</i>",
+    "Q-17" = "<i>Q-17</i>",
+    "Q" =    "<i>Q</i>"
+  ))
 
-collapse_n <- collapse_stats %>% 
-  group_by(genotype) %>% 
+collapse_n <- collapse_stats %>%
+  group_by(genotype) %>%
   summarise(replicates = paste0(unique(replicate), collapse = ","))
 ```
 
@@ -895,22 +1180,28 @@ collapse_n <- collapse_stats %>%
 ```{r}
 
 letters <- letter_groups(collapse_stats,
-                         value,
-                         genotype,
-                         "kruskal",
-                         variable,
-                         cell_type,
-                         print_position = "below")
+  value,
+  genotype,
+  "kruskal",
+  variable,
+  cell_type,
+  print_position = "below"
+)
 
-collapse_plot <- ggplot(collapse_stats,
-                       aes(x = genotype,
-                           y = value)) +
+collapse_plot <- ggplot(
+  collapse_stats,
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
   geom_quasirandom(
     aes(fill = instance),
     shape = 21,
     size = 0.5,
     alpha = 0.5,
-    stroke = 0.2) +
+    stroke = 0.2
+  ) +
   # geom_violin(
   #   draw_quantiles = 0.5,
   #   fill = "white",
@@ -919,59 +1210,71 @@ collapse_plot <- ggplot(collapse_stats,
   #   width = 0.2,
   #   size = 0.2,
   #   scale = "width") +
-  stat_summary(geom = "crossbar",
-               fun = "median",
-               size = 0.2,
-               fatten = 1) +
-  geom_text(data = letters,
-            aes(label = Letters),
-            size = ggtext_size,
-            family = "Helvetica") +
-  scale_fill_manual(values = pal_ostwald_disc[c(1,3)]) +
+  stat_summary(
+    geom = "crossbar",
+    fun = "median",
+    size = 0.2,
+    fatten = 1
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = pal_ostwald_disc[c(1, 3)]) +
   theme_leo() +
   facet_grid(variable ~ cell_type, scales = "free_y")
-  
+
 pdf("lac_collapse.pdf", width = onecol, height = onecol)
 collapse_plot
 dev.off()
 
 # presentation figure
-collapse_pres_data <- collapse_stats %>% 
-  filter(variable == "Solidity" & cell_type == "MX") 
+collapse_pres_data <- collapse_stats %>%
+  filter(variable == "Solidity" & cell_type == "MX")
 
 letters <- letter_groups(collapse_pres_data,
-                         value,
-                         genotype,
-                         "kruskal",
-                         print_position = "below") %>% 
+  value,
+  genotype,
+  "kruskal",
+  print_position = "below"
+) %>%
   mutate(genotype = ordered(genotype, levels = c(
-      "WT",
-      "<i>Q-4</i>",
-      "<i>Q-5</i>",
-      "<i>Q-10</i>",
-      "<i>Q-12</i>",
-      "<i>Q-17</i>",
-      "<i>Q</i>"
-    )))
+    "WT",
+    "<i>Q-4</i>",
+    "<i>Q-5</i>",
+    "<i>Q-10</i>",
+    "<i>Q-12</i>",
+    "<i>Q-17</i>",
+    "<i>Q</i>"
+  )))
 
-rect_data = collapse_pres_data %>% 
-  group_by(genotype) %>% 
+rect_data <- collapse_pres_data %>%
+  group_by(genotype) %>%
   summarise(genotype = unique(genotype))
 
-MX_collapse <- ggplot(collapse_pres_data,
-       aes(x = 0.5,
-           y = value)) +
-  geom_rect(data = rect_data,
-            aes(fill = genotype, y = 1),
-            xmin = -Inf,
-            xmax = Inf,
-            ymin = -Inf,
-            ymax = Inf,
-            alpha = 0.5) +
+MX_collapse <- ggplot(
+  collapse_pres_data,
+  aes(
+    x = 0.5,
+    y = value
+  )
+) +
+  geom_rect(
+    data = rect_data,
+    aes(fill = genotype, y = 1),
+    xmin = -Inf,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf,
+    alpha = 0.5
+  ) +
   geom_quasirandom(
     shape = 16,
     size = 0.5,
-    alpha = 0.5) +
+    alpha = 0.5
+  ) +
   # geom_violin(
   #   draw_quantiles = 0.5,
   #   fill = "white",
@@ -980,26 +1283,32 @@ MX_collapse <- ggplot(collapse_pres_data,
   #   width = 0.2,
   #   size = 0.2,
   #   scale = "width") +
-  stat_summary(fill = "white",
-               geom = "point",
-               fun = "median",
-               size = 1,
-               shape = 21,
-               stroke = 0.2) +
-  geom_text(data = letters,
-            aes(label = Letters),
-            size = ggtext_size,
-            family = "Helvetica") +
+  stat_summary(
+    fill = "white",
+    geom = "point",
+    fun = "median",
+    size = 1,
+    shape = 21,
+    stroke = 0.2
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
   labs(y = "TE convexity") +
   scale_fill_viridis_d() +
   ylim(0.4, 1) +
   theme_leo() +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        strip.text = element_markdown(hjust = 0.5),
-        panel.spacing = unit(0.75, "mm")) +
-  facet_wrap(~ genotype, nrow = 1)
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    strip.text = element_markdown(hjust = 0.5),
+    panel.spacing = unit(0.75, "mm")
+  ) +
+  facet_wrap(~genotype, nrow = 1)
 
 pdf("collapse_pres.pdf", width = onecol, height = onecol * 0.15)
 MX_collapse
@@ -2395,18 +2704,20 @@ unfiltered_data_dab <- data_dab %>%
     treatment == "none")
 
 data_dab <- data_dab %>%
-  filter(cell_type %in% c("IF", "XF", "MX", "PX") &
-    pH == 5 &
-    treatment == "none" 
+  filter(
+    cell_type %in% c("IF", "XF", "MX", "PX") &
+      pH == 5 &
+      treatment == "none"
     # adj.r.squared > 0.85
-    )
+  )
 
 nested_data_dab <- nested_data_dab %>%
-  filter(cell_type %in% c("IF", "XF", "MX", "PX") &
-    pH == 5 &
-    treatment == "none" 
+  filter(
+    cell_type %in% c("IF", "XF", "MX", "PX") &
+      pH == 5 &
+      treatment == "none"
     # adj.r.squared > 0.85
-    )
+  )
 
 avg_slopes <- nested_data_dab %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
@@ -2585,7 +2896,7 @@ slopes <- ggplot(
 pdf("DAB_pH5.pdf", width = twocol, height = onecol * 1.75)
 raw_absorbance /
   activity_grid /
-slopes
+  slopes
 dev.off()
 
 # pdf("DAB_pH5_diagnostics.pdf", width = onecol, height = onecol)
@@ -2774,7 +3085,7 @@ pH_data <- read_csv(paste0(
 ),
 comment = '"#'
 ) %>%
-  bind_rows(pH_data_single_files) %>% 
+  bind_rows(pH_data_single_files) %>%
   mutate(time = slice * interval) %>%
   select(-c(slice, interval)) %>%
   separate(image,
@@ -2834,9 +3145,11 @@ pygl_slopes <- nested_pH_data %>%
   filter(substrate == "PYGL") %>%
   left_join(ctrl_slopes) %>%
   mutate(
-    corrected_estimate = case_when(mean_estimate > 0 ~ estimate - mean_estimate,
-                                   TRUE ~ estimate)
+    corrected_estimate = case_when(
+      mean_estimate > 0 ~ estimate - mean_estimate,
+      TRUE ~ estimate
     )
+  )
 
 activity_grid <- ggplot(
   pH_data %>% filter(substrate == "PYGL"),
@@ -2853,7 +3166,7 @@ activity_grid <- ggplot(
       xmin = lm_start,
       xmax = lm_stop,
       linetype = NULL,
-      x = NULL, 
+      x = NULL,
       y = NULL,
       colour = NULL
     ),
@@ -2866,10 +3179,12 @@ activity_grid <- ggplot(
     se = F
   ) +
   labs(x = "Time [min]") +
-  scale_colour_manual(values = c(lighten(desaturate("#d25952", amount = 0.75), amount = 0.5),
-                                 "#d25952", 
-                                 lighten(desaturate("#275d95", amount = 0.75), amount = 0.5), 
-                                 "#275d95")) +
+  scale_colour_manual(values = c(
+    lighten(desaturate("#d25952", amount = 0.75), amount = 0.5),
+    "#d25952",
+    lighten(desaturate("#275d95", amount = 0.75), amount = 0.5),
+    "#275d95"
+  )) +
   scale_linetype(guide = "none") +
   theme_leo() +
   theme(legend.position = "bottom") +
@@ -2881,14 +3196,14 @@ letter_data <- nested_pH_data %>%
   unite("ID", treatment, genotype)
 
 letters <- letter_groups(letter_data,
-                         estimate,
-                         ID,
-                         "tukey",
-                         cell_type,
-                         pH,
-                         print_position = "above",
-                         print_adjust = 1
-                         ) %>%
+  estimate,
+  ID,
+  "tukey",
+  cell_type,
+  pH,
+  print_position = "above",
+  print_adjust = 1
+) %>%
   separate(ID, into = c("treatment", "genotype"))
 
 slopes <- ggplot(
@@ -2920,28 +3235,35 @@ slopes <- ggplot(
     size = 0.2,
     scale = "width"
   ) +
-  geom_text(data = letters,
-            aes(label = Letters,
-                group = interaction(treatment, genotype)),
-            colour = "black",
-            position = position_dodge2(width = 0.75),
-            family = "Helvetica",
-            size = ggtext_size) +
-  scale_colour_manual(values = c(lighten(desaturate("#d25952", amount = 0.75), amount = 0.5),
-                                 "#d25952", 
-                                 lighten(desaturate("#275d95", amount = 0.75), amount = 0.5), 
-                                 "#275d95")) +
+  geom_text(
+    data = letters,
+    aes(
+      label = Letters,
+      group = interaction(treatment, genotype)
+    ),
+    colour = "black",
+    position = position_dodge2(width = 0.75),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_colour_manual(values = c(
+    lighten(desaturate("#d25952", amount = 0.75), amount = 0.5),
+    "#d25952",
+    lighten(desaturate("#275d95", amount = 0.75), amount = 0.5),
+    "#275d95"
+  )) +
   scale_x_discrete() +
   # scale_y_log10() +
   theme_leo() +
-  theme(legend.position = "bottom",
-        # panel.grid.major.y = element_line(size = 0.2)
-        ) +
+  theme(
+    legend.position = "bottom",
+    # panel.grid.major.y = element_line(size = 0.2)
+  ) +
   facet_wrap(
-    ~cell_type, 
-    ncol = 6, 
+    ~cell_type,
+    ncol = 6,
     # scales = "free_y"
-    )
+  )
 
 pygl_slopes_cont <- pygl_slopes %>%
   mutate(pH = as.numeric(pH)) %>%
@@ -2949,17 +3271,24 @@ pygl_slopes_cont <- pygl_slopes %>%
   group_by(genotype, replicate, pH, cell_type) %>%
   summarise(mean_estimate = mean(corrected_estimate))
 
-ph_cont <- ggplot(pygl_slopes_cont,
-       aes(x = pH,
-           y = mean_estimate)) +
+ph_cont <- ggplot(
+  pygl_slopes_cont,
+  aes(
+    x = pH,
+    y = mean_estimate
+  )
+) +
   geom_hline(
     yintercept = 0,
     size = 0.2
   ) +
-  geom_line(aes(colour = genotype,
-                group = interaction(replicate, genotype)),
-            size = 0.2,
-            alpha = 0.25) +
+  geom_line(aes(
+    colour = genotype,
+    group = interaction(replicate, genotype)
+  ),
+  size = 0.2,
+  alpha = 0.25
+  ) +
   # geom_point(aes(colour = genotype),
   #            size = 1,
   #            alpha = 0.25,
@@ -2972,23 +3301,24 @@ ph_cont <- ggplot(pygl_slopes_cont,
   #             alpha = 0.25,
   #             se = F) +
   geom_smooth(aes(colour = genotype),
-              span = 1.25,
-              size = 0.5,
-              alpha = 1,
-              se = F) +
+    span = 1.25,
+    size = 0.5,
+    alpha = 1,
+    se = F
+  ) +
   scale_colour_manual(values = c("#d25952", "#275d95")) +
   expand_limits(y = 0) +
   theme_leo() +
   facet_wrap(
-    ~cell_type, 
-    ncol = 6, 
+    ~cell_type,
+    ncol = 6,
     # scales = "free_y"
-    )
+  )
 
 pdf("PYGL_pH.pdf", width = twocol, height = onecol * 1.75)
 activity_grid /
-slopes /
-ph_cont
+  slopes /
+  ph_cont
 dev.off()
 ```
 
@@ -3017,7 +3347,7 @@ activity_grid <- ggplot(
       xmin = lm_start,
       xmax = lm_stop,
       linetype = NULL,
-      x = NULL, 
+      x = NULL,
       y = NULL,
       colour = NULL
     ),
@@ -3030,10 +3360,12 @@ activity_grid <- ggplot(
     se = F
   ) +
   labs(x = "Time [min]") +
-  scale_colour_manual(values = c(lighten(desaturate("#d25952", amount = 0.75), amount = 0.5),
-                                 "#d25952", 
-                                 lighten(desaturate("#275d95", amount = 0.75), amount = 0.5), 
-                                 "#275d95")) +
+  scale_colour_manual(values = c(
+    lighten(desaturate("#d25952", amount = 0.75), amount = 0.5),
+    "#d25952",
+    lighten(desaturate("#275d95", amount = 0.75), amount = 0.5),
+    "#275d95"
+  )) +
   scale_linetype(guide = "none") +
   theme_leo() +
   theme(legend.position = "bottom") +
@@ -3045,14 +3377,14 @@ letter_data <- nested_pH_data %>%
   unite("ID", treatment, genotype)
 
 letters <- letter_groups(letter_data,
-                         estimate,
-                         ID,
-                         "tukey",
-                         cell_type,
-                         pH,
-                         print_position = "above",
-                         print_adjust = 1
-                         ) %>%
+  estimate,
+  ID,
+  "tukey",
+  cell_type,
+  pH,
+  print_position = "above",
+  print_adjust = 1
+) %>%
   separate(ID, into = c("treatment", "genotype"))
 
 slopes <- ggplot(
@@ -3084,34 +3416,44 @@ slopes <- ggplot(
     size = 0.2,
     scale = "width"
   ) +
-  geom_text(data = letters,
-            aes(label = Letters,
-                group = interaction(treatment, genotype)),
-            colour = "black",
-            position = position_dodge2(width = 0.75),
-            family = "Helvetica",
-            size = ggtext_size) +
-  scale_colour_manual(values = c(lighten(desaturate("#d25952", amount = 0.75), amount = 0.5),
-                                 "#d25952", 
-                                 lighten(desaturate("#275d95", amount = 0.75), amount = 0.5), 
-                                 "#275d95")) +
+  geom_text(
+    data = letters,
+    aes(
+      label = Letters,
+      group = interaction(treatment, genotype)
+    ),
+    colour = "black",
+    position = position_dodge2(width = 0.75),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  scale_colour_manual(values = c(
+    lighten(desaturate("#d25952", amount = 0.75), amount = 0.5),
+    "#d25952",
+    lighten(desaturate("#275d95", amount = 0.75), amount = 0.5),
+    "#275d95"
+  )) +
   scale_x_discrete() +
   theme_leo() +
   theme(legend.position = "bottom") +
   facet_wrap(
-    ~cell_type, 
-    ncol = 4, 
+    ~cell_type,
+    ncol = 4,
     # scales = "free_y"
-    )
+  )
 
 daf_slopes_cont <- avg_pH_slopes %>%
   filter(substrate == "DAF" & treatment == "untreated") %>%
   mutate(pH = as.numeric(pH)) %>%
   group_by(genotype, replicate, pH, cell_type)
 
-ph_cont <- ggplot(daf_slopes_cont,
-       aes(x = pH,
-           y = mean_estimate)) +
+ph_cont <- ggplot(
+  daf_slopes_cont,
+  aes(
+    x = pH,
+    y = mean_estimate
+  )
+) +
   # geom_point(aes(colour = genotype),
   #            size = 1,
   #            alpha = 0.25,
@@ -3123,27 +3465,33 @@ ph_cont <- ggplot(daf_slopes_cont,
   #             size = 0.2,
   #             alpha = 0.25,
   #             se = F) +
-  geom_line(aes(colour = genotype,
-                group = interaction(replicate, genotype)),
-            size = 0.2,
-            alpha = 0.25) +
+  geom_line(aes(
+    colour = genotype,
+    group = interaction(replicate, genotype)
+  ),
+  size = 0.2,
+  alpha = 0.25
+  ) +
   geom_smooth(aes(colour = genotype),
-              span = 1.25,
-              size = 0.5,
-              alpha = 1,
-              se = F) +
+    span = 1.25,
+    size = 0.5,
+    alpha = 1,
+    se = F
+  ) +
   labs(y = "DAF oxidation rate") +
   scale_colour_manual(values = c("#d25952", "#275d95")) +
   expand_limits(y = 0) +
   theme_leo() +
-  theme(legend.position = c(0.075, 0.9),
-        legend.title = element_blank(),
-        legend.direction = "horizontal") +
+  theme(
+    legend.position = c(0.075, 0.9),
+    legend.title = element_blank(),
+    legend.direction = "horizontal"
+  ) +
   facet_wrap(
-    ~cell_type, 
-    ncol = 4, 
+    ~cell_type,
+    ncol = 4,
     # scales = "free_y"
-    )
+  )
 
 pdf("DAF_pH.pdf", width = twocol, height = onecol * 0.5)
 # activity_grid /
@@ -3202,8 +3550,8 @@ daf_IF_files <-
     full.names = TRUE
   )
 
-reps <- read_csv("/home/leonard/Dropbox/DAF_pH5_IF/to_measure_IF.csv") %>% 
-  select(1:3) %>% 
+reps <- read_csv("/home/leonard/Dropbox/DAF_pH5_IF/to_measure_IF.csv") %>%
+  select(1:3) %>%
   mutate(replicate = as.character(replicate))
 
 daf_IF_data <- map_dfr(daf_IF_files, read_csv) %>%
@@ -3220,9 +3568,9 @@ daf_IF_data <- map_dfr(daf_IF_files, read_csv) %>%
     pH = "5",
     substrate = "DAF"
   ) %>%
-  group_by(date, genotype, cell_type, time) %>% 
-  mutate(point = row_number()) %>% 
-  select(-image, -slice, -interval) %>% 
+  group_by(date, genotype, cell_type, time) %>%
+  mutate(point = row_number()) %>%
+  select(-image, -slice, -interval) %>%
   left_join(reps)
 
 #### subtract water column and background ####
@@ -3234,7 +3582,7 @@ data_daf <- data_daf %>%
   ),
   col_type = "ccDccc"
   )) %>%
-  bind_rows(daf_IF_data) %>% 
+  bind_rows(daf_IF_data) %>%
   group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
   mutate(
     corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
@@ -3286,16 +3634,18 @@ slope_dist <- ggplot(nested_data_daf) +
   facet_wrap(~cell_type, ncol = 1)
 
 
-data_daf <- data_daf %>% filter(cell_type %in% c("IF", "CML", "XF", "MX", "PX") &
-  pH == 5 &
-  treatment == "none" 
+data_daf <- data_daf %>% filter(
+  cell_type %in% c("IF", "CML", "XF", "MX", "PX") &
+    pH == 5 &
+    treatment == "none"
   # adj.r.squared > 0.85
-  )
-nested_data_daf <- nested_data_daf %>% filter(cell_type %in% c("IF", "CML", "XF", "MX", "PX") &
-  pH == 5 &
-  treatment == "none" 
+)
+nested_data_daf <- nested_data_daf %>% filter(
+  cell_type %in% c("IF", "CML", "XF", "MX", "PX") &
+    pH == 5 &
+    treatment == "none"
   # adj.r.squared > 0.85
-  )
+)
 
 avg_slopes <- nested_data_daf %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
@@ -3360,7 +3710,7 @@ activity_grid <- ggplot(
   theme_leo() +
   # theme(legend.position = "bottom") +
   coord_cartesian(xlim = c(0, 400)) +
-  facet_grid(~ cell_type)
+  facet_grid(~cell_type)
 
 raw_absorbance <- ggplot(
   data_daf,
@@ -3401,7 +3751,7 @@ raw_absorbance <- ggplot(
 #   print_position = "above",
 #   print_adjust = 1
 # )
-# 
+#
 # letters <- letter_groups(avg_slopes,
 #   mean_estimate,
 #   genotype,
@@ -3536,11 +3886,11 @@ daf6_data <- map_dfr(daf6_files, read_csv) %>%
       "PH",
       "BG"
     ))
-  ) %>% 
-group_by(genotype, replicate, substrate, pH, date, cell_type, time) %>%
+  ) %>%
+  group_by(genotype, replicate, substrate, pH, date, cell_type, time) %>%
   mutate(point = row_number()) %>%
   select(-slice, -interval)
-  
+
 
 #### subtract water column and background ####
 daf6_data <- daf6_data %>%
@@ -3659,9 +4009,11 @@ activity_grid <- ggplot(
   ) +
   theme_leo() +
   # theme(legend.position = "bottom") +
-  coord_cartesian(xlim = c(0, 400),
-                  ylim = c(-0.2, 1)) +
-  facet_grid(~ cell_type)
+  coord_cartesian(
+    xlim = c(0, 400),
+    ylim = c(-0.2, 1)
+  ) +
+  facet_grid(~cell_type)
 
 raw_absorbance <- ggplot(
   daf6_data,
@@ -3690,8 +4042,10 @@ raw_absorbance <- ggplot(
   ) +
   theme_leo() +
   # theme(legend.position = "bottom") +
-  coord_cartesian(xlim = c(0, 400),
-                  ylim = c(-0.2, 1.5)) +
+  coord_cartesian(
+    xlim = c(0, 400),
+    ylim = c(-0.2, 1.5)
+  ) +
   facet_wrap(~cell_type, ncol = 5)
 
 
@@ -3881,29 +4235,30 @@ anim_save("Full_IF_1_animation.gif")
 
 ```{r}
 single_violin_data <- nested_data_dab %>%
-  full_join(nested_data_daf) %>% 
+  full_join(nested_data_daf) %>%
   mutate(genotype = recode(genotype,
-                           "Q-4" = "<i>Q-4</i>",
-                           "Q-5" = "<i>Q-5</i>",
-                           "Q-10" = "<i>Q-10</i>",
-                           "Q-12" = "<i>Q-12</i>",
-                           "Q-17" = "<i>Q-17</i>",
-                           "Q" = "<i>Q</i>"))
+    "Q-4" = "<i>Q-4</i>",
+    "Q-5" = "<i>Q-5</i>",
+    "Q-10" = "<i>Q-10</i>",
+    "Q-12" = "<i>Q-12</i>",
+    "Q-17" = "<i>Q-17</i>",
+    "Q" = "<i>Q</i>"
+  ))
 
 single_violin_avg <- single_violin_data
 
 act_violin <- function(subst, ct) {
-  letters <- letter_groups(single_violin_data %>% 
-                             filter(substrate == subst & cell_type == ct),
-    estimate,
-    genotype,
-    "tukey",
-    print_position = "below",
-    print_adjust = 0.75
-  ) 
+  letters <- letter_groups(single_violin_data %>%
+    filter(substrate == subst & cell_type == ct),
+  estimate,
+  genotype,
+  "tukey",
+  print_position = "below",
+  print_adjust = 0.75
+  )
 
   ggplot(
-    data = single_violin_data %>% 
+    data = single_violin_data %>%
       filter(substrate == subst & cell_type == ct),
     aes(x = genotype, y = estimate)
   ) +
@@ -3934,8 +4289,10 @@ act_violin <- function(subst, ct) {
       family = "Helvetica",
       position = position_dodge(width = 0.6)
     ) +
-    labs(y = paste(subst, "oxidation rate"),
-         title = ct) +
+    labs(
+      y = paste(subst, "oxidation rate"),
+      title = ct
+    ) +
     scale_y_continuous(expand = expansion(mult = 0.1)) +
     # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
     # scale_fill_manual(values = pal_flame_disc) +
@@ -3967,26 +4324,30 @@ dev.off()
 ```{r}
 daf_plate <- read_csv(
   paste0(datapath, "PhD/Laccase_activity/2021-05-24_DAF_analysis/2021-05-24_DAF.csv")
-  ) %>% 
+) %>%
   unite("Well", row, column, sep = "")
 
 daf_abs <- read_csv(
   paste0(datapath, "PhD/Laccase_activity/2021-05-24_DAF_analysis/LB_TE-activity_20210524_115625.csv")
-  )
+)
 
-daf <- left_join(daf_abs, daf_plate) %>% 
-  separate(Well, into = c("row", "column"), sep = 1) %>% 
-  pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>% 
+daf <- left_join(daf_abs, daf_plate) %>%
+  separate(Well, into = c("row", "column"), sep = 1) %>%
+  pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>%
   mutate(
     wavelength = as.numeric(wavelength),
     absorbance = measurement / 0.52, # experimental path length in the plate
     time = (`Cycle #` * 1) - 1 # 1 minute between measurements
   )
 
-spectra <- ggplot(daf,
-                  aes(x = wavelength,
-                      y = absorbance,
-                      group = time)) +
+spectra <- ggplot(
+  daf,
+  aes(
+    x = wavelength,
+    y = absorbance,
+    group = time
+  )
+) +
   geom_line() +
   theme_leo() +
   facet_grid(row ~ column)
@@ -3995,14 +4356,18 @@ plotly::ggplotly(spectra)
 
 peaks <- c(290, 360, 610, 800)
 
-daf_peaks <- daf %>% 
-  filter(wavelength %in% peaks) %>% 
+daf_peaks <- daf %>%
+  filter(wavelength %in% peaks) %>%
   mutate(wavelength = as.character(wavelength))
 
-peak_time <- ggplot(daf_peaks,
-                    aes(x = time,
-                        y = absorbance,
-                        colour = wavelength)) +
+peak_time <- ggplot(
+  daf_peaks,
+  aes(
+    x = time,
+    y = absorbance,
+    colour = wavelength
+  )
+) +
   geom_point() +
   geom_smooth(aes(group = wavelength)) +
   theme_leo() +
@@ -4011,20 +4376,25 @@ peak_time <- ggplot(daf_peaks,
 
 peak_time
 
-peak_conc <- ggplot(daf_peaks %>% filter(time == 39 & concentration > 0.7),
-                    aes(x = concentration,
-                        y = absorbance,
-                        colour = wavelength)) +
+peak_conc <- ggplot(
+  daf_peaks %>% filter(time == 39 & concentration > 0.7),
+  aes(
+    x = concentration,
+    y = absorbance,
+    colour = wavelength
+  )
+) +
   geom_point() +
   geom_smooth(aes(group = wavelength),
-              method = "lm", 
-              se = F,
-              linetype = 2) +
+    method = "lm",
+    se = F,
+    linetype = 2
+  ) +
   geom_line(aes(group = wavelength)) +
   theme_leo() +
   scale_x_log10() +
   theme(legend.position = "bottom") +
-  facet_wrap(~ row, ncol = 4)
+  facet_wrap(~row, ncol = 4)
 
 peak_conc
 ```
@@ -4035,7 +4405,8 @@ peak_conc
 
 ```{r}
 growth_estimates <- read_csv(paste0(datapath, "PhD/Cell cultures/2021_timelines/2021_timeline_counts.csv"),
-                             col_types = "Dccnnnnnc") %>%
+  col_types = "Dccnnnnnc"
+) %>%
   select(-comment)
 
 growth_files <-
@@ -4079,8 +4450,10 @@ growth_data <- map(growth_files, read_plus) %>%
     nTE_viab = nTEs_alive / (nTEs_alive + nTEs_dead),
     TE_prop = (TEs_alive + TEs_dead) / n,
     TE_viab = TEs_alive / (TEs_alive + TEs_dead),
-    TE_viab = case_when(is.nan(TE_viab) ~ 1,
-                        TRUE ~ TE_viab)
+    TE_viab = case_when(
+      is.nan(TE_viab) ~ 1,
+      TRUE ~ TE_viab
+    )
   )
 
 growth_avg <- growth_data %>%
@@ -4161,9 +4534,11 @@ growth_fine <- tibble(
 
 growth_long <- growth_data %>%
   filter(treatment == "ind") %>%
-  pivot_longer(cols = c(TE_viab, TE_prop),
-               names_to = "variable",
-               values_to = "value")
+  pivot_longer(
+    cols = c(TE_viab, TE_prop),
+    names_to = "variable",
+    values_to = "value"
+  )
 
 growth_sigmoid <- growth_long %>%
   select(replicate, dpi, variable, value) %>%
@@ -4197,14 +4572,17 @@ growth_sigmoid <- growth_long %>%
   pivot_wider(names_from = term, values_from = estimate) %>%
   unnest(c(data, predicted)) %>%
   mutate(variable = recode(variable,
-                           nTE_viab = "Non-TE viability",
-                           TE_prop = "TE proportion",
-                           TE_viab = "TE viability"))
+    nTE_viab = "Non-TE viability",
+    TE_prop = "TE proportion",
+    TE_viab = "TE viability"
+  ))
 
 sigmoid_inflection <- growth_sigmoid %>%
   group_by(variable) %>%
-  summarise(inflection_x = mean(round(e, digits = 1)),
-            inflection_y = mean(predicted[round(dpi, digits = 1) == round(inflection_x, digits = 1)]))
+  summarise(
+    inflection_x = mean(round(e, digits = 1)),
+    inflection_y = mean(predicted[round(dpi, digits = 1) == round(inflection_x, digits = 1)])
+  )
 
 growth_facet <- ggplot(
   growth_sigmoid,
@@ -4220,31 +4598,38 @@ growth_facet <- ggplot(
     xmax = 7,
     fill = "grey90"
   ) +
-  geom_segment(data = sigmoid_inflection,
-             aes(x = inflection_x,
-                 xend = inflection_x,
-                 y = inflection_y,
-                 yend = Inf),
-             size = 0.2,
-             linetype = 2,
-             # arrow = arrow(ends = "first",
-             #               type = "closed",
-             #               angle = 10,
-             #               length = unit(1.5, "mm"))
-             ) +
+  geom_segment(
+    data = sigmoid_inflection,
+    aes(
+      x = inflection_x,
+      xend = inflection_x,
+      y = inflection_y,
+      yend = Inf
+    ),
+    size = 0.2,
+    linetype = 2,
+    # arrow = arrow(ends = "first",
+    #               type = "closed",
+    #               angle = 10,
+    #               length = unit(1.5, "mm"))
+  ) +
   geom_point(
     # aes(colour = replicate),
     alpha = 0.5,
     shape = 16,
     size = 0.5
   ) +
-  geom_text(data = sigmoid_inflection,
-            aes(x = inflection_x,
-                y = 1,
-                label = paste(" ", inflection_x, "dpi")),
-            family = "Helvetica",
-            size = ggtext_size,
-            hjust = 0) +
+  geom_text(
+    data = sigmoid_inflection,
+    aes(
+      x = inflection_x,
+      y = 1,
+      label = paste(" ", inflection_x, "dpi")
+    ),
+    family = "Helvetica",
+    size = ggtext_size,
+    hjust = 0
+  ) +
   # stat_smooth(geom = "line",
   #             aes(group = replicate),
   #             size = 0.2,
@@ -4254,10 +4639,14 @@ growth_facet <- ggplot(
     colour = "#275d95",
     size = 0.2
   ) +
-  scale_y_continuous(limits = c(0, 1),
-                     labels = c("0", "25", "50", "75", "100")) +
-  labs(y = "Proportion [%]",
-       x = "Days past induction (dpi)") +
+  scale_y_continuous(
+    limits = c(0, 1),
+    labels = c("0", "25", "50", "75", "100")
+  ) +
+  labs(
+    y = "Proportion [%]",
+    x = "Days past induction (dpi)"
+  ) +
   theme_leo() +
   facet_wrap(~variable, ncol = 3)
 
@@ -4270,12 +4659,11 @@ dev.off()
 # # growth
 # growth_facet
 # dev.off()
-# 
+#
 # ragg::agg_png("TE_growth_sigmoid.png", width = onecol, height = onecol * 0.5,
 #               units = "in", res = 600)
 # growth_facet
 # dev.off()
-
 ```
 
 ## Pilots
@@ -4309,7 +4697,7 @@ abs_max <- tibble(
   substrate = c("DAF", "PYGL", "SGZ", "ABTS"),
   abs_max = c(610, 360, 525, 420),
   abs_min = c(450, 600, 600, 480)
-  )
+)
 
 plate <- tibble(
   row = rep(LETTERS[1:4], length.out = 48, each = 12),
@@ -4317,14 +4705,15 @@ plate <- tibble(
   sample = c(
     rep(c(
       rep(c("TE", "nTE", "ctrl"),
-      length.out = 12, each = 4
+        length.out = 12, each = 4
       )
     ),
     length.out = 48
     )
   ),
   substrate = ordered(rep(c("DAF", "PYGL", "SGZ", "ABTS"), each = 12),
-                      levels = c("DAF", "PYGL", "SGZ", "ABTS")),
+    levels = c("DAF", "PYGL", "SGZ", "ABTS")
+  ),
   pH = rep(rep(c(4:7), length.out = 12), length.out = 48),
   replicate = 4,
   day = 21
@@ -4333,34 +4722,45 @@ plate <- tibble(
 
 pilot1 <- read_csv(
   paste0(datapath, "PhD/Laccase_activity/2021-03_TE_activity/2021-03-17_pilot.csv")
-  ) %>%
+) %>%
   left_join(plate) %>%
   left_join(abs_max) %>%
-  left_join(lm_bounds) %>% 
-  pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>% 
+  left_join(lm_bounds) %>%
+  pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>%
   mutate(
     wavelength = as.numeric(wavelength),
     absorbance = measurement / 0.52, # experimental path length in the plate
-    time = `Cycle #` * 20) %>% # 20 minutes between measurements
+    time = `Cycle #` * 20
+  ) %>%
+  # 20 minutes between measurements
   group_by(sample, substrate, pH, replicate, day) %>%
-  mutate(density = absorbance[wavelength == 600 & `Cycle #` == 1],
-         adjusted_absorbance = case_when(sample == "ctrl" ~ absorbance,
-                                         TRUE ~ absorbance / density),
-         zeroed_absorbance = adjusted_absorbance - adjusted_absorbance[`Cycle #` == 2]) %>% 
+  mutate(
+    density = absorbance[wavelength == 600 & `Cycle #` == 1],
+    adjusted_absorbance = case_when(
+      sample == "ctrl" ~ absorbance,
+      TRUE ~ absorbance / density
+    ),
+    zeroed_absorbance = adjusted_absorbance - adjusted_absorbance[`Cycle #` == 2]
+  ) %>%
   select(-`Cycle #`, -`Time (s)`)
-  
+
 pilot1_peaks <- pilot1 %>%
   group_by(sample, substrate, pH, replicate, day, time, lm_start, lm_stop, Well) %>%
-  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>%
   summarise(
     corrected_absorbance = corrected_absorbance[wavelength == abs_max],
     absorbance = absorbance[wavelength == abs_max],
-    measurement = measurement[wavelength == abs_max])
+    measurement = measurement[wavelength == abs_max]
+  )
 
-ggplot(pilot1_peaks,
-       aes(x = time,
-           y = corrected_absorbance,
-           colour = sample)) +
+ggplot(
+  pilot1_peaks,
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = sample
+  )
+) +
   geom_line() +
   scale_x_continuous(limits = c(0, 400)) +
   theme_leo() +
@@ -4380,21 +4780,25 @@ pilot1_nested <- pilot1_peaks %>%
   select(-model) %>%
   unnest(tidied) %>%
   filter(term == "time") %>%
-  mutate(column = as.numeric(str_remove(Well, "[:alpha:]")),
-         row = ordered(str_extract(Well, "[:alpha:]"),
-                       levels = c("A", "B", "C", "D")))
+  mutate(
+    column = as.numeric(str_remove(Well, "[:alpha:]")),
+    row = ordered(str_extract(Well, "[:alpha:]"),
+      levels = c("A", "B", "C", "D")
+    )
+  )
 
 ggplot(
   pilot1_nested,
-  aes(x = column, y = row, fill = estimate)) +
+  aes(x = column, y = row, fill = estimate)
+) +
   geom_tile() +
   # scale_x_discrete(limits = rev(levels(pilot1_nested$dilution))) +
   scale_y_discrete(limits = rev(levels(pilot1_nested$row))) +
   # scale_fill_gradientn(colours = rev(pal_ostwald_cont)) +
   scale_fill_viridis_c() +
   geom_label(aes(label = round(estimate, digits = 4))) +
-  theme_leo() 
- 
+  theme_leo()
+
 
 # plotly::ggplotly(ggplot(filter(pilot1, sample == "nTE" & substrate == "DAF" & pH == 5),
 #        aes(x = wavelength,
@@ -4402,7 +4806,6 @@ ggplot(
 #            colour = time,
 #            group = time)) +
 #   geom_line(size = 0.1))
-
 ```
 
 ### Calibration
@@ -4459,7 +4862,7 @@ calibration <- read_csv(
     wavelength = as.numeric(wavelength),
     absorbance = measurement / 0.52, # experimental path length in the plate
     time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
-  ) %>% 
+  ) %>%
   group_by(sample, substrate, pH, replicate, dilution, technical, day) %>%
   mutate(
     density = absorbance[wavelength == 600 & `Cycle #` == 1],
@@ -4479,40 +4882,51 @@ calibration_density <- calibration %>%
 cal_r2 <- round(
   summary(
     lm(density ~ dilution, data = calibration_density)
-    )$adj.r.squared, 
-  digits = 2)
+  )$adj.r.squared,
+  digits = 2
+)
 
-ggplot(calibration_density,
-       aes(x = dilution,
-           y = density)) +
+ggplot(
+  calibration_density,
+  aes(
+    x = dilution,
+    y = density
+  )
+) +
   geom_point() +
   geom_smooth(method = "lm") +
   annotate("text",
-           label = paste("R² =", cal_r2),
-           x = 0.1,
-           y = 1.4) +
+    label = paste("R² =", cal_r2),
+    x = 0.1,
+    y = 1.4
+  ) +
   theme_leo()
 
 # plot absorbance over time ####
 calibration_peaks <- calibration %>%
   group_by(
     sample, substrate, pH, replicate, dilution, technical, day, time, lm_start, lm_stop, density
-    ) %>%
-  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
+  ) %>%
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>%
   summarise(
     corrected_absorbance = corrected_absorbance[wavelength == abs_max],
     absorbance = absorbance[wavelength == abs_max],
-    measurement = measurement[wavelength == abs_max])
+    measurement = measurement[wavelength == abs_max]
+  )
 
-ggplot(calibration_peaks,
-       aes(x = time,
-           y = corrected_absorbance,
-           colour = sample)) +
+ggplot(
+  calibration_peaks,
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = sample
+  )
+) +
   geom_line(aes(group = technical)) +
   scale_x_continuous(limits = c(0, 400)) +
   theme_leo() +
   theme(legend.position = "bottom") +
-  facet_wrap(~ dilution)
+  facet_wrap(~dilution)
 
 # calculate slopes of linear phase ####
 calibration_nested <- calibration_peaks %>%
@@ -4532,14 +4946,14 @@ calibration_nested <- calibration_peaks %>%
 
 ggplot(
   calibration_nested,
-  aes(x = density, y = estimate)) +
+  aes(x = density, y = estimate)
+) +
   geom_point() +
   geom_smooth(method = "lm") +
   labs(y = "PYGL oxidation rate") +
   expand_limits(y = 0) +
   theme_leo() +
   facet_wrap(~substrate)
-
 ```
 
 ### Calibration II
@@ -4596,7 +5010,7 @@ calibration <- read_csv(
     wavelength = as.numeric(wavelength),
     absorbance = measurement / 0.52, # experimental path length in the plate
     time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
-  ) %>% 
+  ) %>%
   group_by(sample, substrate, pH, replicate, dilution, concentration, day) %>%
   mutate(
     density = absorbance[wavelength == 600 & `Cycle #` == 1],
@@ -4616,18 +5030,24 @@ calibration_density <- calibration %>%
 cal_r2 <- round(
   summary(
     lm(density ~ dilution, data = calibration_density)
-    )$adj.r.squared, 
-  digits = 2)
+  )$adj.r.squared,
+  digits = 2
+)
 
-ggplot(calibration_density,
-       aes(x = dilution,
-           y = density)) +
+ggplot(
+  calibration_density,
+  aes(
+    x = dilution,
+    y = density
+  )
+) +
   geom_point(aes(colour = pH)) +
   geom_smooth(method = "lm") +
   annotate("text",
-           label = paste("R² =", cal_r2),
-           x = 0.1,
-           y = 1.4) +
+    label = paste("R² =", cal_r2),
+    x = 0.1,
+    y = 1.4
+  ) +
   theme_leo()
 
 # check which wavelength to use for PYGL ####
@@ -4636,8 +5056,10 @@ calibration_wide <- calibration %>%
   filter(wavelength %in% c(300, 360, 450)) %>%
   pivot_wider(names_from = wavelength, values_from = zeroed_absorbance)
 
-ggplot(filter(calibration_wide, substrate == "PYGL"),
-       aes(x = `450`, y = `360`)) +
+ggplot(
+  filter(calibration_wide, substrate == "PYGL"),
+  aes(x = `450`, y = `360`)
+) +
   geom_point() +
   geom_smooth(method = "lm")
 
@@ -4645,17 +5067,22 @@ ggplot(filter(calibration_wide, substrate == "PYGL"),
 calibration_peaks <- calibration %>%
   group_by(
     sample, substrate, pH, replicate, dilution, concentration, day, time, lm_start, lm_stop, density
-    ) %>%
-  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
+  ) %>%
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>%
   summarise(
     corrected_absorbance = corrected_absorbance[wavelength == abs_max],
     absorbance = absorbance[wavelength == abs_max],
-    measurement = measurement[wavelength == abs_max])
+    measurement = measurement[wavelength == abs_max]
+  )
 
-ggplot(calibration_peaks,
-       aes(x = time,
-           y = corrected_absorbance,
-           colour = concentration)) +
+ggplot(
+  calibration_peaks,
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = concentration
+  )
+) +
   geom_line(aes(group = concentration)) +
   scale_x_continuous(limits = c(0, 400)) +
   theme_leo() +
@@ -4680,24 +5107,25 @@ calibration_nested <- calibration_peaks %>%
 
 ggplot(
   calibration_nested,
-  aes(x = density, y = estimate, colour = concentration)) +
+  aes(x = density, y = estimate, colour = concentration)
+) +
   geom_point() +
   geom_smooth(method = "lm") +
   labs(y = "Oxidation rate") +
   expand_limits(y = 0) +
   theme_leo() +
-  facet_wrap(~ substrate, scales = "free_y")
+  facet_wrap(~substrate, scales = "free_y")
 
 ggplot(
   calibration_nested,
-  aes(x = dilution, y = interaction(concentration, substrate), fill = estimate)) +
+  aes(x = dilution, y = interaction(concentration, substrate), fill = estimate)
+) +
   geom_tile() +
   scale_x_discrete(limits = rev(levels(calibration_nested$dilution))) +
   # scale_fill_gradientn(colours = rev(pal_ostwald_cont)) +
   scale_fill_viridis_c() +
   geom_label(aes(label = round(estimate, digits = 4))) +
-  theme_leo() 
-
+  theme_leo()
 ```
 
 ### Calibration III
@@ -4739,8 +5167,9 @@ plate <- tibble(
   concentration = rep(c(5, 0.07, 5, 0.1, 6), each = 8, length.out = 40),
   dilution = rep(c(1, 0.5, 0.25, 0.125, 0.0625, 0.03125, 0.015625, 0), length.out = 40),
   sample = "TE",
-  substrate = ordered(rep(c("ABTS", "DAF", "PYGL", "SGZ", "MBTH"), each = 8, length.out = 40), 
-                      levels = c("ABTS", "DAF", "PYGL", "SGZ", "MBTH")),
+  substrate = ordered(rep(c("ABTS", "DAF", "PYGL", "SGZ", "MBTH"), each = 8, length.out = 40),
+    levels = c("ABTS", "DAF", "PYGL", "SGZ", "MBTH")
+  ),
   pH = rep(c(4, 5, 6, 5, 5), each = 8, length.out = 40),
   replicate = 4,
   day = 21
@@ -4759,7 +5188,7 @@ calibration <- read_csv(
     wavelength = as.numeric(wavelength),
     absorbance = measurement / 0.52, # experimental path length in the plate
     time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
-  ) %>% 
+  ) %>%
   group_by(sample, substrate, pH, replicate, dilution, day) %>%
   mutate(
     density = absorbance[wavelength == 600 & `Cycle #` == 1],
@@ -4779,18 +5208,24 @@ calibration_density <- calibration %>%
 cal_r2 <- round(
   summary(
     lm(density ~ dilution, data = calibration_density)
-    )$adj.r.squared, 
-  digits = 2)
+  )$adj.r.squared,
+  digits = 2
+)
 
-ggplot(calibration_density,
-       aes(x = dilution,
-           y = density)) +
+ggplot(
+  calibration_density,
+  aes(
+    x = dilution,
+    y = density
+  )
+) +
   geom_point(aes(colour = pH)) +
   geom_smooth(method = "lm") +
   annotate("text",
-           label = paste("R² =", cal_r2),
-           x = 0.1,
-           y = 1.4) +
+    label = paste("R² =", cal_r2),
+    x = 0.1,
+    y = 1.4
+  ) +
   theme_leo()
 
 # check which wavelength to use for PYGL ####
@@ -4799,8 +5234,10 @@ calibration_wide <- calibration %>%
   filter(wavelength %in% c(300, 360, 450)) %>%
   pivot_wider(names_from = wavelength, values_from = zeroed_absorbance)
 
-ggplot(filter(calibration_wide, substrate == "PYGL"),
-       aes(x = `450`, y = `360`)) +
+ggplot(
+  filter(calibration_wide, substrate == "PYGL"),
+  aes(x = `450`, y = `360`)
+) +
   geom_point() +
   geom_smooth(method = "lm")
 
@@ -4808,16 +5245,21 @@ ggplot(filter(calibration_wide, substrate == "PYGL"),
 calibration_peaks <- calibration %>%
   group_by(
     sample, substrate, pH, replicate, dilution, day, time, lm_start, lm_stop, density
-    ) %>%
-  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
+  ) %>%
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>%
   summarise(
     corrected_absorbance = corrected_absorbance[wavelength == abs_max],
     absorbance = absorbance[wavelength == abs_max],
-    measurement = measurement[wavelength == abs_max])
+    measurement = measurement[wavelength == abs_max]
+  )
 
-ggplot(calibration_peaks,
-       aes(x = time,
-           y = corrected_absorbance)) +
+ggplot(
+  calibration_peaks,
+  aes(
+    x = time,
+    y = corrected_absorbance
+  )
+) +
   geom_line() +
   scale_x_continuous(limits = c(0, 400)) +
   theme_leo() +
@@ -4842,25 +5284,26 @@ calibration_nested <- calibration_peaks %>%
 
 ggplot(
   calibration_nested,
-  aes(x = density, y = estimate)) +
+  aes(x = density, y = estimate)
+) +
   geom_point() +
   geom_smooth(method = "lm") +
   labs(y = "Oxidation rate") +
   expand_limits(y = 0) +
   theme_leo() +
-  facet_wrap(~ substrate, scales = "free_y")
+  facet_wrap(~substrate, scales = "free_y")
 
 ggplot(
   calibration_nested,
-  aes(x = dilution, y = substrate, fill = estimate)) +
+  aes(x = dilution, y = substrate, fill = estimate)
+) +
   geom_tile() +
   scale_x_discrete(limits = rev(levels(calibration_nested$dilution))) +
   scale_y_discrete(limits = rev(levels(calibration_nested$substrate))) +
   # scale_fill_gradientn(colours = rev(pal_ostwald_cont)) +
   scale_fill_viridis_c() +
   geom_label(aes(label = round(estimate, digits = 4))) +
-  theme_leo() 
-
+  theme_leo()
 ```
 
 ### Calibration IV
@@ -4902,8 +5345,9 @@ plate <- tibble(
   concentration = rep(c(5, 0.5, 0.05), each = 16, length.out = 48),
   dilution = rep(c(1, 0.5, 0.25, 0.125, 0.0625, 0.03125, 0.015625, 0), length.out = 48),
   sample = rep(c("TE", "nTE"), each = 8, length.out = 48),
-  substrate = ordered("PYGL", 
-                      levels = c("ABTS", "DAF", "PYGL", "SGZ", "MBTH")),
+  substrate = ordered("PYGL",
+    levels = c("ABTS", "DAF", "PYGL", "SGZ", "MBTH")
+  ),
   pH = 6,
   replicate = 4,
   day = 21
@@ -4922,7 +5366,7 @@ calibration <- read_csv(
     wavelength = as.numeric(wavelength),
     absorbance = measurement / 0.52, # experimental path length in the plate
     time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
-  ) %>% 
+  ) %>%
   group_by(sample, substrate, pH, replicate, dilution, concentration, day) %>%
   mutate(
     density = absorbance[wavelength == 600 & `Cycle #` == 1],
@@ -4942,19 +5386,26 @@ calibration_density <- calibration %>%
 cal_r2 <- round(
   summary(
     lm(density ~ dilution, data = calibration_density)
-    )$adj.r.squared, 
-  digits = 2)
+  )$adj.r.squared,
+  digits = 2
+)
 
-ggplot(calibration_density,
-       aes(x = dilution,
-           y = density)) +
+ggplot(
+  calibration_density,
+  aes(
+    x = dilution,
+    y = density
+  )
+) +
   geom_point(aes(colour = sample)) +
   geom_smooth(aes(colour = sample),
-              method = "lm") +
+    method = "lm"
+  ) +
   annotate("text",
-           label = paste("R² =", cal_r2),
-           x = 0.1,
-           y = 1.4) +
+    label = paste("R² =", cal_r2),
+    x = 0.1,
+    y = 1.4
+  ) +
   theme_leo()
 
 # check which wavelength to use for PYGL ####
@@ -4963,8 +5414,10 @@ calibration_wide <- calibration %>%
   filter(wavelength %in% c(300, 360, 450)) %>%
   pivot_wider(names_from = wavelength, values_from = zeroed_absorbance)
 
-ggplot(filter(calibration_wide, substrate == "PYGL"),
-       aes(x = `450`, y = `360`, colour = concentration)) +
+ggplot(
+  filter(calibration_wide, substrate == "PYGL"),
+  aes(x = `450`, y = `360`, colour = concentration)
+) +
   geom_point() +
   geom_smooth(method = "lm")
 
@@ -4972,17 +5425,22 @@ ggplot(filter(calibration_wide, substrate == "PYGL"),
 calibration_peaks <- calibration %>%
   group_by(
     sample, substrate, pH, replicate, dilution, concentration, day, time, lm_start, lm_stop, density
-    ) %>%
-  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
+  ) %>%
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>%
   summarise(
     corrected_absorbance = corrected_absorbance[wavelength == abs_max],
     absorbance = absorbance[wavelength == abs_max],
-    measurement = measurement[wavelength == abs_max])
+    measurement = measurement[wavelength == abs_max]
+  )
 
-ggplot(calibration_peaks,
-       aes(x = time,
-           y = corrected_absorbance,
-           colour = sample)) +
+ggplot(
+  calibration_peaks,
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = sample
+  )
+) +
   geom_line() +
   scale_x_continuous(limits = c(0, 400)) +
   theme_leo() +
@@ -5007,7 +5465,8 @@ calibration_nested <- calibration_peaks %>%
 
 ggplot(
   calibration_nested,
-  aes(x = density, y = estimate)) +
+  aes(x = density, y = estimate)
+) +
   geom_point() +
   geom_smooth(method = "loess") +
   labs(y = "Oxidation rate") +
@@ -5017,15 +5476,15 @@ ggplot(
 
 ggplot(
   calibration_nested,
-  aes(x = dilution, y = interaction(sample, concentration), fill = estimate)) +
+  aes(x = dilution, y = interaction(sample, concentration), fill = estimate)
+) +
   geom_tile() +
   scale_x_discrete(limits = rev(levels(calibration_nested$dilution))) +
   # scale_y_discrete(limits = rev(levels(calibration_nested$substrate))) +
   # scale_fill_gradientn(colours = rev(pal_ostwald_cont)) +
   scale_fill_viridis_c() +
   geom_label(aes(label = round(estimate, digits = 4))) +
-  theme_leo() 
-
+  theme_leo()
 ```
 
 ## Full assays
@@ -5051,7 +5510,7 @@ read_plus <- function(flnm) {
       Well = paste0(row, column),
       started = str_remove(started, fixed(".csv")),
       date = ymd(date)
-    ) %>% 
+    ) %>%
     select(-row, -column)
 }
 
@@ -5072,16 +5531,19 @@ read_vroom <- function(flnm) {
       time = str_remove(time, fixed(".csv")),
       date = ymd(date),
       started = ymd_hms(paste(date, time, sep = "_")),
-      started = case_when(hour(started) < 14 ~ "morning", 
-                          TRUE ~ "evening")
-    ) %>% 
-    select(-time) %>% 
+      started = case_when(
+        hour(started) < 14 ~ "morning",
+        TRUE ~ "evening"
+      )
+    ) %>%
+    select(-time) %>%
     tidyfast::dt_pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement")
 }
 
 test_spec <- read_vroom(
-  paste0(datapath, "PhD/Laccase_activity/2021-04_TE_activity/csv_files/absorbance/LB_TE-activity_20210512_190857.csv")) %>%
-  left_join(TE_plates, by = c("date", "started", "Well")) %>% 
+  paste0(datapath, "PhD/Laccase_activity/2021-04_TE_activity/csv_files/absorbance/LB_TE-activity_20210512_190857.csv")
+) %>%
+  left_join(TE_plates, by = c("date", "started", "Well")) %>%
   drop_na()
 
 gc()
@@ -5092,9 +5554,9 @@ test_data <- test_spec %>%
     absorbance = measurement / 0.52, # experimental path length in the plate
     time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
   ) %>%
-  filter(time < 390) %>% 
-  group_by(date, replicate, substrate, pH, wavelength, time) %>% 
-  mutate("blank" = absorbance[sample == "neg. ctrl."]) %>% 
+  filter(time < 390) %>%
+  group_by(date, replicate, substrate, pH, wavelength, time) %>%
+  mutate("blank" = absorbance[sample == "neg. ctrl."]) %>%
   group_by(date, sample, substrate, pH, replicate, day) %>%
   mutate(
     density = mean(absorbance[wavelength == 600 & `Cycle #` %in% c(1, 2)]),
@@ -5107,13 +5569,18 @@ test_data <- test_spec %>%
   ) %>%
   select(-`Cycle #`, -`Time (s)`)
 
-plotly::ggplotly(ggplot(test_data %>% filter(Well == "F8"),
-       aes(x = wavelength,
-           y = absorbance,
-           group = time)) +
-  geom_line(size = 0.2,
-            alpha = 0.5))
-
+plotly::ggplotly(ggplot(
+  test_data %>% filter(Well == "F8"),
+  aes(
+    x = wavelength,
+    y = absorbance,
+    group = time
+  )
+) +
+  geom_line(
+    size = 0.2,
+    alpha = 0.5
+  ))
 ```
 
 
@@ -5122,8 +5589,8 @@ plotly::ggplotly(ggplot(test_data %>% filter(Well == "F8"),
 ```{r}
 abs_max <- tibble(
   substrate = c("ABTS", "DAF", "MBTH", "PYGL", "SGZ"),
-  abs_max = c(420, 610, 505, 450, 530), #DAF default: 610
-  abs_min = c(480, 930, 700, 600, 600) #DAF default: 515
+  abs_max = c(420, 610, 505, 450, 530), # DAF default: 610
+  abs_min = c(480, 930, 700, 600, 600) # DAF default: 515
 )
 
 spec_files <-
@@ -5145,16 +5612,18 @@ read_vroom <- function(flnm) {
       time = str_remove(time, fixed(".csv")),
       date = ymd(date),
       started = ymd_hms(paste(date, time, sep = "_")),
-      started = case_when(hour(started) < 14 ~ "morning", 
-                          TRUE ~ "evening")
-    ) %>% 
-    select(-time) %>% 
-    pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>% 
+      started = case_when(
+        hour(started) < 14 ~ "morning",
+        TRUE ~ "evening"
+      )
+    ) %>%
+    select(-time) %>%
+    pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>%
     filter(wavelength %in% c(abs_max$abs_max, abs_max$abs_min))
 }
 
 TE_spec <- map_dfr(spec_files, read_vroom) %>%
-  left_join(TE_plates, by = c("date", "started", "Well")) %>% 
+  left_join(TE_plates, by = c("date", "started", "Well")) %>%
   drop_na()
 
 gc()
@@ -5165,9 +5634,9 @@ TE_data <- TE_spec %>%
     absorbance = measurement / 0.52, # experimental path length in the plate
     time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
   ) %>%
-  filter(time < 390) %>% 
-  group_by(date, replicate, substrate, pH, wavelength, time) %>% 
-  mutate("blank" = absorbance[sample == "neg. ctrl."]) %>% 
+  filter(time < 390) %>%
+  group_by(date, replicate, substrate, pH, wavelength, time) %>%
+  mutate("blank" = absorbance[sample == "neg. ctrl."]) %>%
   group_by(date, sample, substrate, pH, replicate, day) %>%
   mutate(
     density = mean(absorbance[wavelength == 600 & `Cycle #` %in% c(1, 2)]),
@@ -5213,97 +5682,133 @@ lm_bounds <- tribble(
 
 kinetics <- TE_data %>%
   left_join(abs_max) %>%
-  left_join(lm_bounds) %>% 
+  left_join(lm_bounds) %>%
   group_by(
     date, sample, substrate, pH, replicate, day, time, lm_start, lm_stop, density
-    ) %>%
-  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
+  ) %>%
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>%
   summarise(
     corrected_absorbance = corrected_absorbance[wavelength == abs_max],
     adjusted_absorbance = adjusted_absorbance[wavelength == abs_max],
-    absorbance = absorbance[wavelength == abs_max])
+    absorbance = absorbance[wavelength == abs_max]
+  )
 
 pdf("TE_kinetics.pdf", height = twocol, width = twocol)
-ggplot(kinetics %>% filter(sample == "TE"),
-       aes(x = time,
-           y = corrected_absorbance,
-           colour = pH,
-           linetype = sample)) +
+ggplot(
+  kinetics %>% filter(sample == "TE"),
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = pH,
+    linetype = sample
+  )
+) +
   # geom_line(aes(group = interaction(sample, pH))) +
-  stat_smooth(geom = "line",
-              aes(group = interaction(replicate, pH)),
-              alpha = 0.5,
-              size = 0.2,
-              se = F) +
-  geom_smooth(data = filter(kinetics, sample == "TE" & time %in% c(lm_start:lm_stop)),
-              aes(group = interaction(replicate, pH)),
-              method = "lm",
-              size = 0.5,
-              se = F) +
+  stat_smooth(
+    geom = "line",
+    aes(group = interaction(replicate, pH)),
+    alpha = 0.5,
+    size = 0.2,
+    se = F
+  ) +
+  geom_smooth(
+    data = filter(kinetics, sample == "TE" & time %in% c(lm_start:lm_stop)),
+    aes(group = interaction(replicate, pH)),
+    method = "lm",
+    size = 0.5,
+    se = F
+  ) +
   # scale_x_continuous(limits = c(0, 400)) +
   theme_leo() +
   theme(legend.position = "bottom") +
   facet_grid(substrate ~ day,
-             scales = "free_y")
+    scales = "free_y"
+  )
 dev.off()
 
 pdf("TE_kinetics_ABTS_4.pdf", height = onecol * 0.5, width = twocol)
-ggplot(kinetics %>% filter(sample == "TE" & pH == 4 & substrate == "ABTS"),
-       aes(x = time,
-           y = corrected_absorbance,
-           colour = pH,
-           linetype = sample)) +
+ggplot(
+  kinetics %>% filter(sample == "TE" & pH == 4 & substrate == "ABTS"),
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = pH,
+    linetype = sample
+  )
+) +
   # geom_line(aes(group = interaction(sample, pH))) +
-  stat_smooth(geom = "line",
-              aes(group = interaction(replicate, pH)),
-              alpha = 0.5,
-              size = 0.2,
-              se = F) +
-  geom_smooth(data = filter(kinetics, 
-                            sample == "TE" &
-                              pH == 4 &
-                              substrate == "ABTS" &
-                              time %in% c(lm_start:lm_stop)),
-              aes(group = interaction(replicate, pH)),
-              method = "lm",
-              size = 0.5,
-              se = F) +
-  labs(y = "Corrected absorbance",
-       x = "Time [min]") +
+  stat_smooth(
+    geom = "line",
+    aes(group = interaction(replicate, pH)),
+    alpha = 0.5,
+    size = 0.2,
+    se = F
+  ) +
+  geom_smooth(
+    data = filter(
+      kinetics,
+      sample == "TE" &
+        pH == 4 &
+        substrate == "ABTS" &
+        time %in% c(lm_start:lm_stop)
+    ),
+    aes(group = interaction(replicate, pH)),
+    method = "lm",
+    size = 0.5,
+    se = F
+  ) +
+  labs(
+    y = "Corrected absorbance",
+    x = "Time [min]"
+  ) +
   scale_x_continuous(limits = c(0, 400), breaks = c(100, 300)) +
   theme_leo() +
   # theme(legend.position = "bottom") +
   facet_grid(substrate ~ day,
-             scales = "free_y")
+    scales = "free_y"
+  )
 dev.off()
 
 pdf("TE_kinetics_4.pdf", height = onecol * 1.5, width = twocol)
-ggplot(kinetics %>% filter(sample == "TE" & pH == 4),
-       aes(x = time,
-           y = corrected_absorbance,
-           colour = pH,
-           linetype = sample)) +
+ggplot(
+  kinetics %>% filter(sample == "TE" & pH == 4),
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = pH,
+    linetype = sample
+  )
+) +
   # geom_line(aes(group = interaction(sample, pH))) +
-  stat_smooth(geom = "line",
-              aes(group = interaction(replicate, pH)),
-              alpha = 0.5,
-              size = 0.2,
-              se = F) +
-  geom_smooth(data = filter(kinetics, 
-                            sample == "TE" &
-                              pH == 4 &
-                              time %in% c(lm_start:lm_stop)),
-              aes(group = interaction(replicate, pH)),
-              method = "lm",
-              size = 0.5,
-              se = F) +
-  labs(y = "Corrected absorbance",
-       x = "Time [min]") +
+  stat_smooth(
+    geom = "line",
+    aes(group = interaction(replicate, pH)),
+    alpha = 0.5,
+    size = 0.2,
+    se = F
+  ) +
+  geom_smooth(
+    data = filter(
+      kinetics,
+      sample == "TE" &
+        pH == 4 &
+        time %in% c(lm_start:lm_stop)
+    ),
+    aes(group = interaction(replicate, pH)),
+    method = "lm",
+    size = 0.5,
+    se = F
+  ) +
+  labs(
+    y = "Corrected absorbance",
+    x = "Time [min]"
+  ) +
   scale_x_continuous(limits = c(0, 400), breaks = c(100, 300)) +
   theme_leo() +
   # theme(legend.position = "bottom") +
   facet_grid(substrate ~ day,
-             scales = "free_y")
+    scales = "free_y"
+  )
 dev.off()
 ```
 
@@ -5327,37 +5832,53 @@ kinetics_nested <- kinetics %>%
   select(-model) %>%
   unnest(tidied) %>%
   filter(term == "time") %>%
-  mutate(pH = as.factor(pH)) %>% 
+  mutate(pH = as.factor(pH)) %>%
   # group_by(substrate, pH, replicate, day) %>% # subtract nTE activity (2 lines)
   # mutate(estimate = estimate - estimate[sample == "nTE"]) %>%
   # filter(adj.r.squared > 0.5) %>%
   group_by(substrate, pH, replicate, sample) %>%
-  mutate(scaled_estimate = estimate / max(estimate),
-         scaled_estimate = case_when(scaled_estimate < 0 ~ 0,
-                                     TRUE ~ scaled_estimate)) %>% 
+  mutate(
+    scaled_estimate = estimate / max(estimate),
+    scaled_estimate = case_when(
+      scaled_estimate < 0 ~ 0,
+      TRUE ~ scaled_estimate
+    )
+  ) %>%
   group_by(pH, replicate) %>%
-  mutate(pH_scaled = estimate / max(estimate),
-         pH_scaled = case_when(pH_scaled < 0 ~ 0,
-                                     TRUE ~ pH_scaled)) %>% 
+  mutate(
+    pH_scaled = estimate / max(estimate),
+    pH_scaled = case_when(
+      pH_scaled < 0 ~ 0,
+      TRUE ~ pH_scaled
+    )
+  ) %>%
   group_by(substrate, replicate) %>%
-  mutate(substrate_scaled = estimate / max(estimate),
-         substrate_scaled = case_when(substrate_scaled < 0 ~ 0,
-                                     TRUE ~ substrate_scaled))
+  mutate(
+    substrate_scaled = estimate / max(estimate),
+    substrate_scaled = case_when(
+      substrate_scaled < 0 ~ 0,
+      TRUE ~ substrate_scaled
+    )
+  )
 
-kinetic_max <- kinetics_nested %>% 
-  filter(day > 3) %>% 
-  group_by(pH, sample, substrate, day) %>% 
+kinetic_max <- kinetics_nested %>%
+  filter(day > 3) %>%
+  group_by(pH, sample, substrate, day) %>%
   summarise(scaled_estimate = mean(scaled_estimate)) %>%
-  group_by(pH, sample, substrate) %>% 
+  group_by(pH, sample, substrate) %>%
   mutate(
     max_estimate = max(scaled_estimate)
-  ) %>% 
+  ) %>%
   filter(scaled_estimate == max_estimate)
 
-slope_grid <- ggplot(kinetics_nested %>% filter(sample == "TE"),
-       aes(x = day,
-           y = scaled_estimate,
-           colour = substrate)) +
+slope_grid <- ggplot(
+  kinetics_nested %>% filter(sample == "TE"),
+  aes(
+    x = day,
+    y = scaled_estimate,
+    colour = substrate
+  )
+) +
   annotate("rect",
     ymin = -Inf,
     ymax = Inf,
@@ -5370,11 +5891,14 @@ slope_grid <- ggplot(kinetics_nested %>% filter(sample == "TE"),
   #            size = 0.2,
   #            linetype = 2) +
   geom_line(aes(group = interaction(replicate, sample)),
-            size = 0.2,
-            alpha = 0.5) +
-  stat_smooth(geom = "line",
-              size = 0.4,
-              se = FALSE) +
+    size = 0.2,
+    alpha = 0.5
+  ) +
+  stat_smooth(
+    geom = "line",
+    size = 0.4,
+    se = FALSE
+  ) +
   # scale_colour_brewer(palette = "Set1") +
   scale_colour_manual(
     values = c(
@@ -5383,7 +5907,8 @@ slope_grid <- ggplot(kinetics_nested %>% filter(sample == "TE"),
       "#D35877",
       "#FFCC66",
       "#FF99CC"
-    )) +
+    )
+  ) +
   scale_alpha_discrete(range = c(0.3, 1)) +
   labs(y = "Normalised substrate oxidation rate") +
   # scale_colour_manual(values = c("grey75", pal_ostwald_disc[1])) +
@@ -5392,9 +5917,13 @@ slope_grid <- ggplot(kinetics_nested %>% filter(sample == "TE"),
   facet_grid(pH ~ substrate)
 
 
-pH_facet <- ggplot(kinetics_nested %>% filter(sample == "TE"),
-       aes(x = day,
-           y = scaled_estimate)) +
+pH_facet <- ggplot(
+  kinetics_nested %>% filter(sample == "TE"),
+  aes(
+    x = day,
+    y = scaled_estimate
+  )
+) +
   annotate("rect",
     ymin = -Inf,
     ymax = Inf,
@@ -5410,9 +5939,11 @@ pH_facet <- ggplot(kinetics_nested %>% filter(sample == "TE"),
   # geom_line(aes(group = interaction(replicate, sample)),
   #           size = 0.2,
   #           alpha = 0.5) +
-  stat_smooth(geom = "line",
-              size = 0.4,
-              se = FALSE) +
+  stat_smooth(
+    geom = "line",
+    size = 0.4,
+    se = FALSE
+  ) +
   # scale_colour_brewer(palette = "Set1") +
   scale_colour_manual(
     values = c(
@@ -5421,28 +5952,37 @@ pH_facet <- ggplot(kinetics_nested %>% filter(sample == "TE"),
       "#D35877",
       "#FFCC66",
       "#FF99CC"
-    )) +
+    )
+  ) +
   scale_alpha_discrete(guide = "none", range = c(0.3, 1)) +
   # scale_colour_manual(values = c("grey75", pal_ostwald_disc[1])) +
   theme_leo() +
-  guides(colour = guide_legend(label.position = "bottom",
-                               nrow = 2)) +
-  theme(axis.text = element_blank(),
-        axis.title = element_blank(),
-        axis.ticks = element_blank(),
-        strip.text = element_blank(),
-        legend.position = c(0.5,-0.1),
-        legend.title = element_blank(),
-        legend.key.width = unit(1.5, "mm"),
-        legend.key.height = unit(1.5, "mm"),
-        legend.direction = "horizontal") +
-  facet_wrap(~ pH, ncol = 1)
+  guides(colour = guide_legend(
+    label.position = "bottom",
+    nrow = 2
+  )) +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank(),
+    strip.text = element_blank(),
+    legend.position = c(0.5, -0.1),
+    legend.title = element_blank(),
+    legend.key.width = unit(1.5, "mm"),
+    legend.key.height = unit(1.5, "mm"),
+    legend.direction = "horizontal"
+  ) +
+  facet_wrap(~pH, ncol = 1)
 
-substrate_facet <- ggplot(kinetics_nested %>% filter(sample == "TE"),
-       aes(x = day,
-           y = substrate_scaled,
-           colour = substrate,
-           alpha = pH)) +
+substrate_facet <- ggplot(
+  kinetics_nested %>% filter(sample == "TE"),
+  aes(
+    x = day,
+    y = substrate_scaled,
+    colour = substrate,
+    alpha = pH
+  )
+) +
   annotate("rect",
     ymin = -Inf,
     ymax = Inf,
@@ -5458,9 +5998,11 @@ substrate_facet <- ggplot(kinetics_nested %>% filter(sample == "TE"),
   # geom_line(aes(group = interaction(replicate, sample)),
   #           size = 0.2,
   #           alpha = 0.5) +
-  stat_smooth(geom = "line",
-              size = 0.4,
-              se = FALSE) +
+  stat_smooth(
+    geom = "line",
+    size = 0.4,
+    se = FALSE
+  ) +
   # scale_alpha(name = "pH") +
   # scale_colour_brewer(palette = "Set1", guide = "none") +
   scale_colour_manual(
@@ -5470,21 +6012,24 @@ substrate_facet <- ggplot(kinetics_nested %>% filter(sample == "TE"),
       "#D35877",
       "#FFCC66",
       "#FF99CC"
-    ), guide = "none") +
+    ), guide = "none"
+  ) +
   scale_alpha_discrete(range = c(0.3, 1)) +
   # scale_colour_manual(values = pal_pedersen_disc, name = "pH") +
   theme_leo() +
-  theme(axis.text = element_blank(),
-        axis.title = element_blank(),
-        axis.ticks = element_blank(),
-        strip.text = element_blank(),
-        # legend.title = element_blank(),
-        legend.key.height = unit(2.5, "mm"),
-        legend.key.width = unit(1.5, "mm"),
-        legend.position = c(1.025, 0.5)) +
-  facet_wrap(~ substrate, nrow = 1)
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank(),
+    strip.text = element_blank(),
+    # legend.title = element_blank(),
+    legend.key.height = unit(2.5, "mm"),
+    legend.key.width = unit(1.5, "mm"),
+    legend.position = c(1.025, 0.5)
+  ) +
+  facet_wrap(~substrate, nrow = 1)
 
-layout = "
+layout <- "
 AAAAAB
 AAAAAB
 AAAAAB
@@ -5493,25 +6038,31 @@ AAAAAB
 CCCCC#
 "
 pdf("TE_activity_slopes.pdf", width = onecol, height = onecol)
-slope_grid 
+slope_grid
 # + pH_facet + substrate_facet +
-  # plot_layout(design = layout)
+# plot_layout(design = layout)
 dev.off()
-
 ```
 
 #### Single pH
 
 ```{r}
-kinetics_single <- kinetics_nested %>% 
-  filter(pH == 5) %>% 
-  mutate(pH = paste("pH", pH),
-         substrate = recode(substrate,
-                            "MBTH" = "L-DOPA"))
-slope_grid <- ggplot(kinetics_single %>% filter(sample == "TE"),
-       aes(x = day,
-           y = scaled_estimate,
-           colour = substrate)) +
+kinetics_single <- kinetics_nested %>%
+  filter(pH == 5) %>%
+  mutate(
+    pH = paste("pH", pH),
+    substrate = recode(substrate,
+      "MBTH" = "L-DOPA"
+    )
+  )
+slope_grid <- ggplot(
+  kinetics_single %>% filter(sample == "TE"),
+  aes(
+    x = day,
+    y = scaled_estimate,
+    colour = substrate
+  )
+) +
   annotate("rect",
     ymin = -Inf,
     ymax = Inf,
@@ -5524,11 +6075,14 @@ slope_grid <- ggplot(kinetics_single %>% filter(sample == "TE"),
   #            size = 0.2,
   #            linetype = 2) +
   geom_line(aes(group = interaction(replicate, sample)),
-            size = 0.2,
-            alpha = 0.5) +
-  stat_smooth(geom = "line",
-              size = 0.4,
-              se = FALSE) +
+    size = 0.2,
+    alpha = 0.5
+  ) +
+  stat_smooth(
+    geom = "line",
+    size = 0.4,
+    se = FALSE
+  ) +
   # scale_colour_brewer(palette = "Set1") +
   scale_colour_manual(
     values = c(
@@ -5537,17 +6091,22 @@ slope_grid <- ggplot(kinetics_single %>% filter(sample == "TE"),
       "#D35877",
       "#FFCC66",
       "#FF99CC"
-    )) +
-  labs(y = "Relative oxidation rate",
-       x = "Days past induction") +
+    )
+  ) +
+  labs(
+    y = "Relative oxidation rate",
+    x = "Days past induction"
+  ) +
   # scale_colour_manual(values = c("grey75", pal_ostwald_disc[1])) +
   theme_leo() +
-  theme(strip.text.y = element_markdown(padding = unit(0.1, "mm")),
-        axis.title.y = element_textbox_simple(
-          orientation = "left-rotated",
-          halign = 0.5,
-          width = unit(15, "mm")
-          )) +
+  theme(
+    strip.text.y = element_markdown(padding = unit(0.1, "mm")),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(15, "mm")
+    )
+  ) +
   facet_grid(pH ~ substrate)
 
 pdf("TE_activity_pH5.pdf", width = onecol, height = onecol * 0.25)
@@ -5573,48 +6132,66 @@ kinetics_nested <- kinetics %>%
   select(-model) %>%
   unnest(tidied) %>%
   filter(term == "time") %>%
-  mutate(pH = as.factor(pH)) %>% 
-  group_by(substrate, pH, replicate, day) %>% 
-  # mutate(estimate = estimate - estimate[sample == "nTE"]) %>% 
+  mutate(pH = as.factor(pH)) %>%
+  group_by(substrate, pH, replicate, day) %>%
+  # mutate(estimate = estimate - estimate[sample == "nTE"]) %>%
   # filter(adj.r.squared > 0.5) %>%
   group_by(substrate, pH, replicate) %>%
-  mutate(scaled_estimate = estimate / max(estimate),
-         scaled_estimate = case_when(scaled_estimate < 0 ~ 0,
-                                     TRUE ~ scaled_estimate)) %>% 
+  mutate(
+    scaled_estimate = estimate / max(estimate),
+    scaled_estimate = case_when(
+      scaled_estimate < 0 ~ 0,
+      TRUE ~ scaled_estimate
+    )
+  ) %>%
   group_by(pH, replicate) %>%
-  mutate(pH_scaled = estimate / max(estimate),
-         pH_scaled = case_when(pH_scaled < 0 ~ 0,
-                                     TRUE ~ pH_scaled)) %>% 
+  mutate(
+    pH_scaled = estimate / max(estimate),
+    pH_scaled = case_when(
+      pH_scaled < 0 ~ 0,
+      TRUE ~ pH_scaled
+    )
+  ) %>%
   group_by(substrate, replicate) %>%
-  mutate(substrate_scaled = estimate / max(estimate),
-         substrate_scaled = case_when(substrate_scaled < 0 ~ 0,
-                                     TRUE ~ substrate_scaled))
+  mutate(
+    substrate_scaled = estimate / max(estimate),
+    substrate_scaled = case_when(
+      substrate_scaled < 0 ~ 0,
+      TRUE ~ substrate_scaled
+    )
+  )
 
-kinetic_max <- kinetics_nested %>% 
-  filter(day > 3) %>% 
-  group_by(pH, sample, substrate, day) %>% 
+kinetic_max <- kinetics_nested %>%
+  filter(day > 3) %>%
+  group_by(pH, sample, substrate, day) %>%
   summarise(scaled_estimate = mean(scaled_estimate)) %>%
-  group_by(pH, sample, substrate) %>% 
+  group_by(pH, sample, substrate) %>%
   mutate(
     max_estimate = max(scaled_estimate)
-  ) %>% 
+  ) %>%
   filter(scaled_estimate == max_estimate)
 
-slope_grid <- ggplot(kinetics_nested %>% filter(sample != "neg. ctrl."),
-       aes(x = day,
-           y = scaled_estimate,
-           colour = substrate,
-           linetype = sample,
-           alpha = pH)) +
+slope_grid <- ggplot(
+  kinetics_nested %>% filter(sample != "neg. ctrl."),
+  aes(
+    x = day,
+    y = scaled_estimate,
+    colour = substrate,
+    linetype = sample,
+    alpha = pH
+  )
+) +
   # geom_vline(data = kinetic_max %>% filter(sample != "neg. ctrl."),
   #            aes(xintercept = day),
   #            size = 0.2,
   #            linetype = 2) +
   # geom_line(aes(group = interaction(replicate, sample)),
   #           size = 0.2) +
-  stat_smooth(geom = "line",
-              size = 0.4,
-              se = FALSE) +
+  stat_smooth(
+    geom = "line",
+    size = 0.4,
+    se = FALSE
+  ) +
   # scale_colour_brewer(palette = "Set1") +
   scale_colour_manual(
     values = c(
@@ -5623,7 +6200,8 @@ slope_grid <- ggplot(kinetics_nested %>% filter(sample != "neg. ctrl."),
       "#D35877",
       "#FFCC66",
       "#FF99CC"
-    )) +
+    )
+  ) +
   scale_alpha_discrete(range = c(0.3, 1)) +
   labs(y = "Normalised substrate oxidation rate") +
   # scale_colour_manual(values = c("grey75", pal_ostwald_disc[1])) +
@@ -5632,12 +6210,16 @@ slope_grid <- ggplot(kinetics_nested %>% filter(sample != "neg. ctrl."),
   facet_grid(pH ~ substrate)
 
 
-pH_facet <- ggplot(kinetics_nested %>% filter(sample != "neg. ctrl."),
-       aes(x = day,
-           y = scaled_estimate,
-           colour = substrate,
-           linetype = sample,
-           alpha = pH)) +
+pH_facet <- ggplot(
+  kinetics_nested %>% filter(sample != "neg. ctrl."),
+  aes(
+    x = day,
+    y = scaled_estimate,
+    colour = substrate,
+    linetype = sample,
+    alpha = pH
+  )
+) +
   # geom_vline(data = kinetic_max,
   #            aes(xintercept = day,
   #                colour = sample),
@@ -5646,9 +6228,11 @@ pH_facet <- ggplot(kinetics_nested %>% filter(sample != "neg. ctrl."),
   # geom_line(aes(group = interaction(replicate, sample)),
   #           size = 0.2,
   #           alpha = 0.5) +
-  stat_smooth(geom = "line",
-              size = 0.4,
-              se = FALSE) +
+  stat_smooth(
+    geom = "line",
+    size = 0.4,
+    se = FALSE
+  ) +
   # scale_colour_brewer(palette = "Set1") +
   scale_colour_manual(
     values = c(
@@ -5657,29 +6241,38 @@ pH_facet <- ggplot(kinetics_nested %>% filter(sample != "neg. ctrl."),
       "#D35877",
       "#FFCC66",
       "#FF99CC"
-    )) +
+    )
+  ) +
   scale_alpha_discrete(guide = "none", range = c(0.3, 1)) +
   # scale_colour_manual(values = c("grey75", pal_ostwald_disc[1])) +
   theme_leo() +
-  guides(colour = guide_legend(label.position = "bottom",
-                               nrow = 2)) +
-  theme(axis.text = element_blank(),
-        axis.title = element_blank(),
-        axis.ticks = element_blank(),
-        strip.text = element_blank(),
-        legend.position = c(0.5,-0.2),
-        legend.title = element_blank(),
-        legend.key.width = unit(2.5, "mm"),
-        legend.key.height = unit(1.5, "mm"),
-        legend.direction = "horizontal") +
-  facet_wrap(~ pH, ncol = 1)
+  guides(colour = guide_legend(
+    label.position = "bottom",
+    nrow = 2
+  )) +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank(),
+    strip.text = element_blank(),
+    legend.position = c(0.5, -0.2),
+    legend.title = element_blank(),
+    legend.key.width = unit(2.5, "mm"),
+    legend.key.height = unit(1.5, "mm"),
+    legend.direction = "horizontal"
+  ) +
+  facet_wrap(~pH, ncol = 1)
 
-substrate_facet <- ggplot(kinetics_nested %>% filter(sample != "neg. ctrl."),
-       aes(x = day,
-           y = substrate_scaled,
-           colour = substrate,
-           linetype = sample,
-           alpha = pH)) +
+substrate_facet <- ggplot(
+  kinetics_nested %>% filter(sample != "neg. ctrl."),
+  aes(
+    x = day,
+    y = substrate_scaled,
+    colour = substrate,
+    linetype = sample,
+    alpha = pH
+  )
+) +
   # geom_vline(data = kinetic_max,
   #            aes(xintercept = day,
   #                colour = sample),
@@ -5688,9 +6281,11 @@ substrate_facet <- ggplot(kinetics_nested %>% filter(sample != "neg. ctrl."),
   # geom_line(aes(group = interaction(replicate, sample)),
   #           size = 0.2,
   #           alpha = 0.5) +
-  stat_smooth(geom = "line",
-              size = 0.4,
-              se = FALSE) +
+  stat_smooth(
+    geom = "line",
+    size = 0.4,
+    se = FALSE
+  ) +
   # scale_alpha(name = "pH") +
   # scale_colour_brewer(palette = "Set1", guide = "none") +
   scale_colour_manual(
@@ -5700,22 +6295,25 @@ substrate_facet <- ggplot(kinetics_nested %>% filter(sample != "neg. ctrl."),
       "#D35877",
       "#FFCC66",
       "#FF99CC"
-    ), guide = "none") +
+    ), guide = "none"
+  ) +
   scale_alpha_discrete(range = c(0.3, 1)) +
   scale_linetype(guide = "none") +
   # scale_colour_manual(values = pal_pedersen_disc, name = "pH") +
   theme_leo() +
-  theme(axis.text = element_blank(),
-        axis.title = element_blank(),
-        axis.ticks = element_blank(),
-        strip.text = element_blank(),
-        # legend.title = element_blank(),
-        legend.key.height = unit(2.5, "mm"),
-        legend.key.width = unit(1.5, "mm"),
-        legend.position = c(1.025, 0.5)) +
-  facet_wrap(~ substrate, nrow = 1)
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank(),
+    strip.text = element_blank(),
+    # legend.title = element_blank(),
+    legend.key.height = unit(2.5, "mm"),
+    legend.key.width = unit(1.5, "mm"),
+    legend.position = c(1.025, 0.5)
+  ) +
+  facet_wrap(~substrate, nrow = 1)
 
-layout = "
+layout <- "
 AAAAAB
 AAAAAB
 AAAAAB
@@ -5774,8 +6372,10 @@ PA_growth_data <- map(growth_files, read_plus) %>%
     nTE_viab = nTEs_alive / (nTEs_alive + nTEs_dead),
     TE_prop = (TEs_alive + TEs_dead) / n,
     TE_viab = TEs_alive / (TEs_alive + TEs_dead),
-    TE_viab = case_when(is.nan(TE_viab) ~ 1,
-                        TRUE ~ TE_viab)
+    TE_viab = case_when(
+      is.nan(TE_viab) ~ 1,
+      TRUE ~ TE_viab
+    )
   )
 ```
 
@@ -5801,7 +6401,7 @@ read_plus <- function(flnm) {
       Well = paste0(row, column),
       started = str_remove(started, fixed(".csv")),
       date = ymd(date)
-    ) %>% 
+    ) %>%
     select(-row, -column)
 }
 
@@ -5830,15 +6430,17 @@ read_vroom <- function(flnm) {
       time = str_remove(time, fixed(".csv")),
       date = ymd(date),
       started = ymd_hms(paste(date, time, sep = "_")),
-      started = case_when(hour(started) < 14 ~ "morning", 
-                          TRUE ~ "evening")
-    ) %>% 
+      started = case_when(
+        hour(started) < 14 ~ "morning",
+        TRUE ~ "evening"
+      )
+    ) %>%
     select(-time)
 }
 
 PA_spec <- map_dfr(spec_files, read_vroom) %>%
   pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>%
-  left_join(PA_plates, by = c("date", "started", "Well")) %>% 
+  left_join(PA_plates, by = c("date", "started", "Well")) %>%
   drop_na()
 
 PA_data <- PA_spec %>%
@@ -5847,8 +6449,8 @@ PA_data <- PA_spec %>%
     absorbance = measurement / 0.52, # experimental path length in the plate
     time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
   ) %>%
-  filter(time < 390) %>% 
-  group_by(date, replicate, substrate, pH, wavelength, time) %>% 
+  filter(time < 390) %>%
+  group_by(date, replicate, substrate, pH, wavelength, time) %>%
   group_by(date, sample, substrate, pH, replicate, day) %>%
   mutate(
     density = mean(absorbance[wavelength == 600 & `Cycle #` %in% c(1, 2)]),
@@ -5894,38 +6496,48 @@ abs_max <- tibble(
 
 PA_kinetics <- PA_data %>%
   left_join(abs_max) %>%
-  left_join(lm_bounds) %>% 
+  left_join(lm_bounds) %>%
   group_by(
     date, sample, substrate, pH, replicate, day, time, lm_start, lm_stop, density
-    ) %>%
-  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>% 
+  ) %>%
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>%
   summarise(
     corrected_absorbance = corrected_absorbance[wavelength == abs_max],
     adjusted_absorbance = adjusted_absorbance[wavelength == abs_max],
-    absorbance = absorbance[wavelength == abs_max])
+    absorbance = absorbance[wavelength == abs_max]
+  )
 
 pdf("PA_kinetics.pdf", height = twocol, width = twocol)
-ggplot(PA_kinetics,
-       aes(x = time,
-           y = corrected_absorbance,
-           colour = pH,
-           linetype = sample)) +
+ggplot(
+  PA_kinetics,
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = pH,
+    linetype = sample
+  )
+) +
   # geom_line(aes(group = interaction(sample, pH))) +
-  stat_smooth(geom = "line",
-              aes(group = interaction(replicate, sample, pH)),
-              alpha = 0.5,
-              size = 0.2,
-              se = F) +
-  geom_smooth(data = filter(PA_kinetics, time %in% c(lm_start:lm_stop)),
-              aes(group = interaction(replicate, sample, pH)),
-              method = "lm",
-              size = 0.5,
-              se = F) +
+  stat_smooth(
+    geom = "line",
+    aes(group = interaction(replicate, sample, pH)),
+    alpha = 0.5,
+    size = 0.2,
+    se = F
+  ) +
+  geom_smooth(
+    data = filter(PA_kinetics, time %in% c(lm_start:lm_stop)),
+    aes(group = interaction(replicate, sample, pH)),
+    method = "lm",
+    size = 0.5,
+    se = F
+  ) +
   # scale_x_continuous(limits = c(0, 400)) +
   theme_leo() +
   theme(legend.position = "bottom") +
   facet_grid(substrate ~ day,
-             scales = "free_y")
+    scales = "free_y"
+  )
 dev.off()
 ```
 
@@ -5947,33 +6559,49 @@ PA_kinetics_nested <- PA_kinetics %>%
   select(-model) %>%
   unnest(tidied) %>%
   filter(term == "time") %>%
-  mutate(pH = as.factor(pH)) %>% 
+  mutate(pH = as.factor(pH)) %>%
   group_by(substrate, pH, replicate, sample) %>%
-  mutate(scaled_estimate = estimate / max(estimate),
-         scaled_estimate = case_when(scaled_estimate < 0 ~ 0,
-                                     TRUE ~ scaled_estimate)) %>% 
+  mutate(
+    scaled_estimate = estimate / max(estimate),
+    scaled_estimate = case_when(
+      scaled_estimate < 0 ~ 0,
+      TRUE ~ scaled_estimate
+    )
+  ) %>%
   group_by(pH, replicate) %>%
-  mutate(pH_scaled = estimate / max(estimate),
-         pH_scaled = case_when(pH_scaled < 0 ~ 0,
-                                     TRUE ~ pH_scaled)) %>% 
+  mutate(
+    pH_scaled = estimate / max(estimate),
+    pH_scaled = case_when(
+      pH_scaled < 0 ~ 0,
+      TRUE ~ pH_scaled
+    )
+  ) %>%
   group_by(substrate, replicate) %>%
-  mutate(substrate_scaled = estimate / max(estimate),
-         substrate_scaled = case_when(substrate_scaled < 0 ~ 0,
-                                     TRUE ~ substrate_scaled))
+  mutate(
+    substrate_scaled = estimate / max(estimate),
+    substrate_scaled = case_when(
+      substrate_scaled < 0 ~ 0,
+      TRUE ~ substrate_scaled
+    )
+  )
 
-PA_kinetic_max <- PA_kinetics_nested %>% 
-  group_by(pH, sample, substrate, day) %>% 
+PA_kinetic_max <- PA_kinetics_nested %>%
+  group_by(pH, sample, substrate, day) %>%
   summarise(scaled_estimate = mean(scaled_estimate)) %>%
-  group_by(pH, sample, substrate) %>% 
+  group_by(pH, sample, substrate) %>%
   mutate(
     max_estimate = max(scaled_estimate)
-  ) %>% 
+  ) %>%
   filter(scaled_estimate == max_estimate)
 
-slope_grid <- ggplot(PA_kinetics_nested,
-       aes(x = day,
-           y = scaled_estimate,
-           colour = sample)) +
+slope_grid <- ggplot(
+  PA_kinetics_nested,
+  aes(
+    x = day,
+    y = scaled_estimate,
+    colour = sample
+  )
+) +
   annotate("rect",
     ymin = -Inf,
     ymax = Inf,
@@ -5986,12 +6614,15 @@ slope_grid <- ggplot(PA_kinetics_nested,
   #            size = 0.2,
   #            linetype = 2) +
   geom_line(aes(group = interaction(replicate, sample)),
-            size = 0.2) +
-  stat_smooth(geom = "line",
-              size = 0.4,
-              se = FALSE) +
+    size = 0.2
+  ) +
+  stat_smooth(
+    geom = "line",
+    size = 0.4,
+    se = FALSE
+  ) +
   # scale_colour_brewer(palette = "Set1") +
-  scale_colour_manual(values = pal_ostwald_disc[c(1,3)]) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1, 3)]) +
   labs(y = "Normalised substrate oxidation rate") +
   theme_leo() +
   theme(legend.position = "bottom") +
@@ -6000,7 +6631,6 @@ slope_grid <- ggplot(PA_kinetics_nested,
 pdf("PA_activity_slopes.pdf", width = onecol, height = onecol)
 slope_grid
 dev.off()
-
 ```
 
 # Raman microspectroscopy
@@ -6162,7 +6792,7 @@ rmn_lac_sum <- rmn_lac_scaled %>%
 
 ```{r}
 rmn_lac_test <- ggplot(
-  rmn_lac_scaled, 
+  rmn_lac_scaled,
   aes(
     x = wavenumber,
     y = scaled_cellu
@@ -6218,7 +6848,7 @@ rmn_lac_test <- ggplot(
     legend.title = element_blank()
   ) +
   guides(colour = guide_legend(override.aes = list(alpha = 1, size = 1))) +
-  facet_grid(genotype~cell_type)
+  facet_grid(genotype ~ cell_type)
 
 # plotly::ggplotly(rmn_lac_test)
 pdf("rmn_lac.pdf", height = twocol, width = twocol)
@@ -6281,7 +6911,6 @@ violin_data_avg <- violin_data %>%
 rmn_n <- rmn_lac_sum %>%
   group_by(genotype, replicate, cell_type) %>%
   summarise(n = n())
-
 ```
 
 ### Overview
@@ -6316,7 +6945,7 @@ letters_avg <- letter_groups(violin_data_avg,
 ) %>%
   select(-value) %>%
   left_join(select(letters, -Letters), by = c("variable", "cell_type", "genotype"))
-  
+
 
 lig_violin <- ggplot(
   violin_data,
@@ -6408,26 +7037,31 @@ raman_regressions <- violin_data %>%
   mutate(cell = row_number()) %>%
   pivot_wider(names_from = variable, values_from = value) %>%
   # select(-AUC) %>%
-  pivot_longer(cols = -c(1:6), names_to = "variable", values_to ="value") %>%
+  pivot_longer(cols = -c(1:6), names_to = "variable", values_to = "value") %>%
   nest(data = -c(variable, cell_type)) %>%
   group_by(variable, cell_type) %>%
   mutate(
-    model = map(data, ~lm(value ~ `Total lignin`, data = .x)),
+    model = map(data, ~ lm(value ~ `Total lignin`, data = .x)),
     model_glance = map(model, glance),
     predicted = map(model, predict),
     residuals = map(model, residuals),
-    adj.r.squared = unlist(map(model_glance, ~ .x[["adj.r.squared"]]))) %>%
-  unnest(c(data, predicted, residuals)) 
+    adj.r.squared = unlist(map(model_glance, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  unnest(c(data, predicted, residuals))
 
 raman_regression_avg <- raman_regressions %>%
   group_by(genotype, cell_type, variable) %>%
-  summarise(value = mean(value),
-            predicted = mean(predicted),
-            divergence = value - predicted,
-            value_label = case_when(divergence > 0 ~ value + 1,
-                                    TRUE ~ value -1),
-            `Total lignin` = mean(`Total lignin`),
-            adj.r.squared = mean(adj.r.squared))
+  summarise(
+    value = mean(value),
+    predicted = mean(predicted),
+    divergence = value - predicted,
+    value_label = case_when(
+      divergence > 0 ~ value + 1,
+      TRUE ~ value - 1
+    ),
+    `Total lignin` = mean(`Total lignin`),
+    adj.r.squared = mean(adj.r.squared)
+  )
 
 resid_plot <- ggplot(raman_regressions) +
   geom_point(aes(
@@ -6486,11 +7120,13 @@ resid_plot <- ggplot(raman_regressions) +
     # direction = "y"
   ) +
   theme_leo() +
-  theme(legend.position = "bottom",
-        axis.title.y = element_blank(),
-        strip.placement = "outside",
-        strip.text = element_text(hjust = 0.5, face = "plain"),
-        legend.title = element_blank()) +
+  theme(
+    legend.position = "bottom",
+    axis.title.y = element_blank(),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5, face = "plain"),
+    legend.title = element_blank()
+  ) +
   scale_alpha_continuous(range = c(0.25, 0.75), guide = "none") +
   # scale_fill_brewer(palette = "Set2") +
   scale_colour_distiller(palette = "Greys", direction = 1, guide = "none") +
@@ -6504,7 +7140,6 @@ resid_plot
 dev.off()
 
 # plotly::ggplotly(resid_plot)
-
 ```
 
 ### Single plots
@@ -6525,26 +7160,29 @@ scatter_data <- rmn_lac_sum %>%
     # "Lignin/cellulose" = lig.cellu,
     "G<sub>CHO</sub>/G<sub>OH</sub>" = GCHO.GOH
   ) %>%
-  filter(cell_type != "LP") 
+  filter(cell_type != "LP")
 
 # single correlations
-lig_sg <- ggplot(scatter_data,
-       aes(x = `Total lignin`, y = `S/G`)
-       ) +
+lig_sg <- ggplot(
+  scatter_data,
+  aes(x = `Total lignin`, y = `S/G`)
+) +
   geom_point(
     shape = 21,
     alpha = 0.5,
     stroke = 0.2,
     aes(fill = genotype)
-    ) +
+  ) +
   # stat_ellipse(aes(colour = genotype),
   #              # geom = "polygon",
-  #              type = "t", 
+  #              type = "t",
   #              level = 0.4) +
-  geom_smooth(method = "loess",
-              se = F,
-              colour = "black",
-              span = 3) +
+  geom_smooth(
+    method = "loess",
+    se = F,
+    colour = "black",
+    span = 3
+  ) +
   scale_fill_viridis_d() +
   theme_leo() +
   theme(legend.position = "bottom") +
@@ -6556,29 +7194,33 @@ dev.off()
 
 # single comparisons
 
-single_violin_data <- violin_data %>% 
-  mutate(genotype = recode(genotype,
-                           "Q-4" = "<i>Q-4</i>",
-                           "Q-5" = "<i>Q-5</i>",
-                           "Q-10" = "<i>Q-10</i>",
-                           "Q-12" = "<i>Q-12</i>",
-                           "Q-17" = "<i>Q-17</i>",
-                           "Q" = "<i>Q</i>"),
-         variable = recode(variable,
-                           "G-CHO/G-CHOH" = "<b>G</b><sub>CHO</sub>/<b>G</b><sub>CHOH</sub>"))
+single_violin_data <- violin_data %>%
+  mutate(
+    genotype = recode(genotype,
+      "Q-4" = "<i>Q-4</i>",
+      "Q-5" = "<i>Q-5</i>",
+      "Q-10" = "<i>Q-10</i>",
+      "Q-12" = "<i>Q-12</i>",
+      "Q-17" = "<i>Q-17</i>",
+      "Q" = "<i>Q</i>"
+    ),
+    variable = recode(variable,
+      "G-CHO/G-CHOH" = "<b>G</b><sub>CHO</sub>/<b>G</b><sub>CHOH</sub>"
+    )
+  )
 
 lig_violin <- function(var, ct) {
-  letters <- letter_groups(single_violin_data %>% 
-                             filter(variable == var & cell_type == ct),
-    value,
-    genotype,
-    "tukey",
-    print_position = "below",
-    print_adjust = 0.5
-  ) 
+  letters <- letter_groups(single_violin_data %>%
+    filter(variable == var & cell_type == ct),
+  value,
+  genotype,
+  "tukey",
+  print_position = "below",
+  print_adjust = 0.5
+  )
 
   ggplot(
-    data = single_violin_data %>% 
+    data = single_violin_data %>%
       filter(variable == var & cell_type == ct),
     aes(x = genotype, y = value)
   ) +
@@ -6609,8 +7251,10 @@ lig_violin <- function(var, ct) {
       family = "Helvetica",
       position = position_dodge(width = 0.6)
     ) +
-    labs(y = var,
-         title = ct) +
+    labs(
+      y = var,
+      title = ct
+    ) +
     scale_y_continuous(expand = expansion(mult = 0.1)) +
     # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
     # scale_fill_manual(values = pal_flame_disc) +
@@ -6626,11 +7270,11 @@ lig_violin <- function(var, ct) {
     )
 }
 pdf("IF_ald_to_alc.pdf", width = onecol * 0.5, height = onecol * 0.25)
-lig_violin("<b>G</b><sub>CHO</sub>/<b>G</b><sub>CHOH</sub>", "IF") 
+lig_violin("<b>G</b><sub>CHO</sub>/<b>G</b><sub>CHOH</sub>", "IF")
 dev.off()
 
 pdf("IF_total_lignin.pdf", width = onecol * 0.5, height = onecol * 0.25)
-lig_violin("Total lignin", "IF") 
+lig_violin("Total lignin", "IF")
 dev.off()
 ```
 
@@ -6640,17 +7284,17 @@ dev.off()
 
 ```{r}
 
-pca_data <- rmn_lac_scaled %>% 
-  filter(cell_type != "LP") %>% 
+pca_data <- rmn_lac_scaled %>%
+  filter(cell_type != "LP") %>%
   group_by(genotype, replicate, cell_type, wavenumber) %>%
   mutate(wavenumber = round(wavenumber)) %>%
-  unite("ID", genotype, replicate, cell_type, TE) %>% 
-  group_by(ID) %>% 
-  complete(wavenumber = seq(min(wavenumber), max(wavenumber), by = 1L)) %>% 
-  select(ID, wavenumber, scaled) %>% 
-  filter(wavenumber %in% c(320:1780)) %>% 
-  arrange(wavenumber, .by_group = T) %>% 
-  fill(scaled) %>% 
+  unite("ID", genotype, replicate, cell_type, TE) %>%
+  group_by(ID) %>%
+  complete(wavenumber = seq(min(wavenumber), max(wavenumber), by = 1L)) %>%
+  select(ID, wavenumber, scaled) %>%
+  filter(wavenumber %in% c(320:1780)) %>%
+  arrange(wavenumber, .by_group = T) %>%
+  fill(scaled) %>%
   pivot_wider(names_from = wavenumber, values_from = scaled)
 
 pca_result <- prcomp(pca_data[, -1], center = TRUE, scale. = TRUE)
@@ -6709,12 +7353,11 @@ complete_pca <- ggplot(gg_pca, aes(x = PC1, y = PC2, fill = genotype)) +
     plot.margin = unit(c(2, 2, 3, 2), "mm"),
     plot.title = element_text(size = 10)
   ) +
-  facet_wrap(~ cell_type, scale = "free")
+  facet_wrap(~cell_type, scale = "free")
 
 pdf("overall_PCA.pdf", width = twocol, height = onecol)
 complete_pca
 dev.off()
-
 ```
 
 ### Selected peaks
@@ -6846,7 +7489,7 @@ pca_rmn <- rmn_lac_sum %>%
   ) %>%
   filter(cell_type != "LP") %>%
   group_by(genotype, cell_type) %>%
-  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE))) 
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
 
 pca_activity <- ungroup(nested_data_dab) %>%
   add_row(ungroup(nested_data_daf)) %>%
@@ -6857,7 +7500,7 @@ pca_activity <- ungroup(nested_data_dab) %>%
 
 pca_complete <- pca_rmn %>%
   left_join(pca_activity) %>%
-  pivot_wider(everything(), names_from = cell_type, values_from = -c(1,2))
+  pivot_wider(everything(), names_from = cell_type, values_from = -c(1, 2))
 
 pca_result <- prcomp(pca_complete[, -1], center = TRUE, scale. = TRUE)
 rownames(pca_result$x) <- pca_complete$genotype
@@ -6866,9 +7509,9 @@ factoextra::fviz_pca_biplot(pca_result)
 
 cell_type_pca <- function(celltype) {
   pca_data <- pca_rmn %>%
-  left_join(pca_activity) %>%
-  filter(cell_type == celltype) %>%
-  pivot_wider(everything(), names_from = cell_type, values_from = -c(genotype, cell_type))
+    left_join(pca_activity) %>%
+    filter(cell_type == celltype) %>%
+    pivot_wider(everything(), names_from = cell_type, values_from = -c(genotype, cell_type))
 
   pca_result <- prcomp(pca_data[, -1], center = TRUE, scale. = TRUE)
   rownames(pca_result$x) <- pca_data$genotype
@@ -6949,88 +7592,100 @@ dev.off()
 ### Load data
 
 ```{r}
-expression <- read_csv("/home/leonard/Documents/Uni/Master/Master thesis/Laccases/Expression/R_file.csv") %>% 
-  filter(dataset == "array") %>% 
-  mutate(time = case_when(time == 0 ~ "Proliferation",
-                          TRUE ~ "SCW formation"),
-         laccase = ordered(laccase, levels = c(
-           "LAC1",
-           "LAC2",
-           "LAC3",
-           "LAC4",
-           "LAC5",
-           "LAC6",
-           "LAC7",
-           "LAC8",
-           "LAC9",
-           "LAC10",
-           "LAC11",
-           "LAC12",
-           "LAC13",
-           "LAC14",
-           "LAC15",
-           "LAC16",
-           "LAC17",
-           "XCP2",
-           "IRX3"
-         )))
+expression <- read_csv("/home/leonard/Documents/Uni/Master/Master thesis/Laccases/Expression/R_file.csv") %>%
+  filter(dataset == "array") %>%
+  mutate(
+    time = case_when(
+      time == 0 ~ "Proliferation",
+      TRUE ~ "SCW formation"
+    ),
+    laccase = ordered(laccase, levels = c(
+      "LAC1",
+      "LAC2",
+      "LAC3",
+      "LAC4",
+      "LAC5",
+      "LAC6",
+      "LAC7",
+      "LAC8",
+      "LAC9",
+      "LAC10",
+      "LAC11",
+      "LAC12",
+      "LAC13",
+      "LAC14",
+      "LAC15",
+      "LAC16",
+      "LAC17",
+      "XCP2",
+      "IRX3"
+    ))
+  )
 ```
 
 ### Plot Expression
 ```{r}
-expression_highlight <- tibble(laccase = c("LAC4", "LAC5", "LAC10", "LAC11", "LAC12", "LAC17")) %>% 
+expression_highlight <- tibble(laccase = c("LAC4", "LAC5", "LAC10", "LAC11", "LAC12", "LAC17")) %>%
   mutate(laccase = ordered(laccase, levels = c(
-           "LAC1",
-           "LAC2",
-           "LAC3",
-           "LAC4",
-           "LAC5",
-           "LAC6",
-           "LAC7",
-           "LAC8",
-           "LAC9",
-           "LAC10",
-           "LAC11",
-           "LAC12",
-           "LAC13",
-           "LAC14",
-           "LAC15",
-           "LAC16",
-           "LAC17",
-           "XCP2",
-           "IRX3"
-         )))
+    "LAC1",
+    "LAC2",
+    "LAC3",
+    "LAC4",
+    "LAC5",
+    "LAC6",
+    "LAC7",
+    "LAC8",
+    "LAC9",
+    "LAC10",
+    "LAC11",
+    "LAC12",
+    "LAC13",
+    "LAC14",
+    "LAC15",
+    "LAC16",
+    "LAC17",
+    "XCP2",
+    "IRX3"
+  )))
 
-expression_plot <- ggplot(expression,
-       aes(x = laccase)) +
-  geom_tile(data = expression_highlight,
-            aes(y = 3,
-                width = 0.75,
-                height = 10),
-            fill = "#ffcc3d") +
+expression_plot <- ggplot(
+  expression,
+  aes(x = laccase)
+) +
+  geom_tile(
+    data = expression_highlight,
+    aes(
+      y = 3,
+      width = 0.75,
+      height = 10
+    ),
+    fill = "#ffcc3d"
+  ) +
   scale_fill_manual(values = c("black", "white")) +
   scale_x_discrete(drop = F) +
   geom_pointrange(aes(
-    y = absolute, 
+    y = absolute,
     fill = time,
     ymin = absolute - absolute.sd,
-           ymax = absolute + absolute.sd),
-                  shape = 21,
-                  stroke = 0.2) +
+    ymax = absolute + absolute.sd
+  ),
+  shape = 21,
+  stroke = 0.2
+  ) +
   labs(y = "Relative expression") +
   coord_flip(clip = "off", ylim = c(0, 8)) +
   theme_leo() +
-  theme(axis.title.y = element_blank(),
-        axis.text.x = element_blank(),
-        axis.text.y = element_text(hjust = 0),
-        axis.ticks = element_blank(),
-        # panel.border = element_blank(),
-        legend.position = "bottom",
-        legend.title = element_blank()) 
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_text(hjust = 0),
+    axis.ticks = element_blank(),
+    # panel.border = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_blank()
+  )
 
 pdf("lac_expression.pdf", width = onecol * 0.3, height = onecol * 0.65)
 expression_plot
 dev.off()
 ```
-
-
