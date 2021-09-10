@@ -253,10 +253,6 @@ letters <- letter_groups(pheno_data,
 ) %>%
   mutate(genotype = ordered(genotype, levels = c(WT, triple_it, quad_it, Q_it)))
 
-rect_data <- pheno_data %>%
-  group_by(genotype) %>%
-  summarise(genotype = unique(genotype))
-
 final_height <- ggplot(
   pheno_data,
   aes(
@@ -308,21 +304,107 @@ final_height
 ### Siliques
 
 ```{r}
-ggplot(siliques) +
-  # geom_violin() +
-  # ggbeeswarm::geom_quasirandom(aes(x = genotype,
-  #                                  y = length)) +
-  ggridges::geom_density_ridges_gradient(aes(
-    x = length,
-    y = genotype,
-    fill = stat(x)
-  ),
-  bandwidth = 0.05,
-  quantile_lines = TRUE, quantiles = 2
+
+siliques_avg <- siliques %>% 
+  group_by(genotype, rep) %>% 
+  summarise(length = mean(length)) %>% 
+  left_join(pheno_data %>% select(genotype, rep, stretched.height)) %>% 
+  drop_na()
+
+letters_tech <- letter_groups(siliques %>%  filter(genotype %in% c(WT, quad_it, Q_it)),
+  length,
+  genotype,
+  "tukey",
+  print_position = "below",
+  print_adjust = 1
+) %>%
+  mutate(genotype = ordered(genotype, levels = c(WT, triple_it, quad_it, Q_it))) %>% 
+  select(-Letters)
+
+letters <- letter_groups(siliques_avg %>% filter(genotype %in% c(WT, quad_it, Q_it)),
+  length,
+  genotype,
+  "tukey",
+  print_position = "below",
+  print_adjust = 1
+) %>%
+  mutate(genotype = ordered(genotype, levels = c(WT, triple_it, quad_it, Q_it))) %>% 
+  select(-length) %>% 
+  left_join(letters_tech)
+
+silique_plot <- ggplot(
+  siliques %>% filter(genotype %in% c(WT, quad_it, Q_it)),
+  aes(
+    x = genotype,
+    y = length,
+    fill = genotype
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
   ) +
-  scale_fill_gradientn(colours = wesanderson::wes_palette("Zissou1", n = 5)) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 2,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Silique length [cm]") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
-  theme(axis.text.y = element_markdown())
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(18, "mm")
+    ),
+    axis.text.x = element_markdown()
+  ) 
+
+r_sq <- glance(lm(length ~ stretched.height, data = siliques_avg))$adj.r.squared %>% 
+  round(digits = 2)
+
+r <- cor(x = siliques_avg$length, y = siliques_avg$stretched.height) %>% 
+  round(digits = 2)
+
+silique_linreg <- ggplot(siliques_avg,
+       aes(x = stretched.height,
+           y = length)) +
+  geom_point(shape = 16,
+             alpha = 0.5) +
+  geom_smooth(method = "lm") +
+  annotate("richtext", 
+           label = paste0("R<sup>2</sup> = ", r_sq, "<br><i>r</i> = ", r),
+           x = 55,
+           y = 1.2,
+           hjust = 1,
+           fill = NA,
+           label.size = NA,
+           family = "Helvetica",
+           size = ggtext_size) +
+  labs(x = "Plant height at harvest [cm]",
+       y = "Average silique length [cm]") +
+  theme_leo()
+
+silique_plot
+silique_linreg
 ```
 
 
@@ -507,6 +589,12 @@ rosette_area <- bind_rows(rosette_area_I, rosette_area_II, rosette_area_III) %>%
 #### Area over time
 
 ```{r}
+label_data <- rosette_area %>% 
+  filter(genotype %in% c(WT, quad_it, Q_it) & dpg == 29) %>% 
+  group_by(genotype) %>% 
+  summarise(value = mean(value),
+            dpg = 29)
+
 area_plot <- ggplot(
   rosette_area %>% filter(genotype %in% c(WT, quad_it, Q_it)),
   aes(
@@ -515,6 +603,9 @@ area_plot <- ggplot(
     colour = genotype
   )
 ) +
+  geom_vline(xintercept = c(20, 29),
+             linetype = 2,
+             size = 0.2) +
   geom_line(aes(group = interaction(genotype, replicate)),
     size = 0.2,
     alpha = 0.2
@@ -525,9 +616,17 @@ area_plot <- ggplot(
     linetype = 2,
     span = 0.4
   ) +
+  geom_richtext(data = label_data,
+            aes(label = genotype),
+            family = "Helvetica",
+            size = ggtext_size,
+            label.size = NA,
+            fill = NA,
+            hjust = 0) +
   labs(x = "Days past germination",
        y = "Rosette area [cm<sup>2</sup>]") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.1))) +
   theme_leo() +
   theme(axis.title.y = element_markdown())
 
@@ -540,7 +639,7 @@ area_plot
 ```{r}
 # define linear phase
 lm_start <- 20
-lm_stop <- 30
+lm_stop <- 29
 
 # calculate slopes
 nested_rosette_area <- rosette_area %>%
@@ -705,6 +804,11 @@ stem_data <- bind_rows(stem_data_II, stem_data_III) %>%
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     ),
+    instance = case_when(
+      replicate < 6 ~ "1",
+      replicate < 11 ~ "2",
+      TRUE ~ "3"
+    ),
     height = height / space * 1.5,
     long_axis = long_axis / space * 1.5,
     longest_path = longest_path / space * 1.5,
@@ -717,19 +821,119 @@ stem_data <- bind_rows(stem_data_II, stem_data_III) %>%
   group_by(genotype, replicate) %>%
   mutate(
     flowering_start = dpg[height == min(height[height > 5])],
-    dpf = dpg - flowering_start
+    dpb = dpg - flowering_start
   )
 ```
 
-#### Height over time
+#### Bolting
 
 ```{r}
-height_plot <- ggplot(
+
+flower_data <- stem_data %>% filter(genotype %in% c(WT, quad_it, Q_it)) %>% 
+  group_by(genotype, replicate) %>% 
+  summarise(flowering_start = mean(flowering_start),
+            instance = unique(instance))
+
+letters <- letter_groups(flower_data,
+                        flowering_start,
+                        genotype,
+                        "tukey",
+                        print_position = "below")
+bolt_geno <- ggplot(flower_data, aes(x = genotype, y = flowering_start)) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Bolting [dpg]") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(25, "mm")
+    ),
+    axis.text.x = element_markdown()
+  ) 
+
+p_val <- glance(t.test(flowering_start ~ instance, data = flower_data))$p.value %>% 
+  formatC(digits = 1, format = "e")
+
+bolt_inst <- ggplot(flower_data, aes(x = instance, y = flowering_start)) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    # aes(fill = instance),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 2,
+    scale = "width"
+  ) +
+  annotate("richtext", 
+           label = paste0("<i>P</i> = ", p_val),
+           x = 1.5,
+           y = 25,
+           hjust = 0.5,
+           fill = NA,
+           label.size = NA,
+           family = "Helvetica",
+           size = ggtext_size) +
+  labs(y = "Bolting [dpg]") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  labs(x = "Growth instance") +
+  theme_leo() +
+  theme(
+    # axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(25, "mm")
+    ),
+    axis.text.x = element_markdown()
+  ) 
+
+bolt_geno
+bolt_inst
+
+```
+
+#### Hue over time
+
+```{r}
+hue_plot <- ggplot(
   stem_data %>% filter(genotype %in% c(WT, quad_it, Q_it) &
-    dpf < 31),
+    dpb < 31),
   aes(
-    x = dpf,
-    y = height,
+    x = dpb,
+    y = hue,
     colour = genotype
   )
 ) +
@@ -743,9 +947,114 @@ height_plot <- ggplot(
     linetype = 2,
     span = 0.4
   ) +
-  labs(x = "Days past first flower",
+  labs(x = "Days past bolting",
+       y = "Hue [°]") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  # scale_y_continuous(position = "right") +
+  theme_leo() +
+  theme(axis.title.y = element_markdown()) +
+  facet_wrap(~ paste("Growth instance", instance))
+
+hue_end <- stem_data %>% 
+  filter(genotype %in% c(WT, quad_it, Q_it)) %>% 
+  group_by(genotype, replicate) %>% 
+  summarise(hue_end = min(hue[dpb > 28]),
+            instance = unique(instance))
+
+letters <- letter_groups(hue_end,
+                         hue_end,
+                         genotype,
+                         "tukey",
+                         instance,
+                         print_position = "below")
+
+hue_violin <- ggplot(hue_end,
+                     aes(x = genotype, 
+                         y = hue_end)) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Hue at time of harvest [°]") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(25, "mm")
+    ),
+    axis.text.x = element_markdown()
+  ) +
+  facet_wrap(~ paste("Growth instance", instance))
+hue_plot
+hue_violin
+```
+
+#### Height over time
+
+```{r}
+label_data <- stem_data %>% 
+  filter(genotype %in% c(WT, quad_it, Q_it) & dpb == 30) %>% 
+  group_by(genotype) %>% 
+  summarise(height = mean(height),
+            dpb = 30)
+
+height_plot <- ggplot(
+  stem_data %>% filter(genotype %in% c(WT, quad_it, Q_it) &
+    dpb < 31),
+  aes(
+    x = dpb,
+    y = height,
+    colour = genotype
+  )
+) +
+  geom_vline(xintercept = c(-3, 11),
+             linetype = 2,
+             size = 0.2) +
+  geom_line(aes(group = interaction(plant, replicate)),
+    size = 0.2,
+    alpha = 0.2
+  ) +
+  geom_smooth(
+    se = F,
+    size = 0.4,
+    linetype = 2,
+    span = 0.4
+  ) +
+  geom_richtext(data = label_data,
+            aes(label = genotype),
+            family = "Helvetica",
+            size = ggtext_size,
+            label.size = NA,
+            fill = NA,
+            hjust = 0) +
+  labs(x = "Days past bolting",
        y = "Stem height [cm]") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.1))) +
   scale_y_continuous(position = "right") +
   theme_leo() +
   theme(axis.title.y = element_markdown())
@@ -763,18 +1072,18 @@ lm_stop <- 11
 
 # calculate slopes
 nested_stem_data <- stem_data %>%
-  filter(dpf >= lm_start & dpf <= lm_stop & genotype %in% c(WT, quad_it, Q_it)) %>%
-  select(genotype, replicate, height, dpf) %>%
-  nest(data = c(dpf, height)) %>%
+  filter(dpb >= lm_start & dpb <= lm_stop & genotype %in% c(WT, quad_it, Q_it)) %>%
+  select(genotype, replicate, height, dpb) %>%
+  nest(data = c(dpb, height)) %>%
   mutate(
-    fit = map(data, ~ lm(height ~ dpf, data = .x)),
+    fit = map(data, ~ lm(height ~ dpb, data = .x)),
     tidied = map(fit, tidy),
     model = map(fit, glance),
     adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
   ) %>%
   select(-model) %>%
   unnest(tidied) %>%
-  filter(term == "dpf")
+  filter(term == "dpb")
 
 # calculate average R²
 avg_r_sq <- nested_stem_data %>%
@@ -864,19 +1173,130 @@ stem_growth_plot
 
 ### Root growth
 
+#### Load data
+
 ```{r}
 root_data <- read_csv(paste0(
-  datapath, "PhD/Phenotyping/2020-10_lac_root_growth/2020-10_root_growth.csv"
-))
-
-ggplot(root_data, aes(
-  y = length.cm,
-  x = genotype
-)) +
-  geom_violin(draw_quantiles = 0.5) +
-  geom_quasirandom() +
-  theme_leo()
+  datapath, "PhD/Phenotyping/2020-10_lac_root_growth/2020-10_roots.csv"
+)) %>% 
+  mutate(genotype = ordered(case_when(
+    genotype == "WT" ~ genotype,
+    TRUE ~ paste0("<i>", genotype, "</i>")
+  ),
+  levels = c(WT, triple_it, quad_it, Q_it)
+  )) 
 ```
+
+#### Length over time
+
+```{r}
+root_plot <- ggplot(
+  root_data %>% filter(genotype %in% c(WT, quad_it, Q_it)),
+  aes(
+    x = dpg,
+    y = length,
+    colour = genotype
+  )
+) +
+  geom_line(aes(group = interaction(genotype, position, plant)),
+    size = 0.2,
+    alpha = 0.2
+  ) +
+  geom_smooth(
+    method = "lm",
+    fullrange = T,
+    se = F,
+    size = 0.4,
+    linetype = 2
+  ) +
+  labs(x = "Days past germination",
+       y = "Root length [cm]") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  theme_leo() +
+  theme(axis.title.y = element_markdown())
+
+
+root_plot
+```
+
+#### Growth rate
+
+```{r}
+lm_start <- 2
+lm_stop <- 7
+
+# calculate slopes
+nested_root_data <- root_data %>%
+  filter(dpg >= lm_start & dpg <= lm_stop & genotype %in% c(WT, quad_it, Q_it)) %>%
+  select(genotype, position, plant, length, dpg) %>%
+  nest(data = c(dpg, length)) %>%
+  mutate(
+    fit = map(data, ~ lm(length ~ dpg, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "dpg")
+
+letters <- letter_groups(nested_root_data,
+  estimate,
+  genotype,
+  "tukey",
+  print_position = "below",
+  print_adjust = 0.5
+) %>%
+  mutate(genotype = ordered(genotype, levels = c(WT, triple_it, quad_it, Q_it)))
+
+# plot slopes
+roots <- ggplot(
+  nested_root_data,
+  aes(
+    x = genotype,
+    y = estimate
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Root growth [cm day<sup>-1</sup>]") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(25, "mm")
+    ),
+    axis.text.x = element_markdown()
+  ) 
+roots
+```
+
 
 ## Pheno figure
 
@@ -895,9 +1315,28 @@ area_plot +
   inset_element(final_height,
     left = 0.425, bottom = 0.075, right = 0.925, top = 0.375,
     align_to = "full"
-  )
+  ) 
 dev.off()
 ```
+
+## Pheno supplementary figure
+
+```{r}
+layout <- "
+AABBCDD
+EEFFGGG
+"
+pdf("Blaschek2022_figureS1.pdf", height = onecol, width = twocol)
+roots + bolt_geno + bolt_inst + silique_plot + silique_linreg + hue_plot + hue_violin +
+  plot_layout(design = layout) &
+  plot_annotation(
+    tag_levels = "A"
+  ) &
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
+dev.off()
+
+```
+
 
 
 # Wiesner
@@ -909,7 +1348,8 @@ dev.off()
 ```{r, message=FALSE}
 Wiesner_files <-
   list.files(
-    path = paste0(datapath, "PhD/Wiesner/2021-05_Wiesner/Stitched/Measurements/"),
+    path = c(paste0(datapath, "PhD/Wiesner/2021-05_Wiesner/Stitched/Measurements/"),
+             paste0(datapath, "PhD/Wiesner/2021-05_Wiesner/2021-09-03_wonky-images/Measurements/")),
     pattern = "*.csv",
     recursive = TRUE,
     full.names = TRUE
@@ -6736,9 +7176,9 @@ dev.off()
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 rmn_files <-
   list.files(
-    path = paste0(datapath, "PhD/Raman/2020-11_lac_mutants/"),
+    path = paste0(datapath, "PhD/Raman/2020-11_lac_mutants"),
     pattern = "*.txt",
-    recursive = TRUE,
+    recursive = FALSE,
     full.names = TRUE
   )
 
@@ -6852,8 +7292,8 @@ rmn_lac_sum <- rmn_lac_scaled %>%
         corrected.intensity[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1] +
         corrected.intensity[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1] +
         corrected.intensity[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
-    "total_lignin" = (scaled_cellu[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
-      scaled_cellu[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
+    "total_lignin" = (scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
+      scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "P_rel" = scaled_lig[abs(wavenumber - 993) == min(abs(wavenumber - 993))][1],
     "G_rel" = scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
     "G_tot" = scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
@@ -6863,9 +7303,9 @@ rmn_lac_sum <- rmn_lac_scaled %>%
     "S_rel" = scaled_lig[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "S_tot" = scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "cellulose" =
-      scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1] +
-        scaled[abs(wavenumber - 378) == min(abs(wavenumber - 378))][1] +
-        scaled[abs(wavenumber - 1120) == min(abs(wavenumber - 1120))][1],
+      # scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1] +
+        scaled[abs(wavenumber - 378) == min(abs(wavenumber - 378))][1],
+        # scaled[abs(wavenumber - 1120) == min(abs(wavenumber - 1120))][1],
     "cellu_cryst" = scaled[abs(wavenumber - 378) == min(abs(wavenumber - 378))][1] /
       scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1],
     "lig.cellu" = total_lignin / cellulose,
@@ -6954,12 +7394,15 @@ dev.off()
 
 ## Lignin composition
 
-```{r}
+### Overview
 
+```{r}
 violin_data <- rmn_lac_sum %>%
   select(
     "Total lignin" = total_lignin,
     "S/G" = S.G,
+    "S" = S_rel,
+    "G" = G_rel,
     # "P-units" = P_rel,
     # AUC,
     # "Cellulose cryst." = cellu_cryst,
@@ -7002,16 +7445,6 @@ violin_data <- rmn_lac_sum %>%
 violin_data_avg <- violin_data %>%
   group_by(genotype, cell_type, replicate, variable, instance) %>%
   summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
-
-
-rmn_n <- rmn_lac_sum %>%
-  group_by(genotype, replicate, cell_type) %>%
-  summarise(n = n())
-```
-
-### Overview
-
-```{r}
 
 letters <- letter_groups(violin_data,
   value,
@@ -7099,7 +7532,7 @@ lig_violin <- ggplot(
   #   size = 1.5
   # ) +
   geom_text(
-    data = letters,
+    data = letters_avg,
     aes(label = Letters),
     size = ggtext_size,
     family = "Helvetica"
@@ -7118,6 +7551,134 @@ lig_violin <- ggplot(
   facet_grid(variable ~ cell_type, scales = "free_y", switch = "y")
 
 pdf("lig_violin_complete.pdf", width = twocol, height = twocol)
+lig_violin
+dev.off()
+```
+
+### Main figure
+
+```{r}
+
+violin_data <- rmn_lac_sum %>%
+  select(
+    # "Total lignin" = total_lignin,
+    "<sup>Lignin</sup>&frasl;<sub>cellulose</sub>" = lig.cellu,
+    "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S.G,
+    # "S" = S_rel,
+    # "G" = G_rel,
+    # "P-units" = P_rel,
+    # AUC,
+    # "Cellulose cryst." = cellu_cryst,
+    # "Benzaldehydes" = Benz_rel,
+    # "G-CHOH" = GOH_rel,
+    # "G-CHO" = GCHO_rel,
+    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO.GOH
+  ) %>%
+  filter(cell_type != "LP") %>%
+  pivot_longer(
+    cols = -c(genotype:replicate),
+    names_to = "variable",
+    values_to = "value"
+  ) %>%
+  mutate(
+    variable = as.character(variable),
+    cell_type = ordered(cell_type,
+      levels = c(
+        "IF",
+        "LP",
+        "XF",
+        "PX",
+        "MX"
+      )
+    ),
+    genotype = ordered(case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    levels = c(WT, triple_it, quad_it, Q_it)
+    ),
+    instance = case_when(
+      replicate %in% c(1:5) ~ "1",
+      TRUE ~ "2"
+    )
+  )
+
+violin_data_avg <- violin_data %>%
+  group_by(genotype, cell_type, replicate, variable, instance) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+letters <- letter_groups(violin_data,
+  value,
+  genotype,
+  "tukey",
+  variable,
+  cell_type,
+  print_position = "above"
+) %>%
+  mutate(value = case_when(
+    variable == "<sup>**S**</sup>&frasl;<sub>**G**</sub>" & cell_type %in% c("PX", "MX") ~
+    value + 0.5,
+    TRUE ~ value
+  ))
+
+letters_avg <- letter_groups(violin_data_avg,
+  value,
+  genotype,
+  "tukey",
+  variable,
+  cell_type,
+  print_position = "above"
+) %>%
+  select(-value) %>%
+  left_join(select(letters, -Letters), by = c("variable", "cell_type", "genotype"))
+
+
+lig_violin <- ggplot(
+  violin_data,
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.25,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  expand_limits(y = 0) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title = element_blank(),
+    axis.text.x = element_markdown(),
+    strip.placement = "outside",
+    strip.text.y.left = element_textbox_simple(halign = 0.5, 
+                                               orientation = "left-rotated",
+                                               size = 8),
+  ) +
+  facet_grid(variable ~ cell_type, scales = "free_y", switch = "y")
+
+pdf("Raman_fig.pdf", width = twocol, height = onecol)
 lig_violin
 dev.off()
 ```
