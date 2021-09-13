@@ -407,6 +407,23 @@ silique_plot
 silique_linreg
 ```
 
+```{r}
+thickness_data <- pheno_data %>% 
+  filter(genotype %in% c(WT, quad_it, Q_it)) %>% 
+  mutate(
+    rep = as.numeric(rep),
+    instance = case_when(
+      rep < 6 ~ "1",
+      rep < 11 ~ "2",
+      TRUE ~ "3"
+    ))
+
+ggplot(thickness_data, aes(x = instance, y = thickness)) +
+  geom_point() +
+  geom_boxplot(alpha = 0.5)
+```
+
+
 
 ## Image based phenotyping
 
@@ -955,6 +972,12 @@ hue_plot <- ggplot(
   theme(axis.title.y = element_markdown()) +
   facet_wrap(~ paste("Growth instance", instance))
 
+hue_plot
+```
+
+#### Hue at harvest
+
+```{r}
 hue_end <- stem_data %>% 
   filter(genotype %in% c(WT, quad_it, Q_it)) %>% 
   group_by(genotype, replicate) %>% 
@@ -1009,7 +1032,7 @@ hue_violin <- ggplot(hue_end,
     axis.text.x = element_markdown()
   ) +
   facet_wrap(~ paste("Growth instance", instance))
-hue_plot
+
 hue_violin
 ```
 
@@ -1477,7 +1500,7 @@ Wiesner_plot <- ggplot(
     size = ggtext_size,
     family = "Helvetica"
   ) +
-  labs(y = "Relative coniferaldehyde") +
+  labs(y = "Relative <b>G</b><sub>CHO</sub>") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
   # scale_x_discrete(limits = c(0, 1)) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
@@ -1489,11 +1512,12 @@ Wiesner_plot <- ggplot(
       halign = 0.5,
       width = unit(25, "mm")
     ),
-    axis.text.x = element_markdown()
+    axis.text.x = element_markdown(),
+    panel.spacing = unit(0.5, "mm")
   ) +
   facet_wrap(~cell_type, nrow = 1)
 
-pdf("lac_Wiesner.pdf", width = twocol, height = onecol * 0.5)
+pdf("lac_Wiesner.pdf", width = twocol * 1.05, height = onecol * 0.3)
 Wiesner_plot
 dev.off()
 ```
@@ -7275,9 +7299,9 @@ rmn_lac_avg <- rmn_lac_scaled %>%
   group_by(genotype, cell_type) %>%
   arrange(genotype, cell_type, wavenumber) %>%
   summarise(
-    roll_mean = slider::slide_index_dbl(scaled, wavenumber, mean, .before = 1, .after = 1),
+    roll_mean = slider::slide_index_dbl(scaled, wavenumber, mean, .before = 1.5, .after = 1.5),
     roll_sd = slider::slide_index_dbl(scaled, wavenumber, sd, .before = 2, .after = 2),
-    roll_scaled_cellu = slider::slide_index_dbl(scaled_cellu, wavenumber, mean, .before = 1, .after = 1),
+    roll_scaled_cellu = slider::slide_index_dbl(scaled_cellu, wavenumber, mean, .before = 1.5, .after = 1.5),
     wavenumber = wavenumber
   )
 
@@ -7291,15 +7315,15 @@ rmn_lac_sum <- rmn_lac_scaled %>%
       corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] +
         corrected.intensity[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1] +
         corrected.intensity[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1] +
-        corrected.intensity[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
+        corrected.intensity[abs(wavenumber - 1624) == min(abs(wavenumber - 1624))][1],
     "total_lignin" = (scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
       scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "P_rel" = scaled_lig[abs(wavenumber - 993) == min(abs(wavenumber - 993))][1],
     "G_rel" = scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
     "G_tot" = scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
     "GOH_rel" = scaled_lig[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1],
-    "GCHO_rel" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
-    "GCHO_tot" = scaled[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
+    "GCHO_rel" = scaled_lig[abs(wavenumber - 1624) == min(abs(wavenumber - 1624))][1],
+    "GCHO_tot" = scaled[abs(wavenumber - 1624) == min(abs(wavenumber - 1624))][1],
     "S_rel" = scaled_lig[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "S_tot" = scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "cellulose" =
@@ -7313,7 +7337,7 @@ rmn_lac_sum <- rmn_lac_scaled %>%
       scaled_lig[abs(wavenumber - 1273) == min(abs(wavenumber - 1273))][1],
     "GOH.G" = scaled_lig[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1] /
       scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
-    "GCHO.GOH" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1] /
+    "GCHO.GOH" = scaled_lig[abs(wavenumber - 1624) == min(abs(wavenumber - 1624))][1] /
       scaled_lig[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1],
     "O4_van_rel" = scaled_lig[abs(wavenumber - 1303) == min(abs(wavenumber - 1303))][1],
     "other_van_rel" = scaled_lig[abs(wavenumber - 785) == min(abs(wavenumber - 785))][1],
@@ -7324,72 +7348,47 @@ rmn_lac_sum <- rmn_lac_scaled %>%
   )
 ```
 
-## View spectra
+## Plot spectra
 
 ```{r}
-rmn_lac_test <- ggplot(
-  rmn_lac_scaled,
-  aes(
-    x = wavenumber,
-    y = scaled_cellu
-  )
-) +
-  scale_x_continuous(
-    trans = "reverse",
-    # limits = c(1020, 980)
-  ) +
-  # scale_y_continuous(limits = c(-0.001, 0.003)) +
-  geom_vline(
-    xintercept = c(1658, 1625, 1600, 1334, 1273, 1120, 1095, 993, 378),
-    size = 0.1
-  ) +
-  # annotate("text",
-  #          label = c("1660", "1600", "1330", "1120", "1095", "1001", "375"),
-  #          y = 0.007,
-  #          x = c(1661, 1601, 1331, 1170, 1096, 1002, 376),
-  #          hjust = 0,
-  #          family = "Helvetica",
-  #          size = ggtext_size) +
-  geom_line(aes(
-    group = interaction(cell_type, replicate, TE),
-    colour = cell_type
-  ),
-  alpha = 0.5,
-  size = 0.1
-  ) +
-  # geom_ribbon(data = rmn_lac_avg,
-  #           aes(fill = genotype,
-  #               y = roll_mean,
-  #               ymin = roll_mean - roll_sd,
-  #               ymax = roll_mean + roll_sd),
-  #           colour = NA,
-  #           alpha = 0.25) +
-  # geom_line(
-  #   data = rmn_lac_avg %>% filter(genotype == "WT" & cell_type == "MX"),
-  #   aes(
-  #     colour = cell_type,
-  #     y = roll_scaled_cellu
-  #   ),
-  #   size = 0.2
-  # ) +
-  labs(
-    x = expression(paste("Wavenumber [", cm^-1, "]")),
-    y = "Scaled scattering intensity"
-  ) +
-  # scale_color_brewer(palette = "Set1", aesthetics = c("colour", "fill")) +
-  scale_colour_manual(values = pal_pedersen_disc) +
-  theme_leo() +
-  theme(
-    # legend.position = "bottom",
-    legend.title = element_blank()
-  ) +
-  guides(colour = guide_legend(override.aes = list(alpha = 1, size = 1))) +
-  facet_grid(genotype ~ cell_type)
 
-# plotly::ggplotly(rmn_lac_test)
-pdf("rmn_lac.pdf", height = twocol, width = twocol)
-rmn_lac_test
+partial_spec <- function(min_wn, max_wn){
+  data = rmn_lac_scaled %>% filter(
+    wavenumber >= min_wn & wavenumber <= max_wn &
+      cell_type == "MX" &
+      genotype %in% c("WT", "Q")) %>% 
+    mutate(genotype = ordered(case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    levels = c(WT, triple_it, quad_it, Q_it)
+    ))
+  
+  ggplot(data,
+         aes(x = wavenumber,
+             y = scaled_cellu,
+             colour = genotype)) +
+    geom_vline(xintercept = c(378, 1273, 1334, 1600, 1624, 1658),
+               linetype = 2,
+               size = 0.2) +
+    geom_line(aes(group = interaction(replicate, genotype, TE)), 
+              alpha = 0.5,
+              size = 0.2) +
+    # geom_smooth(se = F,
+    #             linetype = 1,
+    #             size = 0.2) +
+    labs(y = "Normalised intensity") +
+    scale_colour_manual(values = pal_dawn[c(1, 7)]) +
+    scale_x_reverse() +
+    theme_leo()
+}
+
+full <- partial_spec(300, 1700)
+
+pdf("spectra.pdf", width = twocol, height = onecol * 0.3)
+full
 dev.off()
+
 ```
 
 ## Lignin composition
@@ -7562,7 +7561,7 @@ dev.off()
 violin_data <- rmn_lac_sum %>%
   select(
     # "Total lignin" = total_lignin,
-    "<sup>Lignin</sup>&frasl;<sub>cellulose</sub>" = lig.cellu,
+    "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>" = lig.cellu,
     "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S.G,
     # "S" = S_rel,
     # "G" = G_rel,
@@ -7613,7 +7612,8 @@ letters <- letter_groups(violin_data,
   "tukey",
   variable,
   cell_type,
-  print_position = "above"
+  print_position = "above",
+  print_adjust = 1.5
 ) %>%
   mutate(value = case_when(
     variable == "<sup>**S**</sup>&frasl;<sub>**G**</sub>" & cell_type %in% c("PX", "MX") ~
@@ -7658,7 +7658,7 @@ lig_violin <- ggplot(
     scale = "width"
   ) +
   geom_text(
-    data = letters,
+    data = letters_avg,
     aes(label = Letters),
     size = ggtext_size,
     family = "Helvetica"
@@ -7678,8 +7678,15 @@ lig_violin <- ggplot(
   ) +
   facet_grid(variable ~ cell_type, scales = "free_y", switch = "y")
 
-pdf("Raman_fig.pdf", width = twocol, height = onecol)
-lig_violin
+layout <- "
+A
+B
+B
+B
+B"
+
+pdf("Raman_fig.pdf", width = twocol, height = onecol * 0.7)
+lig_violin 
 dev.off()
 ```
 
