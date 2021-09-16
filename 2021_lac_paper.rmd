@@ -7736,7 +7736,6 @@ dev.off()
 ### Main figure
 
 ```{r}
-
 violin_data <- rmn_lac_sum %>%
   select(
     # "Total lignin" = total_lignin,
@@ -7856,13 +7855,6 @@ lig_violin <- ggplot(
                                                size = 8),
   ) +
   facet_grid(variable ~ cell_type, scales = "free_y", switch = "y")
-
-layout <- "
-A
-B
-B
-B
-B"
 
 pdf("Raman_fig.pdf", width = twocol, height = onecol * 0.7)
 lig_violin 
@@ -8120,6 +8112,135 @@ pdf("IF_total_lignin.pdf", width = onecol * 0.5, height = onecol * 0.25)
 lig_violin("Total lignin", "IF")
 dev.off()
 ```
+
+### Supplemental figure
+
+```{r}
+violin_data <- rmn_lac_sum %>%
+  select(
+    # "Total lignin" = total_lignin,
+    # "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>" = lig.cellu,
+    # "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S.G,
+    "<b>S</b>" = S_rel,
+    "<b>G</b>" = G_rel,
+    "<b>P</b>" = P_rel,
+    # AUC,
+    "Cellulose cryst." = cellu_cryst,
+    "Benz-<br>aldehydes" = Benz_rel,
+    "<b>G</b><sub>CHOH</sub>" = GOH_rel,
+    "<b>G</b><sub>CHO</sub>" = GCHO_rel,
+    # "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO.GOH
+  ) %>%
+  filter(cell_type != "LP") %>%
+  pivot_longer(
+    cols = -c(genotype:replicate),
+    names_to = "variable",
+    values_to = "value"
+  ) %>%
+  mutate(
+    variable = as.character(variable),
+    cell_type = ordered(cell_type,
+      levels = c(
+        "IF",
+        "LP",
+        "XF",
+        "PX",
+        "MX"
+      )
+    ),
+    genotype = ordered(case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    levels = c(WT, triple_it, quad_it, Q_it)
+    ),
+    instance = case_when(
+      replicate %in% c(1:5) ~ "1",
+      TRUE ~ "2"
+    )
+  )
+
+violin_data_avg <- violin_data %>%
+  group_by(genotype, cell_type, replicate, variable, instance) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+letters <- letter_groups(violin_data,
+  value,
+  genotype,
+  "tukey",
+  variable,
+  cell_type,
+  print_position = "above",
+  print_adjust = 1.5
+) %>%
+  mutate(value = case_when(
+    cell_type == "MX" ~
+    value + 0.2 * value,
+    TRUE ~ value
+  ))
+
+letters_avg <- letter_groups(violin_data_avg,
+  value,
+  genotype,
+  "tukey",
+  variable,
+  cell_type,
+  print_position = "above"
+) %>%
+  select(-value) %>%
+  left_join(select(letters, -Letters), by = c("variable", "cell_type", "genotype"))
+
+
+lig_violin <- ggplot(
+  violin_data,
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.25,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters_avg,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  expand_limits(y = 0) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title = element_blank(),
+    axis.text.x = element_markdown(),
+    strip.placement = "outside",
+    strip.text.y.left = element_textbox_simple(halign = 0.5, 
+                                               orientation = "left-rotated"),
+  ) +
+  facet_grid(variable ~ cell_type, scales = "free_y", switch = "y")
+
+
+pdf("Raman_supp_fig.pdf", width = twocol, height = onecol)
+lig_violin 
+dev.off()
+```
+
 
 ## Raman PCA
 
