@@ -301,7 +301,7 @@ final_height <- ggplot(
 final_height
 ```
 
-### Siliques
+### Silique size
 
 ```{r}
 
@@ -406,6 +406,113 @@ silique_linreg <- ggplot(siliques_avg,
 silique_plot
 silique_linreg
 ```
+
+### Silique number
+
+```{r}
+sil_data <- read_csv(paste0(
+  datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_harvesting.csv"
+)) %>%
+  mutate(
+    siliques = green.sil + mat.sil,
+    genotype = recode(genotype,
+      "Col-0" = "WT",
+      "lac4/5/10/12/17" = "Q",
+      "lac5/10/12/17" = "Q-4",
+      "lac4/10/12/17" = "Q-5",
+      "lac4/5/12/17" = "Q-10",
+      "lac4/5/10/17" = "Q-12",
+      "lac4/5/10/12" = "Q-17"
+    )
+  ) %>%
+  mutate(genotype = ordered(case_when(
+    genotype == "WT" ~ genotype,
+    TRUE ~ paste0("<i>", genotype, "</i>")
+  ),
+  levels = c(WT, triple_it, quad_it, Q_it)
+  ))
+
+letters <- letter_groups(sil_data,
+                         siliques,
+                         genotype,
+                         "tukey",
+                         print_position = "below")
+
+sil_number <- ggplot(sil_data,
+                     aes(x = genotype,
+                         y = siliques)) +
+  geom_quasirandom(shape = 21,
+                   size = 1.5,
+                   stroke = 0.2,
+                   fill = "white",
+                   alpha = 0.75) +
+  geom_boxplot(width = 0.25, 
+               alpha = 0.5,
+               outlier.alpha = 0,
+               colour = "black",
+               fatten = 1,
+               size = 0.2) +
+  geom_text(data = letters,
+            aes(label = Letters),
+            size = ggtext_size,
+            family = "Helvetica") +
+  annotate("richtext",
+           label = "<i>n</i> = 5",
+           hjust = 0,
+           x = 6.5,
+           y = 1500,
+           label.size = NA,
+           size = ggtext_size,
+           family = "Helvetica") +
+  labs(y = "Silique number at harvest") +
+  theme_leo() +
+  theme(axis.text.x = element_markdown(),
+        axis.title.x = element_blank())
+
+letters <- letter_groups(pheno_data,
+                         stretched.height,
+                         genotype,
+                         "tukey",
+                         print_position = "below")
+
+height_box <- ggplot(pheno_data,
+                     aes(x = genotype,
+                         y = stretched.height)) +
+  geom_quasirandom(shape = 21,
+                   size = 1.5,
+                   stroke = 0.2,
+                   fill = "white",
+                   alpha = 0.75) +
+  geom_boxplot(width = 0.25, 
+               alpha = 0.5,
+               outlier.alpha = 0,
+               colour = "black",
+               fatten = 1,
+               size = 0.2) +
+  geom_text(data = letters,
+            aes(label = Letters),
+            size = ggtext_size,
+            family = "Helvetica") +
+  annotate("richtext",
+           label = "<i>n</i> = 15",
+           hjust = 0,
+           x = 6.5,
+           y = 55,
+           label.size = NA,
+           size = ggtext_size,
+           family = "Helvetica") +
+  labs(y = "Stem heigth at harvest [cm]") +
+  theme_leo() +
+  theme(axis.text.x = element_markdown(),
+        axis.title.x = element_blank())
+
+pdf("simple_pheno_fig.pdf", height = onecol * 0.75, width = onecol * 0.75)
+sil_number / height_box
+dev.off()
+```
+
+
+### Stem thickness
 
 ```{r}
 thickness_data <- pheno_data %>% 
@@ -1084,6 +1191,56 @@ height_plot <- ggplot(
 
 
 height_plot
+```
+
+#### Area over time
+
+```{r}
+label_data <- stem_data %>% 
+  filter(genotype %in% c(WT, quad_it, Q_it) & dpb == 30) %>% 
+  group_by(genotype) %>% 
+  summarise(area = mean(area),
+            dpb = 30)
+
+area_plot <- ggplot(
+  stem_data %>% filter(genotype %in% c(WT, quad_it, Q_it) &
+    dpb < 31),
+  aes(
+    x = dpb,
+    y = area,
+    colour = genotype
+  )
+) +
+  geom_vline(xintercept = c(-3, 11),
+             linetype = 2,
+             size = 0.2) +
+  geom_line(aes(group = interaction(plant, replicate)),
+    size = 0.2,
+    alpha = 0.2
+  ) +
+  geom_smooth(
+    se = F,
+    size = 0.4,
+    linetype = 2,
+    span = 0.4
+  ) +
+  geom_richtext(data = label_data,
+            aes(label = genotype),
+            family = "Helvetica",
+            size = ggtext_size,
+            label.size = NA,
+            fill = NA,
+            hjust = 0) +
+  labs(x = "Days past bolting",
+       y = "Stem area [cm]") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.1))) +
+  scale_y_continuous(position = "right") +
+  theme_leo() +
+  theme(axis.title.y = element_markdown())
+
+
+area_plot
 ```
 
 #### Growth rate
@@ -3702,7 +3859,7 @@ ph_cont <- ggplot(
   expand_limits(y = 0) +
   theme_leo() +
   theme(
-    legend.position = c(0.45, 0.8),
+    legend.position = c(0.45, 0.81),
     legend.title = element_blank(),
     legend.direction = "horizontal",
     legend.text = element_markdown()
@@ -3735,16 +3892,7 @@ comment = '"#',
 col_types = "ccDcccdcddd"
 ) %>%
   mutate(
-    time = slice * interval,
-    cell_type = ordered(cell_type, levels = c(
-      "IF",
-      "LP",
-      "XF",
-      "PX",
-      "MX",
-      "PH",
-      "BG"
-    ))
+    time = slice * interval
   ) %>%
   select(-c(slice, interval)) %>%
   group_by(time, genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
@@ -3806,7 +3954,15 @@ data_dab <- data_dab %>%
       genotype == "WT" ~ genotype,
       TRUE ~ paste0("<i>", genotype, "</i>")
     ),
-    levels = c(WT, quad_it, Q_it)))
+    levels = c(WT, quad_it, Q_it)),
+    cell_type = recode(cell_type, "CML" = "IF-CML"),
+    cell_type = ordered(cell_type, levels = c(
+      "IF",
+      "IF-CML",
+      "XF",
+      "PX",
+      "MX"
+    )))
 
 nested_data_dab <- data_dab %>%
   filter(time >= lm_start & time <= lm_stop) %>%
@@ -3836,7 +3992,7 @@ data_dab <- data_dab %>%
 
 data_dab <- data_dab %>%
   filter(
-    cell_type %in% c("IF", "CML", "XF", "MX", "PX") &
+    cell_type %in% c("IF", "IF-CML", "XF", "MX", "PX") &
       pH == 5 &
       treatment == "none"
     # adj.r.squared > 0.85
@@ -3844,7 +4000,7 @@ data_dab <- data_dab %>%
 
 nested_data_dab <- nested_data_dab %>%
   filter(
-    cell_type %in% c("IF", "CML", "XF", "MX", "PX") &
+    cell_type %in% c("IF", "IF-CML", "XF", "MX", "PX") &
       pH == 5 &
       treatment == "none"
     # adj.r.squared > 0.85
@@ -4042,7 +4198,7 @@ dab_slopes <- ggplot(
   theme_leo() +
   theme(
     axis.title.x = element_blank(),
-    axis.text.x = element_markdown(angle = 90, hjust = 1)
+    axis.text.x = element_markdown(angle = 45, hjust = 1, vjust = 1)
   ) +
   facet_wrap(~cell_type, ncol = 5)
 
@@ -4068,16 +4224,7 @@ comment = '"#',
 col_types = "ccDcccdcddd"
 ) %>%
   mutate(
-    time = slice * interval,
-    cell_type = ordered(cell_type, levels = c(
-      "IF",
-      "LP",
-      "XF",
-      "PX",
-      "MX",
-      "PH",
-      "BG"
-    ))
+    time = slice * interval
   ) %>%
   select(-c(slice, interval)) %>%
   group_by(time, genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
@@ -4139,7 +4286,16 @@ data_daf <- data_daf %>%
       genotype == "WT" ~ genotype,
       TRUE ~ paste0("<i>", genotype, "</i>")
     ),
-    levels = c(WT, quad_it, Q_it)))
+    levels = c(WT, quad_it, Q_it)),
+    cell_type = recode(cell_type, "CML" = "IF-CML"),
+    cell_type = ordered(cell_type, levels = c(
+      "IF",
+      "IF-CML",
+      "XF",
+      "PX",
+      "MX"
+    ))
+    )
 
 nested_data_daf <- data_daf %>%
   filter(time >= lm_start & time <= lm_stop) %>%
@@ -4166,13 +4322,13 @@ data_daf <- data_daf %>%
   left_join(select(nested_data_daf, c(genotype:point, adj.r.squared)))
 
 data_daf <- data_daf %>% filter(
-  cell_type %in% c("IF", "CML", "XF", "MX", "PX") &
+  cell_type %in% c("IF", "IF-CML", "XF", "MX", "PX") &
     pH == 5 &
     treatment == "none"
   # adj.r.squared > 0.85
 )
 nested_data_daf <- nested_data_daf %>% filter(
-  cell_type %in% c("IF", "CML", "XF", "MX", "PX") &
+  cell_type %in% c("IF", "IF-CML", "XF", "MX", "PX") &
     pH == 5 &
     treatment == "none"
   # adj.r.squared > 0.85
@@ -4373,7 +4529,7 @@ daf_slopes <- ggplot(
   theme_leo() +
   theme(
     axis.title.x = element_blank(),
-    axis.text.x = element_markdown(angle = 90, hjust = 1)
+    axis.text.x = element_markdown(angle = 45, hjust = 1, vjust = 1)
   ) +
   facet_wrap(~cell_type, ncol = 5)
 
@@ -4863,14 +5019,14 @@ act_violin("DAB", "IF")
 dev.off()
 ```
 
-## Section activity figure
+## Assemble figure
 
 ```{r}
 layout <- "
 ABBBBBB
 ACCCCCC
 "
-pdf("section_activity.pdf", width = twocol, height = onecol)
+pdf("section_activity.pdf", width = twocol, height = onecol * 0.9)
 ph_cont + daf_slopes + dab_slopes + 
   plot_layout(design = layout)
 dev.off()
@@ -7352,35 +7508,58 @@ rmn_lac_sum <- rmn_lac_scaled %>%
 
 ```{r}
 
-partial_spec <- function(min_wn, max_wn){
-  data = rmn_lac_scaled %>% filter(
-    wavenumber >= min_wn & wavenumber <= max_wn &
-      cell_type == "MX" &
-      genotype %in% c("WT", "Q")) %>% 
+partial_spec <- function(min_wn, max_wn) {
+  data <- rmn_lac_scaled %>%
+    filter(
+      wavenumber >= min_wn & wavenumber <= max_wn &
+        cell_type == "IF" &
+        genotype %in% c("WT", "Q")
+    ) %>%
     mutate(genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
       TRUE ~ paste0("<i>", genotype, "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     ))
-  
-  ggplot(data,
-         aes(x = wavenumber,
-             y = scaled_cellu,
-             colour = genotype)) +
-    geom_vline(xintercept = c(378, 1273, 1334, 1600, 1624, 1658),
-               linetype = 2,
-               size = 0.2) +
-    geom_line(aes(group = interaction(replicate, genotype, TE)), 
-              alpha = 0.5,
-              size = 0.2) +
+
+  ggplot(
+    data,
+    aes(
+      x = wavenumber,
+      y = scaled_cellu,
+      colour = genotype
+    )
+  ) +
+    geom_vline(
+      xintercept = c(378, 1273, 1334, 1600, 1624, 1658),
+      linetype = 2,
+      size = 0.2
+    ) +
+    geom_line(aes(group = interaction(replicate, genotype, TE)),
+      alpha = 0.5,
+      size = 0.2
+    ) +
     # geom_smooth(se = F,
     #             linetype = 1,
     #             size = 0.2) +
-    labs(y = "Normalised intensity") +
+    labs(
+      y = "Normalised intensity",
+      x = "Wavenumber [cm<sup>-1</sup>]"
+    ) +
     scale_colour_manual(values = pal_dawn[c(1, 7)]) +
-    scale_x_reverse() +
-    theme_leo()
+    guides(color = guide_legend(override.aes = list(
+      alpha = 1,
+      size = 0.4
+    ))) +
+    scale_y_continuous(limits = c(-0.1, 8)) +
+    scale_x_reverse(expand = expansion(mult = 0.01)) +
+    theme_leo() +
+    theme(
+      axis.title.x = element_textbox_simple(halign = 0.5),
+      plot.margin = unit(c(1, 1, 1, 6), "mm"),
+      legend.position = c(0.9675, 0.9),
+      legend.text = element_markdown()
+    )
 }
 
 full <- partial_spec(300, 1700)
