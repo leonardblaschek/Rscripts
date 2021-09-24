@@ -219,6 +219,31 @@ eds_plot <- function(num, den, lbl) {
     ) %>%
     left_join(p_values)
 
+  letter_data <- eds_data %>%
+    mutate(ratio = !!num / !!den) %>%
+    unite("ID", layer, days, sep = "_")
+
+  letters <- letter_groups(letter_data,
+    ratio,
+    ID,
+    "tukey",
+    print_position = "below"
+  ) %>%
+    separate(ID, into = c("layer", "days"), sep = "_")
+  
+  stat_tab <- letter_groups(letter_data,
+    ratio,
+    ID,
+    "tukey",
+    table = TRUE
+  ) 
+
+  anova_tab <- stat_tab$anova %>% distinct()
+  write_csv(anova_tab, paste0("1C_anova_", quo_name(num), "-", quo_name(den), ".csv"))
+  
+  tukey_tab <- stat_tab$tukey %>% distinct()
+  write_csv(tukey_tab, paste0("1C_tukey_", quo_name(num), "-", quo_name(den), ".csv"))
+
   ggplot(
     eds_data,
     aes(
@@ -250,17 +275,27 @@ eds_plot <- function(num, den, lbl) {
     size = 0.2,
     scale = "width"
     ) +
+    # geom_text(
+    #   data = eds_avg,
+    #   aes(
+    #     label = paste0(diff, "%"),
+    #     y = 0,
+    #     vjust = 0,
+    #     fill = NA
+    #   ),
+    #   size = ggtext_size,
+    #   family = "Helvetica",
+    #   lineheight = 0.75,
+    #   position = position_dodge(width = 0.6)
+    # ) +
     geom_text(
-      data = eds_avg,
+      data = letters,
       aes(
-        label = paste0(diff, "%\n", "P=", p_value),
-        y = 0,
-        vjust = 0,
-        fill = NA
+        label = Letters,
+        y = ratio
       ),
-      size = ggtext_size,
       family = "Helvetica",
-      lineheight = 0.75,
+      size = ggtext_size,
       position = position_dodge(width = 0.6)
     ) +
     # scale_x_discrete(labels = c("PX", "PMX", "SMX")) +
@@ -306,6 +341,113 @@ pdf("eds_plots.pdf", width = onecol * 0.7, height = onecol * 0.7)
 eds
 dev.off()
 ```
+
+### EDS by morphotype
+
+```{r}
+eds_data_supp <- read_csv(paste0(datapath, "PhD/IRX/EDS/eds_data_morpho.csv"),
+  col_types = "ccnnn"
+) %>%
+  mutate(
+    "C/O" = C / O,
+    "C/Cr" = C / Cr
+  ) %>%
+  select(layer, days, morphotype, `C/O`, `C/Cr`) %>%
+  pivot_longer(c(`C/O`, `C/Cr`), names_to = "elements", values_to = "ratio")
+
+
+letters <- eds_data_supp %>%
+  unite("ID", morphotype, layer) %>%
+  letter_groups(.,
+    ratio,
+    ID,
+    "tukey",
+    elements,
+    print_position = "below",
+    print_adjust = 1
+  ) %>%
+  separate(ID, into = c("morphotype", "layer"), sep = "_")
+
+stat_tab <- eds_data_supp %>%
+  unite("ID", morphotype, layer) %>%
+  letter_groups(.,
+    ratio,
+    ID,
+    "tukey",
+    elements,
+    table = TRUE
+  )
+
+  anova_tab <- stat_tab$anova %>% add_column("panel" = stat_tab$elements) %>% distinct()
+  write_csv(anova_tab, paste0("S1_anova.csv"))
+
+  tukey_tab <- stat_tab$tukey %>% add_column("panel" = stat_tab$elements) %>% distinct()
+  write_csv(tukey_tab, paste0("S1_tukey.csv"))
+
+
+eds_supp <- ggplot(
+  eds_data_supp,
+  aes(
+    x = morphotype,
+    y = ratio,
+    fill = layer
+  )
+) +
+  geom_quasirandom(
+    # aes(fill = cell.type, group = days),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2
+  ) +
+  geom_violin(aes(
+    group = interaction(morphotype, layer),
+    # fill = cell.type
+  ),
+  draw_quantiles = 0.5,
+  fill = "white",
+  colour = "black",
+  alpha = 0.85,
+  width = 0.2,
+  position = position_dodge(width = 0.6),
+  size = 0.2,
+  scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(
+      label = Letters,
+      y = ratio
+    ),
+    family = "Helvetica",
+    size = ggtext_size,
+    position = position_dodge(width = 0.6)
+  ) +
+  scale_fill_grey(start = 0.9, end = 0.3) +
+  expand_limits(y = 0) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.1))) +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    axis.title = element_blank(),
+    legend.position = c(0.10, 0.95),
+    legend.title = element_blank(),
+    legend.key.height = unit(0, "cm"),
+    legend.key.width = unit(0, "cm"),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5)
+  ) +
+  facet_wrap(~elements, ncol = 1, scales = "free_y", strip.position = "left")
+
+pdf("eds_plots_morpho.pdf", width = onecol * 0.5, height = onecol * 0.5)
+eds_supp
+dev.off()
+
+```
+
 
 ## EM drying collapse
 
@@ -419,8 +561,11 @@ afm_data <- read_csv(paste0(datapath, "PhD/IRX/AFM/afm_PX.csv")) %>%
 rmn_violin <- function(x) {
   afm_test <- afm_data %>% filter(variable == x)
   p_values <- afm_test %>%
-    group_by(cell.type) %>%
-    summarise(p_value = broom::tidy(
+    group_by(cell.type, cell, days) %>%
+    summarise(ratio = mean(ratio)) %>% 
+    group_by(cell.type) %>% 
+    summarise(
+      p_value = broom::tidy(
       t.test(ratio[days == "10"], ratio[days == "50"])
     )[["p.value"]]) %>%
     mutate(p_value = case_when(
@@ -458,15 +603,18 @@ rmn_violin <- function(x) {
     size = 0.2,
     scale = "width"
     ) +
-    geom_text(
+    ggtext::geom_richtext(
       data = p_values,
-      aes(label = paste(("P ="), p_value)),
+      aes(label = paste(("<i>P</i> ="), p_value)),
       x = 0.5,
       y = 0,
       hjust = 0,
       vjust = 1,
       family = "Helvetica",
-      size = ggtext_size
+      size = ggtext_size,
+      label.size = NA,
+      label.padding = unit(0, "lines"),
+      fill = NA
     ) +
     scale_fill_manual(values = pal_flame_disc) +
     expand_limits(y = 0) +
@@ -2603,9 +2751,24 @@ summary(psem_pop)
 ### Hydration influence
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+
 medium_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/WT_medium.csv")) %>%
   pivot_longer(cols = c(stiffness, strength), values_to = "value", names_to = "variable") %>%
-  mutate(medium = ordered(medium, levels = c("Water", "Air", "Sorbitol")))
+  mutate(
+    medium = ordered(medium, levels = c("Water", "Air", "Sorbitol")),
+    value = case_when(
+      variable == "stiffness" ~ value / 1000,
+      TRUE ~ value
+    )
+  ) %>%
+  rename("type" = section) %>%
+  mutate(
+    type = recode(type,
+      Top = "Apical",
+      Base = "Basal"
+    ),
+    type = ordered(type, levels = c("Basal", "Mid", "Apical"))
+  )
 
 bending_files <-
   list.files(
@@ -2636,22 +2799,56 @@ read_plus <- function(flnm) {
       "strain" = X6
     )
 }
-medium_curves <- lapply(bending_files, read_plus) %>%
-  bind_rows() %>%
+
+read_summary <- function(flnm) {
+  read_delim(
+    delim = ";",
+    flnm,
+    skip = 1,
+    col_types = "cccccc"
+  ) %>%
+    filter(str_detect(`Specimen text input  1`, "Stem")) %>%
+    rename(
+      "section" = 1,
+      "metadata" = 2
+    )
+}
+
+medium_summary <- map_dfr(bending_files, read_summary) %>%
+  separate(metadata, into = c("dummy", "replicate", "medium", "type", "who_knows")) %>%
+  mutate(
+    technical = str_extract(type, "[:digit:]"),
+    technical = case_when(
+      is.na(technical) ~ "1",
+      TRUE ~ technical
+    ),
+    type = str_remove(type, "[:digit:]"),
+    type = str_to_title(type)
+  ) %>%
+  select(-dummy)
+
+medium_curves <- map_dfr(bending_files, read_plus) %>%
   mutate(
     filename = str_remove(filename, fixed("Stem ")),
     filename = str_remove(filename, fixed(".txt"))
   ) %>%
   separate(filename, into = c("replicate", "medium"), sep = " ") %>%
+  left_join(medium_summary, by = c("replicate", "medium", "section")) %>%
   mutate(
     replicate = as.factor(replicate),
-    medium = as.factor(medium)
+    medium = ordered(medium, levels = c("Water", "Air", "Sorbitol")),
+    type = recode(type,
+      Top = "Apical",
+      Base = "Basal"
+    ),
+    type = ordered(type, levels = c("Basal", "Mid", "Apical")),
+    technical = as.factor(technical),
+    who_knows = as.factor(who_knows)
   ) %>%
-  mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed(".")))) %>%
-  mutate(medium = ordered(medium, levels = c("Water", "Air", "Sorbitol")))
+  mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
 
 medium_breaking <- medium_curves %>%
-  group_by(medium, replicate, section) %>%
+  group_by(medium, replicate, section, type, technical, who_knows) %>%
   filter(strain < 2.5) %>%
   summarise(
     break_point = max(strain[stress == max(stress)]),
@@ -2660,13 +2857,19 @@ medium_breaking <- medium_curves %>%
   pivot_longer(cols = c(break_point, strength), names_to = "variable", values_to = "value")
 
 flex_violin <- function(x, dat = medium_data) {
-  letters <- letter_groups(dat %>% filter(variable == x),
+  dat_united <- dat %>%
+    filter(variable == x) %>%
+    unite("ID", medium, type, sep = "_")
+
+  letters <- letter_groups(dat_united,
     value,
-    medium,
+    ID,
     "tukey",
     print_position = "below",
-    print_adjust = 0.5
-  )
+    print_adjust = 1
+  ) %>%
+    separate(ID, into = c("medium", "type"), sep = "_") %>%
+    mutate(type = ordered(type, levels = c("Basal", "Mid", "Apical")))
 
   ggplot(
     data = dat %>% filter(variable == x),
@@ -2706,7 +2909,8 @@ flex_violin <- function(x, dat = medium_data) {
     theme(
       text = element_text(family = "Helvetica"),
       legend.position = "none"
-    )
+    ) +
+    facet_wrap(~type)
 }
 
 medium_strength <- flex_violin("strength") +
@@ -2714,7 +2918,7 @@ medium_strength <- flex_violin("strength") +
   theme(axis.title.x = element_blank())
 
 medium_stiffness <- flex_violin("stiffness") +
-  labs(y = "Stiffness [MPa]") +
+  labs(y = "Stiffness [GPa]") +
   theme(axis.title.y = element_blank()) +
   scale_x_discrete(
     limits = rev(levels(medium_data$medium))
@@ -2724,6 +2928,10 @@ medium_stiffness <- flex_violin("stiffness") +
 medium_breakpoint <- flex_violin("break_point", medium_breaking) +
   labs(y = "Strain [%] at breaking") +
   coord_flip() +
+  scale_y_continuous(
+    expand = expand_scale(mult = c(0.1, 0.05)),
+    breaks = c(0, 0.5, 1), labels = c("0", "0.5", "1")
+  ) +
   theme(
     axis.title.y = element_blank(),
     axis.text.y = element_blank(),
@@ -2784,6 +2992,40 @@ read_plus <- function(flnm) {
     )
 }
 
+read_summary <- function(flnm, gntyp) {
+  read_delim(delim = ";",
+             flnm,
+             skip = 1,
+             col_types = "cccccc") %>%
+    filter(str_detect(`Specimen text input  1`, gntyp)) %>% 
+    rename("section" = 1,
+           "metadata" = 2,
+           "modulus" = 3,
+           "max.stress" = 4,
+           "AUC" = 5,
+           "N.max.stress" = 6)
+}
+
+bending_fah1_metadata <- map_dfr(bending_files, ~read_summary(.x, "Fah1")) %>% 
+  separate(metadata, 
+           into = c("genotype", "medium", "replicate", "segment"), 
+           extra = "merge") %>% 
+  mutate(type = str_extract(segment, "[:alpha:]+"),
+         technical = str_extract(segment, "[:digit:]")) %>% 
+  select(-medium, -segment)
+
+bending_WT_metadata <- map_dfr(bending_files, ~read_summary(.x, "WT")) %>% 
+  separate(metadata, into = c("genotype", "replicate", "segment"), 
+           extra = "merge") %>% 
+  mutate(type = str_extract(segment, "[:alpha:]+"),
+         technical = str_extract(segment, "[:digit:]")) %>% 
+  select(-segment)
+
+bending_summary <- bind_rows(bending_WT_metadata, bending_fah1_metadata)
+
+bending_metadata <- bending_summary %>% 
+  select(section, genotype, replicate, type, technical)
+
 fahA <- read_delim(bending_files[1],
   delim = ";",
   skip = grep("Raw Data", readLines(bending_files[1])),
@@ -2801,54 +3043,31 @@ fahA <- read_delim(bending_files[1],
     "stress" = X5
   )
 
-bending_data <- lapply(bending_files[-1], read_plus) %>%
-  bind_rows()
-
-bending_data <- bending_data %>%
+bending_data <- map_dfr(bending_files[-1], read_plus) %>%
   bind_rows(fahA) %>%
   separate(filename, into = c("genotype", "replicate"), sep = " ", extra = "merge") %>%
+  mutate(replicate = str_remove_all(replicate, " |Air|[:digit:]|\\.txt|cm")) %>% 
+  left_join(bending_metadata, by = c("section", "genotype", "replicate")) %>% 
   mutate(
-    replicate = str_remove(replicate, "Air"),
-    replicate = str_remove(replicate, ".txt"),
-    replicate = str_remove(replicate, "\\d\\dcm"),
-    replicate = str_remove(replicate, " "),
     replicate = as.factor(replicate),
     section = as.factor(section),
     experiment = factor("fah1", levels = c("fah1", "cad")),
-    genotype = ordered(recode(genotype, "Fah1" = "fah1"), levels = c("WT", "fah1", "cad4xcad5"))
+    genotype = ordered(
+      recode(genotype, "Fah1" = "fah1"), 
+      levels = c("WT", "fah1", "cad4xcad5")),
+    type = ordered(type, levels = c("Base", "Mid", "Top"))
   ) %>%
+  mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed(".")))) 
+
+stiffness_fah1 <- bending_summary %>%
+  mutate(experiment = factor("fah1", levels = c("fah1", "cad")),
+         section = as.factor(section),
+         genotype = ordered(
+           recode(genotype, "Fah1" = "fah1"), 
+           levels = c("WT", "fah1", "cad4xcad5")),
+         replicate = as.factor(replicate),
+         type = ordered(type, levels = c("Base", "Mid", "Top"))) %>%
   mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
-
-read_stiffness <- function(flnm) {
-  read_delim(flnm,
-    delim = ";",
-    skip = 1,
-    col_names = FALSE
-  ) %>%
-    select(-X1) %>%
-    filter(str_detect(X2, "Fah1|WT")) %>%
-    rename(
-      "name" = X2,
-      "modulus" = X3,
-      "max.stress" = X4,
-      "AUC" = X5,
-      "N.max.stress" = X6
-    ) %>%
-    mutate(
-      name = str_remove(name, " Air"),
-      experiment = factor("fah1", levels = c("fah1", "cad"))
-    ) %>%
-    separate(name, into = c("genotype", "replicate", "sample"), extra = "merge") %>%
-    mutate(
-      genotype = ordered(recode(genotype, "Fah1" = "fah1"), levels = c("WT", "fah1", "cad4xcad5")),
-      replicate = as.factor(replicate),
-      sample = as.factor(sample)
-    ) %>%
-    mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
-}
-
-stiffness_fah1 <- lapply(bending_files, read_stiffness) %>%
-  bind_rows()
 
 #### cad4xcad5 ####
 bending_files <-
@@ -2858,6 +3077,9 @@ bending_files <-
     recursive = TRUE,
     full.names = TRUE
   )
+
+bending_files_stiff <- bending_files %>%
+  str_subset(pattern = fixed("_1."))
 
 read_plus <- function(flnm) {
   read_delim(flnm,
@@ -2880,13 +3102,34 @@ read_plus <- function(flnm) {
       "strain" = X4,
       "stress" = X5
     ) %>%
-    separate(filename, into = c("section", "replicate"), sep = "_")
+    separate(filename, into = c("type", "section"), sep = "_") %>% 
+    mutate(type = str_to_title(type))
 }
 
-bending_data_cad <- lapply(bending_files, read_plus) %>%
-  bind_rows() %>%
+read_summary <- function(flnm) {
+  read_delim(delim = ";",
+             flnm,
+             skip = 1,
+             col_types = "cccccc") %>%
+    rename("section" = 1,
+           "metadata" = 2,
+           "modulus" = 3,
+           "max.stress" = 4) %>% 
+    filter(str_detect(metadata, "top|mid|Base"))
+}
+
+bending_cad_summary <- map_dfr(bending_files_stiff, read_summary) %>% 
+  separate(metadata, into = c("replicate", "type", "technical")) %>% 
+  mutate(type = str_to_title(type))
+
+bending_cad_metadata <- bending_cad_summary %>% 
+  select(-modulus, -max.stress)
+
+bending_data_cad <- map_dfr(bending_files, read_plus) %>%
+  left_join(bending_cad_metadata) %>% 
   mutate(
     replicate = as.factor(replicate),
+    type = ordered(type, levels = c("Base", "Mid", "Top")),
     section = as.factor(section),
     experiment = factor("cad", levels = c("fah1", "cad")),
     genotype = ordered(genotype, levels = c("WT", "fah1", "cad4xcad5"))
@@ -2918,16 +3161,24 @@ read_stiffness <- function(flnm) {
     mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
 }
 
-bending_files_stiff <- bending_files %>%
-  str_subset(pattern = fixed("_1."))
+stiffness_cad <- bending_cad_summary %>% 
+  mutate(experiment = factor("cad", levels = c("fah1", "cad")),
+         section = as.factor(section),
+         genotype = ordered(
+           "cad4xcad5",
+           levels = c("WT", "fah1", "cad4xcad5")),
+         replicate = as.factor(replicate),
+         type = ordered(type, levels = c("Base", "Mid", "Top"))) %>%
+  mutate_if(is.character, ~ as.numeric(str_replace(., fixed(","), fixed("."))))
 
-stiffness_cad <- lapply(bending_files_stiff, read_stiffness) %>%
-  bind_rows()
-
-bending_data_complete <- bind_rows(bending_data, bending_data_cad)
+bending_data_complete <- bind_rows(bending_data, bending_data_cad) %>% 
+  mutate(type = recode(type,
+                       Top = "Apical",
+                       Base = "Basal"),
+         type = ordered(type, levels = c("Basal", "Mid", "Apical")))
 
 bending_pre <- bending_data_complete %>%
-  group_by(genotype, replicate, section) %>%
+  group_by(genotype, replicate, type, technical) %>%
   summarise(
     break_point = strain[stress == max(stress)],
     strength = max(stress)
@@ -2937,6 +3188,11 @@ bending_pre <- bending_data_complete %>%
 stiffness_complete <- stiffness_fah1 %>%
   bind_rows(stiffness_cad) %>%
   select(-AUC, -N.max.stress) %>%
+  mutate(modulus = modulus / 1000,
+         type = recode(type,
+                       Top = "Apical",
+                       Base = "Basal"),
+         type = ordered(type, levels = c("Basal", "Mid", "Apical"))) %>% 
   pivot_longer(cols = c(modulus, max.stress), names_to = "variable", values_to = "value")
 
 fold_change <- stiffness_complete %>%
@@ -2957,13 +3213,19 @@ fold_change_flex <- bending_pre %>%
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
 flex_violin <- function(x, dat = stiffness_complete) {
-  letters <- letter_groups(dat %>% filter(variable == x),
+  dat_united <- dat  %>% 
+    filter(variable == x) %>% 
+    unite("ID", genotype, type, sep = "_")
+  
+  letters <- letter_groups(dat_united,
     value,
-    genotype,
+    ID,
     "tukey",
     print_position = "below",
     print_adjust = 0.5
-  )
+  ) %>% 
+    separate(ID, into = c("genotype", "type"), sep = "_") %>% 
+    mutate(type = ordered(type, levels = c("Basal", "Mid", "Apical")))
 
   ggplot(
     data = dat %>% filter(variable == x),
@@ -3054,16 +3316,18 @@ violin_strength <- flex_violin("max.stress") +
       expression(paste(italic("cad4"), "x", italic("5")))
     ),
     limits = levels(stiffness_complete$genotype)
-  )
+  ) +
+  facet_wrap(~ type)
 
 violin_stiffness <- flex_violin("modulus") +
-  labs(y = "Stiffness [MPa]") +
+  labs(y = "Stiffness [GPa]") +
   scale_y_continuous(
     expand = expand_scale(mult = c(0.1, 0.05)),
-    breaks = c(0, 3000, 6000)
+    breaks = c(0, 3, 6)
   ) +
   theme(axis.title.y = element_blank()) +
-  coord_flip()
+  coord_flip() +
+  facet_wrap(~ type)
 
 violin_breakpoint <- flex_violin("break_point", bending_pre) +
   labs(y = "Strain [%] at breaking") +
@@ -3073,7 +3337,8 @@ violin_breakpoint <- flex_violin("break_point", bending_pre) +
     # axis.line.x = element_line(size = 0.2)
   ) +
   theme(axis.title.y = element_blank()) +
-  coord_flip()
+  coord_flip() +
+  facet_wrap(~ type)
 
 pdf("breaking_point.pdf", width = 2, height = 2)
 violin_breakpoint
@@ -3082,6 +3347,158 @@ dev.off()
 ```
 
 ### Mutant lignin composition
+
+#### Raman
+
+```{r}
+rmn_bending <- rmn_sum %>% 
+  group_by(genotype, replicate, cell.type, technical) %>% 
+  mutate(
+    genotype = recode(genotype,
+                      "cad4xcad5" = "<i>cad4</i>x<i>5</i>",
+                      "Col-0" = "WT",
+                      "fah1" = "<i>fah1</i>"),
+    genotype = ordered(genotype, levels = c("<i>cad4</i>x<i>5</i>", "<i>fah1</i>", "WT"))) %>% 
+  summarise("Total lignin" = total_lignin * 1000,
+         "<b>S</b>/<b>G</b>" = S.G,
+         "<b>G</b><sub>CHO</sub>/<b>G</b><sub>CHOH</sub>" = GCHO_rel / GOH_rel) %>% 
+  pivot_longer(cols = -c(1:4), names_to = "variable", values_to = "value") %>% 
+  mutate(variable = ordered(variable, levels = c(
+    "Total lignin",
+    "<b>S</b>/<b>G</b>",
+    "<b>G</b><sub>CHO</sub>/<b>G</b><sub>CHOH</sub>"
+  ))) %>% 
+  filter(cell.type %in% c("PX", "PMX", "SMX")) %>% 
+  filter(genotype %in% c("WT", "<i>fah1</i>", "<i>cad4</i>x<i>5</i>")) %>% 
+  mutate(
+    cell.type = ordered(cell.type, levels = c("PX", "PMX", "SMX", "IF")),
+    tissue = case_when(cell.type %in% c("PX", "PMX", "SMX") ~ "TE",
+                            TRUE ~ "IF")) %>% 
+  group_by(variable, cell.type) %>% 
+  mutate(value_WT = mean(value[genotype == "WT"])) %>% 
+  group_by(genotype, replicate, technical, cell.type, variable) %>% 
+  mutate(value = value / value_WT * 100)
+
+rmn_bending_avg <- rmn_bending %>% 
+  group_by(genotype, variable, tissue) %>% 
+  summarise(sd = sd(value),
+            value = mean(value))
+
+bending_lignin <- ggplot(
+  rmn_bending_avg,
+  aes(x = genotype,
+      y = variable)
+) +
+  geom_point(alpha = 0) +
+  annotate("rect",
+    ymin = c(0.5, 2.5),
+    ymax = c(1.5, 3.5),
+    xmin = -Inf,
+    xmax = Inf,
+    fill = "grey95",
+    colour = NA
+  ) +
+  geom_point(aes(
+    size = value,
+    colour = genotype,
+    # alpha = mean.lig.tga / 10
+  ),
+  alpha = 0.75,
+  # size = 8,
+  shape = 16
+  ) +
+  geom_text(aes(label = paste0(
+      round(value, digits = 1), "\n±",
+      round(sd, digits = 1)
+    )
+  ),
+  family = "Helvetica",
+  size = ggtext_size,
+  lineheight = 0.75,
+  hjust = 0.5
+  ) +
+  labs(y = "Relative lignin composition [% of WT]") +
+  theme_leo() +
+  scale_size_area(
+    max_size = 8
+  ) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.text.x = element_markdown(),
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    # panel.border = element_blank(),
+    # axis.line.x = element_line(size = 0.2)
+  ) +
+  scale_colour_manual(values = rev(c(
+    pal_ostwald_disc[1],
+    pal_ostwald_disc[3],
+    pal_ostwald_disc[3]
+  ))) +
+  coord_flip() +
+  facet_wrap(~ tissue, ncol = 1)
+
+letters <- letter_groups(rmn_bending,
+                         value,
+                         genotype,
+                         "tukey",
+                         variable,
+                         tissue,
+                         print_position = "below")
+
+bending_lignin_violin <- ggplot(rmn_bending,
+                                aes(x = genotype,
+                                    y = value)) +
+  geom_hline(yintercept = 100,
+             size = 0.2,
+             linetype = 2) +
+  geom_quasirandom(
+      aes(fill = cell.type),
+      dodge.width = 0,
+      shape = 21,
+      # width = 0.1,
+      # colour = NA,
+      alpha = 0.75,
+      size = 1,
+      stroke = 0.2
+    ) +
+    geom_violin(
+      draw_quantiles = 0.5,
+      fill = "white",
+      colour = "black",
+      alpha = 0.85,
+      width = 0.2,
+      position = position_dodge(width = 0.6),
+      size = 0.2,
+      scale = "width"
+    ) +
+  geom_text(
+      data = letters,
+      aes(label = Letters),
+      size = ggtext_size,
+      family = "Helvetica",
+    ) +
+  scale_fill_manual(values = c(pal_flame_disc, "grey50")) +
+  # scale_fill_manual(values = c(
+  #     pal_ostwald_disc[1],
+  #     pal_ostwald_disc[3],
+  #     pal_ostwald_disc[3]
+  #   )) +
+  labs(y = "Relative lignin composition [% of WT]") +
+  theme_leo() +
+  theme(strip.text = element_markdown(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_markdown()) +
+  coord_flip() +
+  facet_wrap(~ variable, scales = "free_x")
+
+pdf("bending_raman.pdf", width = onecol, height = onecol)
+bending_lignin_violin
+dev.off()
+```
+
+
+#### Biochemistry
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
@@ -3244,7 +3661,7 @@ biochem <- ggplot(
   coord_flip()
 ```
 
-### Assemble bending figure
+### Assemble figure
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 #### Load images ####
@@ -3255,42 +3672,21 @@ WT <-
     )
   )
 
-#### plot grid ####
-
-top <- plot_grid(WT,
-  medium_stiffness,
-  medium_breakpoint,
-  ncol = 3,
-  labels = c("", "B", "C"),
-  label_fontfamily = "Helvetica",
-  label_size = 10,
-  rel_widths = c(0.785, 1, 0.785)
-  # align = "hv"
-)
-bottom <- plot_grid(
-  violin_stiffness,
-  violin_breakpoint,
-  biochem,
-  ncol = 3,
-  labels = c("D", "E", "F"),
-  label_fontfamily = "Helvetica",
-  label_size = 10,
-  # vjust = 1,
-  # hjust = 0,
-  rel_widths = c(1, 0.785, 0.785),
-  align = "h"
-)
+layout <- "
+AAABBCC
+DDDEEFF
+"
 
 patch <-
-  medium_stiffness + medium_breakpoint + plot_spacer() +
-  violin_stiffness + violin_breakpoint + biochem
+  plot_spacer() + medium_stiffness + medium_breakpoint +
+   bending_lignin_violin + violin_stiffness + violin_breakpoint
 
-pdf("IRX_figure5.pdf", width = onecol, height = onecol * 0.85)
+pdf("IRX_figure5.pdf", width = twocol, height = onecol)
 patch +
-  plot_layout(ncol = 3) &
+  plot_layout(design = layout) &
   plot_annotation(
-    tag_levels = "A",
-    theme = theme(plot.margin = margin(-5, -5, -5, -5))
+    tag_levels = list(c("C", "D", "E", "F", "G")),
+    # theme = theme(plot.margin = margin(-5, -5, -5, -5))
   ) &
   theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 

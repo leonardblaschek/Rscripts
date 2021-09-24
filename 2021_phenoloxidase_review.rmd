@@ -275,7 +275,7 @@ po_plot <- ggplot(data = PO, aes(x = genome, y = value)) +
     stroke = 0.2,
     alpha = 0.75
   ) +
-  scale_size_area(max_size = 5, name = "Divergence [mya]") +
+  scale_size_area(max_size = 5, name = "Divergence [mya]", breaks = c(10, 100, 1000)) +
   scale_x_continuous(limits = c(0, 1201)) +
   scale_fill_few(guide = "none") +
   scale_colour_few(name = "Gene family") +
@@ -2281,6 +2281,7 @@ phylogeny_species <- read_delim("/home/leonard/Dropbox/2018_PO_review/2020_rewri
       str_detect(species, fixed("Azolla")) ~ "[Azolla filiculoides]",
       str_detect(species, fixed("Zea")) ~ "[Zea mays]",
       str_detect(species, fixed("Arabidopsis")) ~ "[Arabidopsis thaliana]",
+      str_detect(species, fixed("Physcomitrella")) ~ "[Physcomitrium patens]",
       TRUE ~ species
     ),
     species = str_extract(species, "\\[.+\\]"),
@@ -2308,7 +2309,7 @@ phylogeny_species <- read_delim("/home/leonard/Dropbox/2018_PO_review/2020_rewri
       "Volvox carteri",
       "Chara braunii",
       "Marchantia polymorpha",
-      "Physcomitrella patens",
+      "Physcomitrium patens",
       "Selaginella moellendorffii",
       "Azolla filiculoides",
       "Ceratopteris richardii",
