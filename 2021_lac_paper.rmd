@@ -2027,6 +2027,7 @@ swelling_data <- map_dfr(swelling_files, read_csv) %>%
   mutate(cell = rep(seq(1:10), each = 3, length.out = 60)) %>% 
   filter(date != "2021-09-03") # those are too dark to differentiate CW from background
 ```
+
 ## Absolute thickness
 
 ```{r}
