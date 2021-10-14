@@ -2023,7 +2023,7 @@ swelling_data <- map_dfr(swelling_files, read_csv) %>%
       TRUE ~ "2"
     )
   ) %>% 
-  group_by(genotype, replicate) %>% 
+  group_by(date, genotype, replicate) %>% 
   mutate(cell = rep(seq(1:10), each = 3, length.out = 60)) %>% 
   filter(date != "2021-09-03") # those are too dark to differentiate CW from background
 ```
@@ -2032,25 +2032,40 @@ swelling_data <- map_dfr(swelling_files, read_csv) %>%
 
 ```{r}
 
-letters <- letter_groups(swelling_data,
-                         thickness,
-                         state,
-                         "tukey",
-                         genotype,
-                         cell_type,
-                         print_position = "above")
-ggplot(swelling_data,
+swelling_data_fresh <- swelling_data %>% 
+  filter(cell_type == "IF") %>% 
+  mutate(state = ordered(state, levels = rev(levels(state))),
+         genotype = ordered(genotype, levels = rev(levels(genotype)))
+         )
+
+letters <- swelling_data_fresh %>%
+  unite("ID", genotype, state) %>%
+  letter_groups(.,
+    thickness,
+    ID,
+    "tukey",
+    print_position = "above"
+  ) %>%
+  separate(ID, into = c("genotype", "state"), sep = "_") %>% 
+  mutate(state = ordered(state, levels = c("rehydrated", "dry", "fresh")),
+         genotype = ordered(genotype, levels = rev(c(WT, triple_it, quad_it, Q_it))))
+
+absolute_thick <- ggplot(swelling_data_fresh,
        aes(x = state,
            y = thickness)) +
   geom_quasirandom(
+    aes(group = interaction(state, genotype)),
+    dodge.width = 0.6,
     shape = 16,
     alpha = 0.25,
     size = 0.5,
-    width = 0.5
+    width = 0.05
   ) +
   geom_violin(
-    aes(fill = genotype),
+    aes(fill = genotype,
+        group = interaction(state, genotype)),
     draw_quantiles = 0.5,
+    position = position_dodge(width = 0.6),
     # fill = "white",
     colour = "black",
     alpha = 0.75,
@@ -2061,26 +2076,39 @@ ggplot(swelling_data,
   ) +
   geom_text(
     data = letters,
-    aes(label = Letters),
+    aes(label = Letters,
+        group = interaction(state, genotype)),
+    position = position_dodge(width = 0.6),
+    vjust = 0.4,
+    hjust = 0.5,
     size = ggtext_size,
     family = "Helvetica"
   ) +
   labs(y = "Cell wall thickness [µm]") +
-  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
-  # scale_x_discrete(limits = c(0, 1)) +
+  scale_color_manual(values = rev(pal_dawn), aesthetics = c("colour", "fill")) +
+  scale_y_continuous(position = "right") +
+  scale_x_discrete(expand = expansion(mult = 0.25)) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
   theme(
-    axis.title.x = element_blank(),
-    axis.title.y = element_textbox_simple(
-      orientation = "left-rotated",
+    axis.title.y = element_blank(),
+    axis.title.x = element_textbox_simple(
+      # orientation = "left-rotated",
       halign = 0.5,
       width = unit(25, "mm")
     ),
-    axis.text.x = element_markdown(),
+    # axis.text.y = element_markdown(
+    #   angle = 90,
+    #   hjust = 0.5),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
     strip.text = element_markdown()
   ) +
-  facet_grid(cell_type ~ genotype, scales = "free_y")
+  coord_flip()
+
+pdf("fresh_IF.pdf", width = onecol * 0.35, height = onecol * 0.71)
+absolute_thick
+dev.off()
 ```
 
 ## Relative thickness
@@ -2131,7 +2159,7 @@ ggplot(rel_swelling_data,
     axis.text.x = element_markdown(),
     strip.text = element_markdown()
   ) +
-  facet_grid(cell_type ~ genotype)
+  facet_wrap(cell_type ~ genotype)
 ```
 
 
