@@ -24,6 +24,7 @@ library(slider)
 library(tidyverse)
 library(tukeygrps)
 library(vroom)
+library(sf)
 
 ## import Helvetica ####
 font_add(
@@ -1776,11 +1777,11 @@ profiles
 dev.off()
 ```
 
+# Lignin function
 
+## TE collapse
 
-# TE collapse
-
-## Load data
+### Load data
 
 ```{r, message=FALSE}
 collapse_files <-
@@ -1819,6 +1820,11 @@ collapse_data <- vroom::vroom(collapse_files) %>%
   )) %>%
   ungroup() %>%
   fill(cell)
+```
+
+### Plot collapse
+
+```{r}
 
 collapse_stats <- collapse_data %>%
   group_by(genotype, replicate, cell_type, cell, instance) %>%
@@ -1827,25 +1833,35 @@ collapse_stats <- collapse_data %>%
     "Perim." = unique(Perim.) * 4, # analysed images were scaled down to 0.25, this corrects the scale
     "Circ." = unique(Circ.),
     "Solidity" = unique(Solidity)
-  ) 
+  ) %>% 
+  mutate(cell_type = paste0(cell_type, " convexity"))
+
+collapse_avg <- collapse_stats %>% 
+  group_by(genotype, cell_type, replicate) %>% 
+  summarise("Solidity" = mean(Solidity))
 
 collapse_n <- collapse_stats %>%
   group_by(genotype) %>%
   summarise(replicates = paste0(unique(replicate), collapse = ","))
-```
 
-## Plot collapse
-
-```{r}
-
-letters <- letter_groups(collapse_stats,
+letters_tech <- letter_groups(collapse_stats,
   Solidity,
   genotype,
   "kruskal",
-  stat_alpha = 0.001,
   cell_type,
   print_position = "below"
-)
+) %>% 
+  select(-Letters)
+
+letters <- letter_groups(collapse_avg,
+  Solidity,
+  genotype,
+  "kruskal",
+  cell_type,
+  print_position = "below"
+) %>% 
+  select(-Solidity) %>% 
+  left_join(letters_tech)
 
 collapse_plot <- ggplot(
   collapse_stats,
@@ -1854,14 +1870,6 @@ collapse_plot <- ggplot(
     y = Solidity
   )
 ) +
-  # geom_quasirandom(
-  #   shape = 21,
-  #   alpha = 1,
-  #   size = 0.5,
-  #   width = 0.25,
-  #   stroke = 0.2,
-  #   fill = "white",
-  # ) +
   geom_quasirandom(
     shape = 16,
     alpha = 0.25,
@@ -1879,6 +1887,12 @@ collapse_plot <- ggplot(
     adjust = 1,
     scale = "width"
   ) +
+  # geom_point(data = collapse_avg,
+  #            shape = 21,
+  #            fill = "white",
+  #            stroke = 0.2,
+  #            size = 1,
+  #            alpha = 0.5) +
   geom_text(
     data = letters,
     aes(label = Letters),
@@ -1887,28 +1901,119 @@ collapse_plot <- ggplot(
   ) +
   labs(y = "TE convexity") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  scale_y_continuous(breaks = c(0.5, 0.75, 1)) +
   # scale_x_discrete(limits = c(0, 1)) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
   theme(
-    axis.title.x = element_blank(),
-    axis.title.y = element_textbox_simple(
-      orientation = "left-rotated",
-      halign = 0.5,
-      width = unit(25, "mm")
-    ),
-    axis.text.x = element_markdown()
+    axis.title = element_blank(),
+    # axis.title.y = element_textbox_simple(
+    #   orientation = "left-rotated",
+    #   halign = 0.5,
+    #   width = unit(25, "mm")
+    # ),
+    axis.text.x = element_markdown(),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5)
   ) +
-  facet_wrap(~cell_type, nrow = 1)
+  facet_wrap(~cell_type, nrow = 2, strip.position = "left")
 
-pdf("lac_collapse.pdf", width = onecol, height = onecol * 0.25)
+pdf("lac_collapse.pdf", width = onecol, height = onecol * 0.5)
 collapse_plot
 dev.off()
 
 ```
 
+### Draw perimeters
 
-#### presentation figure
+#### Calculate perimeters
+
+```{r}
+perimeters <- collapse_data %>%
+  group_by(genotype, replicate, cell_type, cell) %>% 
+  select(point, x, y)
+
+perimeters_sf <- perimeters %>%
+  unite("ID", genotype:cell, remove = FALSE, sep = "_") %>%
+  group_by(ID) %>%
+  mutate(
+    x = x - mean(x, na.rm = TRUE),
+    y = y - mean(y, na.rm = TRUE)
+  ) %>%
+  group_by(ID, point) %>%
+  summarise(xy = list(c(x, y))) %>%
+  group_by(ID) %>%
+  mutate(
+    max_point = max(point)
+  ) %>%
+  bind_rows(filter(., point == 0) %>%
+    group_by(ID) %>%
+    mutate(point = max_point + 1)) %>%
+  arrange(ID, point) %>%
+  summarise(xy = list(c(xy))) %>%
+  mutate(geometry = map(
+    xy,
+    ~ do.call(rbind, .) %>% # make each list a matrix
+      list() %>% # st_polygon() requires a list
+      st_polygon()
+  )) %>%
+  st_as_sf() %>% 
+  group_by(ID) %>%
+  mutate(
+    smooth_geometry = smoothr::smooth(geometry, method = "ksmooth", smoothness = 2),
+    area = st_area(geometry),
+    convex_hull = st_convex_hull(geometry),
+    convex_area = st_area(convex_hull),
+    convexity = area / convex_area,
+    circularity = 4 * pi * (area / (lwgeom::st_perimeter(geometry)^2))
+  ) %>%
+  separate(ID, into = c("genotype", "replicate", "cell_type", "cell"), sep = "_") %>%
+  mutate(
+    genotype = ordered(genotype, levels = c(levels = c(WT, triple_it, quad_it, Q_it))),
+    cell.type = ordered(cell_type, levels = c("PX", "MX"))
+  )
+```
+
+#### Plot perimeters
+
+```{r}
+perimeters_sf_sample <- perimeters_sf %>% 
+  group_by(genotype, cell_type, replicate) %>% 
+  slice_sample(n = 3)
+
+perimeter_plot <- ggplot() +
+  geom_sf(
+    data = perimeters_sf_sample,
+    aes(colour = convexity,
+        geometry = smooth_geometry,),
+    # colour = "black",
+    fill = NA,
+    lwd = 0.1,
+    key_glyph = "point"
+  ) +
+  theme_leo() +
+  scale_x_continuous(expand = expansion(mult = 0)) +
+  scale_y_continuous(expand = expansion(mult = 0)) +
+  scale_colour_gradientn(colours = pal_ostwald_cont, trans = "reverse", name = "Convexity") +
+  guides(colour = guide_colourbar(barheight = unit(1, "mm"))) +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "bottom",
+    panel.border = element_blank(),
+    # panel.background = element_rect(fill = "black"),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank(),
+    strip.text = element_textbox_simple(halign = 0.5)
+  ) +
+  facet_grid(cell_type ~ genotype, switch = "y")
+
+pdf("lac_perimeters.pdf", width = onecol * 0.9, height = onecol * 0.5)
+perimeter_plot
+dev.off()
+```
+
+### Presentation figure
 
 ```{r}
 collapse_pres_data <- collapse_stats %>%
@@ -1995,9 +2100,9 @@ MX_collapse
 dev.off()
 ```
 
-# IF swelling
+## IF swelling
 
-## Load data
+### Load data
 
 ```{r}
 swelling_files <- list.files(
@@ -2028,7 +2133,9 @@ swelling_data <- map_dfr(swelling_files, read_csv) %>%
   filter(date != "2021-09-03") # those are too dark to differentiate CW from background
 ```
 
-## Absolute thickness
+### Absolute thickness
+
+#### Main figure
 
 ```{r}
 
@@ -2038,7 +2145,21 @@ swelling_data_fresh <- swelling_data %>%
          genotype = ordered(genotype, levels = rev(levels(genotype)))
          )
 
-letters <- swelling_data_fresh %>%
+swelling_data_avg <- swelling_data_fresh %>% 
+  group_by(genotype, state, replicate) %>% 
+  summarise(thickness = mean(thickness))
+
+letters_tech <- swelling_data_fresh %>%
+  unite("ID", genotype, state) %>%
+  letter_groups(.,
+    thickness,
+    ID,
+    "tukey",
+    print_position = "above"
+  ) %>% 
+  select(-Letters)
+
+letters <- swelling_data_avg %>%
   unite("ID", genotype, state) %>%
   letter_groups(.,
     thickness,
@@ -2046,6 +2167,8 @@ letters <- swelling_data_fresh %>%
     "tukey",
     print_position = "above"
   ) %>%
+  select(-thickness) %>% 
+  left_join(letters_tech) %>% 
   separate(ID, into = c("genotype", "state"), sep = "_") %>% 
   mutate(state = ordered(state, levels = c("rehydrated", "dry", "fresh")),
          genotype = ordered(genotype, levels = rev(c(WT, triple_it, quad_it, Q_it))))
@@ -2111,7 +2234,103 @@ absolute_thick
 dev.off()
 ```
 
-## Relative thickness
+#### Supplementary figure
+
+```{r}
+
+swelling_data_fresh <- swelling_data %>% 
+  filter(cell_type == "MX") %>% 
+  mutate(state = ordered(state, levels = levels(state)),
+         genotype = ordered(genotype, levels = levels(genotype))
+         )
+
+swelling_data_avg <- swelling_data_fresh %>% 
+  group_by(genotype, state, replicate) %>% 
+  summarise(thickness = mean(thickness))
+
+letters_tech <- swelling_data_fresh %>%
+  unite("ID", genotype, state) %>%
+  letter_groups(.,
+    thickness,
+    ID,
+    "tukey",
+    print_position = "above"
+  ) %>% 
+  select(-Letters)
+
+letters <- swelling_data_avg %>%
+  unite("ID", genotype, state) %>%
+  letter_groups(.,
+    thickness,
+    ID,
+    "tukey",
+    print_position = "above"
+  ) %>%
+  select(-thickness) %>% 
+  left_join(letters_tech) %>% 
+  separate(ID, into = c("genotype", "state"), sep = "_") %>% 
+  mutate(state = ordered(state, levels = c("fresh", "dry", "rehydrated")),
+         genotype = ordered(genotype, levels = c(WT, triple_it, quad_it, Q_it)))
+
+absolute_thick <- ggplot(swelling_data_fresh,
+       aes(x = genotype,
+           y = thickness)) +
+  geom_quasirandom(
+    aes(group = interaction(state, genotype)),
+    dodge.width = 0.6,
+    shape = 16,
+    alpha = 0.25,
+    size = 0.5,
+    width = 0.05
+  ) +
+  geom_violin(
+    aes(fill = genotype,
+        group = interaction(state, genotype)),
+    draw_quantiles = 0.5,
+    position = position_dodge(width = 0.6),
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters,
+        group = interaction(state, genotype)),
+    position = position_dodge(width = 0.6),
+    vjust = 0.4,
+    hjust = 0.5,
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  annotate("text",
+           label = c("fresh", "dried", "rehydrated"),
+           y = c(0.5, 0, 0.5),
+           x = c(0.85, 1, 1.15),
+           hjust = c(1, 0.5, 0),
+           size = ggtext_size,
+           family = "Helvetica") +
+  annotate("segment",
+           x = c(0.8, 1, 1.2),
+           xend = c(0.75, 1, 1.25),
+           y = c(1.1, 1.15, 1.2),
+           yend = c(0.8, 0.3, 0.8),
+           size = 0.2) +
+  labs(y = "MX Cell wall thickness [µm]") +
+  scale_color_manual(values = rev(pal_dawn), aesthetics = c("colour", "fill")) +
+  scale_y_continuous(limits = c(0, 5)) +
+  theme_leo() +
+  theme(axis.text.x = element_markdown())
+
+pdf("fresh_MX.pdf", width = onecol, height = onecol * 0.35)
+absolute_thick
+dev.off()
+```
+
+### Relative thickness
 
 ```{r}
 
@@ -2162,6 +2381,44 @@ ggplot(rel_swelling_data,
   facet_wrap(cell_type ~ genotype)
 ```
 
+## Correlations with plant height
+
+```{r}
+
+rel_swelling_data <- swelling_data %>% 
+  group_by(genotype, replicate, cell_type, cell) %>% 
+  mutate(rel_thickness = thickness / thickness[state == "dry"]) %>% 
+  filter(state == "fresh" & cell_type == "IF") %>% 
+  rename("rep" = replicate) %>% 
+  group_by(genotype, rep) %>% 
+  summarise(swelling_factor = mean(rel_thickness))
+
+collapse_height <- collapse_data %>% 
+  select(genotype, cell_type, "rep" = replicate, Solidity) %>% 
+  group_by(genotype, rep, cell_type) %>% 
+  summarise(mean_convexity = mean(Solidity)) %>% 
+  pivot_wider(names_from = cell_type, values_from = mean_convexity) %>% 
+  left_join(pheno_data %>% select(genotype, rep, "height" = stretched.height)) %>% 
+  left_join(rel_swelling_data)
+
+summary(lm(height ~ MX, data = collapse_height))
+
+ggplot(collapse_height,
+       aes(x = MX,
+           y = height)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+summary(lm(height ~ swelling_factor, data = collapse_height))
+
+ggplot(collapse_height,
+       aes(x = swelling_factor,
+           y = height)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+summary(lm(height ~ MX + swelling_factor, data = collapse_height))
+```
 
 
 # RT-qPCR
@@ -7515,6 +7772,37 @@ pdf("PA_activity_slopes.pdf", width = onecol, height = onecol)
 slope_grid
 dev.off()
 ```
+
+## Table
+
+```{r}
+stock_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Tables/substrates.csv")
+
+stock_tab <- knitr::kable(stock_data,
+  "latex",
+  # align = "lllllcccc",
+  # caption = "Raman bands validated by Py--GC/MS.",
+  # col.names = c(
+  #   "Band no.",
+  #   "Band intensity at",
+  #   "Normalised to",
+  #   "Assigned polymer",
+  #   "Assigned structure",
+  #   "Pearson's r",
+  #   "P-value",
+  #   "Pearson's r",
+  #   "P-value"
+  # ),
+  booktabs = TRUE,
+  linesep = ""
+) %>%
+  kableExtra::kable_styling(latex_options = c("hold_position", "striped", "scale_down")) 
+# add_header_above(c(" " = 5, "Total pyrolysate" = 2, "Total lignin" = 2)) %>%
+# kableExtra::save_kable("lac_tableS1.pdf")
+
+readr::write_file(stock_tab, "lac_tableS1.txt")
+```
+
 
 # Raman microspectroscopy
 

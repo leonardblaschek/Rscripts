@@ -374,12 +374,12 @@ year_cumul_temp <- cumul_temp %>%
     may_10deg = `cummul h above 10`[month == 5])
 ```
 
-### Check correlations between yearly temperatures and humidity
+### Environmental pSEM
 
 ```{r}
 
 pdf("c4h_envir_correlations.pdf", width = 10, height = 10)
-chart.Correlation(envir[,-c(1,12, 13)])
+PerformanceAnalytics::chart.Correlation(envir[,-c(1,12, 13)])
 dev.off()
 
 envir_psem <- piecewiseSEM::psem(
@@ -397,7 +397,8 @@ envir_psem <- piecewiseSEM::psem(
 )
 
 plot(envir_psem)
-summary(envir_psem)
+env_coefs <- summary(envir_psem)$coefficients
+env_model <- summary(envir_psem)$IC
 ```
 
 ## Export merged data
@@ -513,8 +514,6 @@ c4h_coefficients <-
   add_row(tidy(step_model_WT) %>% mutate(genotype = "WT",
                                          line = "T89"))
 
-write_csv(c4h_coefficients, "model_coefficients.csv")
-
 c4h_models <- 
   glance(step_model_c4h) %>%
   mutate(genotype = "C4H-RNAi",
@@ -525,8 +524,6 @@ c4h_models <-
                                          line = "3B")) %>%
   add_row(glance(step_model_WT) %>% mutate(genotype = "WT",
                                          line = "T89"))
-
-write_csv(c4h_models, "model_statistics.csv")
 
 pdf("model_comparisons.pdf", width = onecol, height = onecol)
 ggplot(
@@ -547,6 +544,18 @@ ggplot(
   theme(legend.position = "bottom") +
   coord_flip()
 dev.off()
+
+writexl::write_xlsx(list(
+  "growth models" = c4h_models,
+  "growth coefficients" = c4h_coefficients,
+  "environmental model" = env_model,
+  "environmental coefficients" = env_coefs
+),
+path = "Serk2020_tables.xlsx",
+col_names = TRUE,
+format_headers = TRUE,
+use_zip64 = FALSE
+)
 
 ```
 
@@ -664,15 +673,6 @@ ggplot(partial_model,
   theme(strip.text = ggtext::element_textbox_simple()) +
   facet_wrap(~ genotype)
 dev.off()
-```
-
-## pSEM
-
-```{r}
-
-#### environmental ####
-
-
 ```
 
 ### Export data
