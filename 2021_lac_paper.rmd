@@ -7776,6 +7776,7 @@ dev.off()
 ## Table
 
 ```{r}
+options(knitr.kable.NA = '')
 stock_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Tables/substrates.csv")
 
 stock_tab <- knitr::kable(stock_data,
@@ -7800,7 +7801,7 @@ stock_tab <- knitr::kable(stock_data,
 # add_header_above(c(" " = 5, "Total pyrolysate" = 2, "Total lignin" = 2)) %>%
 # kableExtra::save_kable("lac_tableS1.pdf")
 
-readr::write_file(stock_tab, "lac_tableS1.txt")
+readr::write_file(stock_tab, "lac_tableS2.txt")
 ```
 
 
@@ -9005,6 +9006,41 @@ dev.off()
 ```
 
 # Supplements
+
+## Genotyping primers
+
+```{r}
+options(knitr.kable.NA = '')
+geno_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Tables/genotyping_primers.csv") %>% 
+  mutate(primer = rep(c("FW", "RV"), length.out = 10),
+         `Primer pair mutant allele` = paste0(primer, ": ", `Primer pair mutant allele`),
+         `Primer pair WT allele` = paste0(primer, ": ", `Primer pair WT allele`)) %>% 
+  select(-primer)
+
+geno_tab <- knitr::kable(geno_data,
+  "latex",
+  # align = "lllllcccc",
+  # caption = "Raman bands validated by Py--GC/MS.",
+  # col.names = c(
+  #   "Band no.",
+  #   "Band intensity at",
+  #   "Normalised to",
+  #   "Assigned polymer",
+  #   "Assigned structure",
+  #   "Pearson's r",
+  #   "P-value",
+  #   "Pearson's r",
+  #   "P-value"
+  # ),
+  booktabs = TRUE,
+  linesep = ""
+) %>%
+  kableExtra::column_spec(c(4, 5), monospace = TRUE) %>%
+  kableExtra::column_spec(1, italic = TRUE)
+
+readr::write_file(geno_tab, "lac_tableS1.txt")
+```
+
 
 ## Expression
 
