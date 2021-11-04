@@ -1585,6 +1585,23 @@ Wiesner_n <- Wiesner_data %>%
   group_by(genotype) %>%
   summarise(replicates = paste0(unique(replicate), collapse = ","))
 ```
+### Instance differences
+
+```{r}
+relative_Wiesner <- Wiesner_avg %>% 
+  group_by(genotype, cell_type, instance) %>% 
+  summarise(mean_absorbance = mean(corrected_absorbance)) %>% 
+  group_by(cell_type, instance) %>% 
+  mutate(WT_change = mean_absorbance / mean_absorbance[genotype == "WT"])
+
+ggplot(relative_Wiesner,
+       aes(x = genotype,
+           y = mean_absorbance,
+           fill = instance)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~ cell_type)
+```
+
 
 ### Plot Wiesner violins
 
@@ -3319,7 +3336,33 @@ normalised <- results %>%
     ddCt = dCt - dCt[sample == "WT"],
     fold = 2^ddCt
   ) %>%
-  pivot_longer(c(dCt, ddCt, fold), names_to = "metric", values_to = "value")
+  pivot_longer(c(dCt, ddCt, fold), names_to = "metric", values_to = "value") %>%
+  mutate(
+    gene = paste0("<i>", gene, "</i>"),
+    sample = case_when(
+      sample != "WT" ~ paste0("<i>", as.character(sample), "</i>"),
+      TRUE ~ as.character(sample)
+    )
+  ) %>%
+  mutate(
+    gene = ordered(gene, levels = c(
+      "<i>EF1a</i>",
+      "<i>UBI</i>",
+      "<i>LAC4</i>",
+      "<i>LAC10</i>",
+      "<i>LAC11</i>",
+      "<i>LAC12</i>",
+      "<i>LAC17</i>"
+    )),
+    sample = ordered(sample, levels = c(
+      "WT",
+      "<i>lac4-2</i>",
+      "<i>lac5-1</i>",
+      "<i>lac10-1</i>",
+      "<i>lac12-2</i>",
+      "<i>lac17-1</i>"
+    ))
+  )
 
 normalised_avg <- normalised %>%
   group_by(sample, gene, metric) %>%
@@ -3328,34 +3371,34 @@ normalised_avg <- normalised %>%
     sd = sd(value, na.rm = TRUE)
   )
 
-ggplot(
-  filter(normalised, gene %in% c("LAC4", "LAC11", "LAC12", "LAC17")),
-  aes(
-    x = sample,
-    y = value
-  )
-) +
-  # geom_bar(stat = "identity") +
-  ggbeeswarm::geom_quasirandom(aes(fill = replicate),
-    shape = 21,
-    alpha = 0.75,
-    stroke = 0.2,
-    size = 1.5
-  ) +
-  geom_boxplot(
-    outlier.alpha = 0,
-    alpha = 0.75,
-    size = 0.2
-  ) +
-  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
-  # scale_y_log10() +
-  scale_fill_manual(values = pal_ostwald_disc_long) +
-  theme_leo() +
-  theme(axis.title = element_blank()) +
-  coord_flip() +
-  facet_grid(gene ~ metric, scales = "free")
+# ggplot(
+#   filter(normalised, gene %in% c("LAC4", "LAC11", "LAC12", "LAC17")),
+#   aes(
+#     x = sample,
+#     y = value
+#   )
+# ) +
+#   # geom_bar(stat = "identity") +
+#   ggbeeswarm::geom_quasirandom(aes(fill = replicate),
+#     shape = 21,
+#     alpha = 0.75,
+#     stroke = 0.2,
+#     size = 1.5
+#   ) +
+#   geom_boxplot(
+#     outlier.alpha = 0,
+#     alpha = 0.75,
+#     size = 0.2
+#   ) +
+#   # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+#   # scale_y_log10() +
+#   scale_fill_manual(values = pal_ostwald_disc_long) +
+#   theme_leo() +
+#   theme(axis.title = element_blank()) +
+#   coord_flip() +
+#   facet_grid(gene ~ metric, scales = "free")
 
-ggplot() +
+ex_heatmap <- ggplot() +
   geom_tile(
     data = normalised_avg %>%
       filter(metric == "ddCt"),
@@ -3388,56 +3431,63 @@ ggplot() +
     oob = scales::squish
   ) +
   theme_leo() +
-  guides(fill = guide_colorbar(title = "ddCt")) +
+  guides(fill = guide_colorbar(title = "&#x2206;&#x2206;Ct")) +
   labs(title = "Fold-change of laccase gene expression in single mutants") +
   theme(
     axis.title = element_blank(),
-    legend.position = "bottom"
+    legend.position = "bottom",
+    legend.title = element_markdown(),
+    axis.text.x = element_markdown(),
+    axis.text.y = element_markdown()
   )
 
-WT_ex <- normalised %>%
-  filter(gene %in% c("LAC4", "LAC11", "LAC12", "LAC17") &
-    sample == "WT" &
-    metric == "dCt") %>%
-  mutate(gene = ordered(glue("<i>{gene}</i>"), levels = c("<i>LAC4</i>", "<i>LAC11</i>", "<i>LAC12</i>", "<i>LAC17</i>")))
+# WT_ex <- normalised %>%
+#   filter(gene %in% c("LAC4", "LAC11", "LAC12", "LAC17") &
+#     sample == "WT" &
+#     metric == "dCt") %>%
+#   mutate(gene = ordered(glue("<i>{gene}</i>"), levels = c("<i>LAC4</i>", "<i>LAC11</i>", "<i>LAC12</i>", "<i>LAC17</i>")))
+# 
+# 
+# WT_dCt <- ggplot(
+#   WT_ex,
+#   aes(
+#     x = gene,
+#     y = value
+#   )
+# ) +
+#   # geom_bar(stat = "identity") +
+#   ggbeeswarm::geom_quasirandom(
+#     shape = 16,
+#     alpha = 0.75,
+#     # stroke = 0.2,
+#     size = 1
+#   ) +
+#   geom_boxplot(
+#     outlier.alpha = 0,
+#     alpha = 0.75,
+#     size = 0.2,
+#     fatten = 1,
+#     colour = "black",
+#     width = 0.25
+#   ) +
+#   # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+#   # scale_y_log10() +
+#   scale_fill_manual(values = pal_ostwald_disc_long) +
+#   labs(y = "Relative expression (&#x2206;Ct)") +
+#   theme_leo() +
+#   theme(
+#     axis.title.y = element_blank(),
+#     axis.text.y = element_markdown(),
+#     axis.title.x = element_textbox_simple()
+#   ) +
+#   coord_flip()
+# 
+# pdf("WT_expression.pdf", height = onecol * 0.5, width = onecol * 0.5)
+# WT_dCt
+# dev.off()
 
-
-WT_dCt <- ggplot(
-  WT_ex,
-  aes(
-    x = gene,
-    y = value
-  )
-) +
-  # geom_bar(stat = "identity") +
-  ggbeeswarm::geom_quasirandom(
-    shape = 16,
-    alpha = 0.75,
-    # stroke = 0.2,
-    size = 1
-  ) +
-  geom_boxplot(
-    outlier.alpha = 0,
-    alpha = 0.75,
-    size = 0.2,
-    fatten = 1,
-    colour = "black",
-    width = 0.25
-  ) +
-  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
-  # scale_y_log10() +
-  scale_fill_manual(values = pal_ostwald_disc_long) +
-  labs(y = "Relative expression (&Delta;Ct)") +
-  theme_leo() +
-  theme(
-    axis.title.y = element_blank(),
-    axis.text.y = element_markdown(),
-    axis.title.x = element_textbox_simple()
-  ) +
-  coord_flip()
-
-pdf("WT_expression.pdf", height = onecol * 0.5, width = onecol * 0.5)
-WT_dCt
+pdf("mutant_expression.pdf", height = onecol, width = onehalfcol)
+ex_heatmap
 dev.off()
 ```
 
@@ -7177,7 +7227,7 @@ AAAAAB
 AAAAAB
 CCCCC#
 "
-pdf("TE_activity_slopes.pdf", width = onecol, height = onecol)
+pdf("TE_activity_slopes.pdf", width = twocol, height = onecol)
 slope_grid
 # + pH_facet + substrate_facet +
 # plot_layout(design = layout)
