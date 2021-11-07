@@ -5509,6 +5509,16 @@ dev.off()
 
 # TE activity
 
+## [FAILS] Draw substrates
+
+```{r}
+# library("rcdk")
+# daf_sdf <- load.molecules("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/CID/10679/record/SDF/?record_type=2d&response_type=save&response_basename=Structure2D_CID_10679")
+# depictor <- get.depictor(width=200, height=200)
+# view.molecule.2d(daf_sdf[[1]])
+```
+
+
 ## DAF spectrum
 
 ```{r}
@@ -6707,7 +6717,7 @@ read_plus <- function(flnm) {
 TE_plates <- map_dfr(plate_files, read_plus)
 ```
 
-### Check individual experiments
+#### Check individual experiments
 
 ```{r}
 read_vroom <- function(flnm) {
@@ -7005,9 +7015,9 @@ dev.off()
 
 ### Plot linear phase slope
 
-```{r}
-# write_csv(kinetics, "kinetics.csv")
+#### Calculate slopes
 
+```{r}
 kinetics_nested <- kinetics %>%
   # filter(substrate != "SGZ") %>%
   filter(time >= lm_start & time <= lm_stop) %>%
@@ -7050,7 +7060,12 @@ kinetics_nested <- kinetics %>%
       TRUE ~ substrate_scaled
     )
   )
+```
 
+
+#### TE grid with replicates
+
+```{r}
 kinetic_max <- kinetics_nested %>%
   filter(day > 3) %>%
   group_by(pH, sample, substrate, day) %>%
@@ -7233,6 +7248,179 @@ slope_grid
 # plot_layout(design = layout)
 dev.off()
 ```
+
+#### TE grid with ribbons
+
+```{r}
+
+kinetics_avg <- kinetics_nested %>%
+  filter(sample != "neg. ctrl.") %>%
+  group_by(substrate, sample, day, pH) %>%
+  summarise(
+    mean_slope = mean(estimate),
+    sd_slope = sd(estimate)
+  )
+
+slope_grid <- ggplot(
+  kinetics_avg,
+  aes(
+    x = day,
+    y = mean_slope,
+    colour = substrate
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = 3,
+    xmax = 7,
+    fill = "grey90"
+  ) +
+  geom_ribbon(
+    aes(
+      group = sample,
+      fill = substrate,
+      ymin = mean_slope - sd_slope,
+      ymax = mean_slope + sd_slope
+    ),
+    colour = NA,
+    alpha = 0.25
+  ) +
+  geom_line(
+    aes(linetype = sample),
+    size = 0.4,
+  ) +
+  # scale_colour_brewer(palette = "Set1") +
+  scale_colour_manual(
+    aesthetics = c("colour", "fill"),
+    values = c(
+      "#66CCCC",
+      "#6699FF",
+      "#D35877",
+      "#FFCC66",
+      "#FF99CC"
+    )
+  ) +
+  scale_linetype_manual(values = c(2, 1)) +
+  labs(
+    y = "Substrate oxidation rate [AU min<sup>-1</sup>]",
+    x = "Days past induction (dpi)"
+  ) +
+  # scale_colour_manual(values = c("grey75", pal_ostwald_disc[1])) +
+  theme_leo() +
+  theme(
+    strip.text = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(100, "mm")
+    )
+  ) +
+  facet_wrap(pH ~ substrate, scales = "free_y")
+
+pdf("activity_slopes.pdf", width = twocol, height = onecol)
+slope_grid
+dev.off()
+```
+
+#### pH comparison
+
+```{r}
+kinetics_pH <- kinetics_nested %>%
+  # filter(substrate != "DAF") %>%
+  filter(day == 7) %>%
+  # filter(sample == "TE") %>%
+  filter(sample != "neg. ctrl.")
+
+asterisks <- kinetics_pH %>% 
+  group_by(substrate, pH) %>%
+  mutate(max = max(estimate)) %>% 
+  select(sample, substrate, estimate, pH, max) %>% 
+  nest(data = c(sample, estimate)) %>% 
+  mutate(t_test = map(data, ~ t.test(estimate ~ sample, data = .x)),
+         p_value = t_test[[1]][["p.value"]],
+         sig = case_when(p_value > 0.05 ~ "",
+                         p_value > 0.01 ~ "*",
+                         p_value > 0.001 ~ "**",
+                         TRUE ~ "***"))
+
+max_oxidation <- ggplot(
+  kinetics_pH,
+  aes(
+    x = pH,
+    y = estimate,
+    group = interaction(pH, sample)
+  )
+) +
+  geom_quasirandom(
+    dodge.width = 0.6,
+    shape = 16,
+    alpha = 0.25,
+    size = 0.5,
+    width = 0.3
+  ) +
+  geom_violin(
+    aes(fill = substrate,
+        linetype = sample),
+    draw_quantiles = 0.5,
+    position = position_dodge(width = 0.6),
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  # geom_text(
+  #   data = letters,
+  #   aes(label = Letters),
+  #   position = position_dodge(width = 0.6),
+  #   vjust = 0.4,
+  #   hjust = 0.5,
+  #   size = ggtext_size,
+  #   family = "Helvetica"
+  # ) +
+  geom_text(
+    data = asterisks,
+    aes(label = sig,
+        y = max,
+        x = pH,
+        group = pH),
+    position = position_dodge(width = 0.6),
+    vjust = 0.4,
+    hjust = 0.5,
+    size = ggtext_size * 2,
+    family = "Helvetica"
+  ) +
+  labs(y = "Oxidation rate at 7 dpi [AU min<sup>-1</sup>]") +
+  scale_fill_manual(
+    values = c(
+      "#66CCCC",
+      "#6699FF",
+      "#D35877",
+      "#FFCC66",
+      "#FF99CC"
+    )
+  ) +
+  scale_linetype_manual(values = c(2, 1)) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.15))) +
+  theme_leo() +
+  theme(axis.title.y = element_textbox_simple(
+    orientation = "left-rotated",
+    halign = 0.5,
+    width = unit(22, "mm")
+  )) +
+  facet_wrap(~substrate,
+    nrow = 1,
+    scales = "free_y"
+  )
+
+pdf("max_ox.pdf", height = onecol * 0.3, width = twocol)
+max_oxidation
+dev.off()
+```
+
 
 #### Single pH
 
