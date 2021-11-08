@@ -5509,16 +5509,6 @@ dev.off()
 
 # TE activity
 
-## [FAILS] Draw substrates
-
-```{r}
-# library("rcdk")
-# daf_sdf <- load.molecules("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/CID/10679/record/SDF/?record_type=2d&response_type=save&response_basename=Structure2D_CID_10679")
-# depictor <- get.depictor(width=200, height=200)
-# view.molecule.2d(daf_sdf[[1]])
-```
-
-
 ## DAF spectrum
 
 ```{r}
@@ -7302,11 +7292,12 @@ slope_grid <- ggplot(
     )
   ) +
   scale_linetype_manual(values = c(2, 1)) +
+  scale_y_continuous(labels = function(x) format(x, scientific = TRUE, digits = 1)) +
+  expand_limits(y = 0) +
   labs(
     y = "Substrate oxidation rate [AU min<sup>-1</sup>]",
     x = "Days past induction (dpi)"
   ) +
-  # scale_colour_manual(values = c("grey75", pal_ostwald_disc[1])) +
   theme_leo() +
   theme(
     strip.text = element_blank(),
@@ -7404,7 +7395,8 @@ max_oxidation <- ggplot(
     )
   ) +
   scale_linetype_manual(values = c(2, 1)) +
-  scale_y_continuous(expand = expansion(mult = c(0.05, 0.15))) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.2)), 
+                     labels = function(x) format(x, scientific = TRUE, digits = 1)) +
   theme_leo() +
   theme(axis.title.y = element_textbox_simple(
     orientation = "left-rotated",
@@ -7704,6 +7696,18 @@ slope_grid + pH_facet + substrate_facet +
   plot_layout(design = layout)
 dev.off()
 ```
+
+### Main figure
+
+```{r}
+
+pdf("TE_activity_fig.pdf", width = twocol, height = onecol * 1.15)
+slope_grid + max_oxidation +
+  plot_layout(nrow = 2, heights = c(0.8, 0.2))
+dev.off()
+
+```
+
 
 ## PA inductions
 
