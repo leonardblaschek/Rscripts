@@ -888,6 +888,7 @@ rmn_sum <- rmn_data_corrected %>%
     "G_rel" = scaled_lig[wavenumber == 1603],
     "GOH_rel" = scaled_lig[wavenumber == 1664],
     "GCHO_rel" = scaled_lig[wavenumber == 1625],
+    "GCHO_term.GCHOH" = GCHO_rel / GOH_rel,
     "S_rel" = scaled_lig[wavenumber == 1334],
     "P_rel" = scaled_lig[wavenumber == 1001],
     "cellulose" = scaled[wavenumber == 1099] + scaled[wavenumber == 381],
@@ -1096,6 +1097,11 @@ rmn_irx <- left_join(rmn_irx, wiesner.data.pre) %>%
 ### Violin plots
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%', fig.width=5, fig.height=4}
+
+ref_data <- rmn_sum %>% 
+  filter(cell.type == "IF") %>% 
+  group_by(genotype) %>% 
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
 
 rmn_sum_long <- rmn_irx %>%
   filter(cell.type != "IF" & genotype == "Col-0") %>%
@@ -1307,6 +1313,33 @@ rmn_lig <- rmn_violin("total_lignin") +
   labs(
     x = "",
     y = expression(paste("Relative lignin"))
+  ) +
+  geom_hline(
+    yintercept = c(
+      ref_data$total_lignin[ref_data$genotype == "ccr1-3"],
+      ref_data$total_lignin[ref_data$genotype == "Col-0"]
+    ),
+    linetype = 2,
+    size = 0.2,
+    colour = c(pal_ostwald_disc[c(3, 1)])
+  ) +
+  annotate("richtext",
+    label = c(
+      "<i>ccr1-3</i> IF",
+      "WT IF"
+    ),
+    y = c(
+      ref_data$total_lignin[ref_data$genotype == "ccr1-3"],
+      ref_data$total_lignin[ref_data$genotype == "Col-0"]
+    ),
+    x = c(3.5, 0.5),
+    hjust = c(1, 0),
+    vjust = c(1, 0),
+    label.size = NA,
+    fill = NA,
+    colour = c(pal_ostwald_disc[c(3, 1)]),
+    family = "Helvetica",
+    size = ggtext_size
   )
 
 # rmn_cellu <- rmn_violin("cellulose") +
@@ -1319,6 +1352,66 @@ rmn_s.g <- rmn_violin("S.G") +
   labs(
     x = "",
     y = expression(paste(Relative ~ bold(S) ~ "/" ~ bold(G)))
+  ) +
+  geom_hline(
+    yintercept = c(
+      ref_data$S.G[ref_data$genotype == "fah1"],
+      ref_data$S.G[ref_data$genotype == "Col-0"]
+    ),
+    linetype = 2,
+    size = 0.2,
+    colour = c(pal_ostwald_disc[c(3, 1)])
+  ) +
+  annotate("richtext",
+    label = c(
+      "<i>fah1</i> IF",
+      "WT IF"
+    ),
+    y = c(
+      ref_data$S.G[ref_data$genotype == "fah1"],
+      ref_data$S.G[ref_data$genotype == "Col-0"]
+    ),
+    x = c(3.5, 0.5),
+    hjust = c(1, 0),
+    vjust = c(1, 0),
+    label.size = NA,
+    fill = NA,
+    colour = c(pal_ostwald_disc[c(3, 1)]),
+    family = "Helvetica",
+    size = ggtext_size
+  )
+
+rmn_gcho.goh <- rmn_violin("GCHO_term.GCHOH") +
+  labs(
+    x = "",
+    y = expression(paste(Term. ~ bold(G)[CHO],"/", ~total ~ bold(G)[CHOH]))
+  ) +
+  geom_hline(
+    yintercept = c(
+      ref_data$GCHO_term.GCHOH[ref_data$genotype == "cad4xcad5"],
+      ref_data$GCHO_term.GCHOH[ref_data$genotype == "Col-0"]
+    ),
+    linetype = 2,
+    size = 0.2,
+    colour = c(pal_ostwald_disc[c(3, 1)])
+  ) +
+  annotate("richtext",
+    label = c(
+      "<i>cad4</i>x<i>cad5</i> IF",
+      "WT IF"
+    ),
+    y = c(
+      ref_data$GCHO_term.GCHOH[ref_data$genotype == "cad4xcad5"],
+      ref_data$GCHO_term.GCHOH[ref_data$genotype == "Col-0"]
+    ),
+    x = c(3.5, 0.5),
+    hjust = c(1, 0),
+    vjust = c(1, 0),
+    label.size = NA,
+    fill = NA,
+    colour = c(pal_ostwald_disc[c(3, 1)]),
+    family = "Helvetica",
+    size = ggtext_size
   )
 
 rmn_gcho <- rmn_violin("GCHO_rel") +
@@ -7637,6 +7730,21 @@ casp_plot
 dev.off()
 ```
 
+# Mutant table
+
+```{r}
+mut_csv <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/Submission/Plant Cell revised/Supplemental/mut_table.csv")
+
+mut_tab <- kable(mut_csv,
+  "latex",
+  booktabs = TRUE,
+  linesep = ""
+) %>%
+  kable_styling(latex_options = c("hold_position", "striped", "scale_down"))
+
+readr::write_file(mut_tab, "mut_tab.txt")
+
+```
 
 # Statistics table
 
