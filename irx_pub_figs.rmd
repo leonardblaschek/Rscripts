@@ -110,6 +110,12 @@ font_add(
   bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
   bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
 )
+
+font_add(
+  "Heros",
+  regular = "/tex-gyre/texgyreheros-regular.otf",
+  bold = "/tex-gyre/texgyreheros-bold.otf"
+)
 showtext_auto()
 
 #### generating plot theme ####
@@ -1425,7 +1431,8 @@ rmn_gcho.goh <- rmn_violin("GCHO_term.GCHOH") +
     x = "",
     y = "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>"
   ) +
-  scale_y_continuous(expand = expansion(mult = 0.4)) +
+  scale_y_continuous(expand = expansion(mult = 0.4),
+                     breaks = c(0.5, 1, 1.5, 2, 2.5)) +
   geom_hline(
     yintercept = c(
       ref_data$GCHO_term.GCHOH[ref_data$genotype == "cad4xcad5"],
@@ -2129,7 +2136,7 @@ read_plus <- function(flnm) {
 
 rmn_pop <- lapply(rmn_files, read_plus) %>%
   bind_rows() %>%
-  # filter(cell_type == "TE") %>%
+  filter(cell_type == "TE") %>%
   ungroup() %>%
   select(-cell_type) %>%
   anti_join(read_csv(paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/pop_rmn_exclude.csv"),
@@ -2323,6 +2330,151 @@ rmn_pop_test
 dev.off()
 ```
 
+#### Load Raman fibres
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+#### import and tidy poplar Raman data ####
+rmn_files <-
+  list.files(
+    path = paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar"),
+    pattern = "(TE|FI|RP)(.*).txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_tsv(flnm,
+    comment = "#",
+    col_names = c("wavenumber", "intensity"),
+    col_types = "cc",
+    # locale = locale(decimal_mark = ",")
+  ) %>%
+    mutate(
+      filename = str_remove(
+        flnm,
+        fixed(paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/"))
+      )
+    ) %>%
+    separate(filename, into = c("genotype", "replicate", "TE"), sep = "([/-])") %>%
+    mutate(
+      wavenumber = as.numeric(str_replace(wavenumber, fixed(","), fixed("."))),
+      intensity = as.numeric(str_replace(intensity, fixed(","), fixed("."))),
+      TE = str_remove(TE, fixed(".txt")),
+      technical = unlist(str_extract_all(TE, "[:alpha:]+")),
+      TE = unlist(str_extract_all(TE, "[:digit:]+")),
+      cell_type = case_when(
+        str_detect(technical, "TE") ~ "TE",
+        str_detect(technical, "FI") ~ "fibre",
+        TRUE ~ "ray"
+      )
+    ) %>%
+    pivot_wider(
+      id_cols = c(genotype, replicate, technical, cell_type, TE),
+      names_from = wavenumber,
+      values_from = intensity
+    ) %>%
+    group_by(genotype, replicate, technical, cell_type, TE) %>%
+    nest()
+}
+
+rmn_pop_ref <- map_dfr(rmn_files, read_plus) %>%
+  filter(cell_type == "fibre") %>%
+  ungroup() %>%
+  select(-cell_type) 
+
+#### baseline correction ####
+rmn_als <- function(x) {
+  corrected_spectra <- baseline.als(as.matrix(x),
+    lambda = 5,
+    p = 0.01,
+    maxit = 100
+  )
+  as_tibble(corrected_spectra$corrected, rownames = NA)
+}
+
+rmn_pop_ref_corrected <- rmn_pop_ref %>%
+  mutate(corrected_data = map(data, rmn_als)) %>%
+  select(-data) %>%
+  unnest() %>%
+  pivot_longer(-c(genotype, replicate, technical, TE),
+    names_to = "wavenumber",
+    values_to = "corrected.intensity"
+  ) %>%
+  drop_na() %>%
+  mutate(wavenumber = as.numeric(wavenumber))
+
+#### aligment, filtering and scaling ####
+
+rmn_pop_ref_aligned <- rmn_pop_ref_corrected
+
+# scaling and filtering
+rmn_pop_ref_scaled <- rmn_pop_ref_aligned %>%
+  group_by(genotype, replicate, technical, TE) %>%
+  mutate(
+    AUC = MESS::auc(wavenumber, corrected.intensity),
+    scaled = corrected.intensity / AUC,
+    scaled_lig = corrected.intensity / (
+      (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) + corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1]
+    )
+  ) %>%
+  filter(wavenumber > 200 & wavenumber < 1700)
+
+rmn_pop_ref_avg <- rmn_pop_ref_scaled %>%
+  mutate(wavenumber = round(wavenumber, digits = 1)) %>%
+  group_by(genotype) %>%
+  arrange(genotype, wavenumber) %>%
+  summarise(
+    # roll_mean = RcppRoll::roll_mean(scaled, 50, fill = NA, na.rm = TRUE),
+    roll_mean = slider::slide_index_dbl(scaled, wavenumber, mean, .before = 1, .after = 1),
+    roll_sd = slider::slide_index_dbl(scaled, wavenumber, sd, .before = 2, .after = 2),
+    wavenumber = wavenumber
+    )
+
+rmn_pop_ref_sum <- rmn_pop_ref_scaled %>%
+  group_by(genotype, replicate, technical, TE) %>%
+  summarise(
+    "unscaled_lignin" = 
+      (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
+      corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "broad_lignin" = 
+      corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] +
+      corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1] +
+      corrected.intensity[abs(wavenumber - 1660) == min(abs(wavenumber - 1660))][1] +
+      corrected.intensity[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
+    "total_lignin" = (scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
+      scaled[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "P_rel" = scaled_lig[abs(wavenumber - 1000) == min(abs(wavenumber - 1000))][1],
+    "G_rel" = scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "G_tot" = scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "GOH_rel" = scaled_lig[abs(wavenumber - 1660) == min(abs(wavenumber - 1660))][1],
+    "GCHO_rel" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
+    "GCHO_tot" = scaled[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1],
+    "S_rel" = scaled_lig[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "S_tot" = scaled[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1],
+    "O4_van_rel" = scaled_lig[abs(wavenumber - 1303) == min(abs(wavenumber - 1303))][1],
+    "other_van_rel" = scaled_lig[abs(wavenumber - 785) == min(abs(wavenumber - 785))][1],
+    "O4_syr_rel" = scaled_lig[abs(wavenumber - 1297) == min(abs(wavenumber - 1297))][1],
+    "other_syr_rel" = scaled_lig[abs(wavenumber - 450) == min(abs(wavenumber - 450))][1],
+    "Benz_rel" = O4_van_rel + other_van_rel + O4_syr_rel + other_syr_rel,
+    "cellulose" =
+      scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1] +
+        scaled[abs(wavenumber - 375) == min(abs(wavenumber - 375))][1],
+    "lig.cellu" = total_lignin / cellulose,
+    "G.cellu" = G_tot / cellulose,
+    "S.G" = scaled_lig[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1] /
+      scaled_lig[abs(wavenumber - 1276) == min(abs(wavenumber - 1276))][1],
+    "GOH.G" = scaled_lig[abs(wavenumber - 1660) == min(abs(wavenumber - 1660))][1] /
+      scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "GCHO.GOH" = scaled_lig[abs(wavenumber - 1625) == min(abs(wavenumber - 1625))][1] /
+      scaled_lig[abs(wavenumber - 1660) == min(abs(wavenumber - 1660))][1],
+    "AUC" = mean(AUC)
+  )
+
+pop_ref <- rmn_pop_ref_sum %>% 
+  group_by(genotype) %>% 
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+```
+
 ### Load shape data
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
@@ -2496,6 +2648,10 @@ ggplot(rmn_pop_data) +
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
+ref_data <- ref_data %>% 
+  mutate(genotype = as.character(genotype)) %>% 
+  full_join(pop_ref)
+
 wt_data_pop <- model_data_pop %>%
   filter(genotype == "WT") %>%
   group_by(cell_type, replicate, technical, TE) %>%
@@ -2519,7 +2675,7 @@ rmn_violin <- function(x) {
     cell_type,
     "tukey",
     print_position = "below",
-    print_adjust = 0.5
+    print_adjust = 1
   ) %>%
     mutate(cell_type = ordered(cell_type, levels = c("PV", "Old SV", "Young SV")))
   
@@ -2581,33 +2737,67 @@ rmn_violin <- function(x) {
       family = "Helvetica",
       position = position_dodge(width = 0.6)
     ) +
-    scale_x_discrete(labels = label_wrap(5)) +
+    scale_x_discrete(labels = label_wrap(10)) +
     scale_fill_manual(values = pal_flame_disc) +
     expand_limits(y = 0) +
     theme_leo() +
     theme(
       text = element_text(family = "Helvetica"),
       legend.position = "none",
-      axis.text.x = element_text(vjust = 1)
+      axis.text.x = element_text(vjust = 1),
+      axis.title.y = element_textbox_simple(halign = 0.5, 
+                                               orientation = "left-rotated",
+                                               size = 8)
     )
 }
 
 rmn_nv <- rmn_violin("n_v") +
   labs(
     x = "",
-    y = expression(paste("Adj. vessels [%]"))
-  )
+    y = "<sup>Adj. vessels [%]</sup>"
+  ) +
+  scale_y_continuous(expand = expansion(mult = 0.2))
 
 rmn_area <- rmn_violin("Area") +
   labs(
     x = "",
-    y = expression(paste("Area [µm"^2, "]"))
-  )
+    y = "<sup>Area [µm<sup>2</sup>]</sup>"
+  ) +
+  scale_y_continuous(expand = expansion(mult = 0.2),
+                     breaks = c(0, 500, 1000, 1500))
 
 rmn_lig.cellu <- rmn_violin("lig.cellu") +
   labs(
     x = "",
-    y = expression(paste("Lignin/cellulose"))
+    y = "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>"
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.2, 0.1))) +
+  geom_hline(
+    yintercept = c(
+      ref_data$lig.cellu[ref_data$genotype == "ccr1-3"],
+      ref_data$lig.cellu[ref_data$genotype == "Col-0"]
+    ),
+    linetype = 2,
+    size = 0.2,
+    colour = c(pal_ostwald_disc[c(3, 1)])
+  ) +
+  annotate("richtext",
+    label = c(
+      "<i><sub>At</sub>ccr1-3</i> IF<br>(traces of lignin)",
+      "<sub><i>At</i></sub>WT IF"
+    ),
+    y = c(
+      ref_data$lig.cellu[ref_data$genotype == "ccr1-3"],
+      ref_data$lig.cellu[ref_data$genotype == "Col-0"]
+    ),
+    x = c(4.5, -0.5),
+    hjust = c(1, 0),
+    vjust = c(1, 0),
+    label.size = NA,
+    fill = NA,
+    colour = c(pal_ostwald_disc[c(3, 1)]),
+    family = "Helvetica",
+    size = ggtext_size
   )
 
 # rmn_cellu <- rmn_violin("cellulose") +
@@ -2619,13 +2809,69 @@ rmn_lig.cellu <- rmn_violin("lig.cellu") +
 rmn_gcho.goh <- rmn_violin("GCHO.GOH") +
   labs(
     x = "",
-    y = expression(paste(bold(G)[CHO] ~ "/" ~ bold(G)[CHOH]))
+    y = "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>"
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.3))) +
+  geom_hline(
+    yintercept = c(
+      ref_data$GCHO.GOH[ref_data$genotype == "T89"],
+      ref_data$GCHO_term.GCHOH[ref_data$genotype == "Col-0"]
+    ),
+    linetype = 2,
+    size = 0.2,
+    colour = c(pal_ostwald_disc[c(3, 1)])
+  ) +
+  annotate("richtext",
+    label = c(
+      "<sub>poplar</sub>WT fibre",
+      "<sub><i>At</i></sub>WT IF"
+    ),
+    y = c(
+      ref_data$GCHO.GOH[ref_data$genotype == "T89"],
+      ref_data$GCHO_term.GCHOH[ref_data$genotype == "Col-0"]
+    ),
+    x = c(4.5, -0.5),
+    hjust = c(1, 0),
+    vjust = c(1, 0),
+    label.size = NA,
+    fill = NA,
+    colour = c(pal_ostwald_disc[c(3, 1)]),
+    family = "Helvetica",
+    size = ggtext_size
   )
 
 rmn_s.g <- rmn_violin("S.G") +
   labs(
     x = "",
-    y = expression(paste(Relative ~ bold(S) ~ "/" ~ bold(G)))
+    y = "<sup>**S**</sup>&frasl;<sub>**G**</sub>"
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1))) +
+  geom_hline(
+    yintercept = c(
+      ref_data$S.G[ref_data$genotype == "T89"],
+      ref_data$S.G[ref_data$genotype == "Col-0"]
+    ),
+    linetype = 2,
+    size = 0.2,
+    colour = c(pal_ostwald_disc[c(3, 1)])
+  ) +
+  annotate("richtext",
+    label = c(
+      "<sub>poplar</sub>WT fibre",
+      "<sub><i>At</i></sub>WT IF"
+    ),
+    y = c(
+      ref_data$S.G[ref_data$genotype == "T89"],
+      ref_data$S.G[ref_data$genotype == "Col-0"]
+    ),
+    x = c(-0.5, 4.5),
+    hjust = c(0, 1),
+    vjust = c(0, 1),
+    label.size = NA,
+    fill = NA,
+    colour = c(pal_ostwald_disc[c(3, 1)]),
+    family = "Helvetica",
+    size = ggtext_size
   )
 
 # rmn_gcho <- rmn_violin("GCHO_rel") +
@@ -2668,55 +2914,70 @@ celltypes_WT <-
     density = 900
   ))
 
-top <- plot_grid(
-  celltypes_WT,
-  rmn_nv,
-  labels = c("A", "B"),
-  vjust = 1,
-  nrow = 1,
-  # hjust = 0,
-  label_size = 10,
-  label_fontfamily = "Helvetica",
-  align = "hv",
-  axis = "lr",
-  rel_widths = c(2.25, 1)
-)
+# top <- plot_grid(
+#   celltypes_WT,
+#   rmn_nv,
+#   labels = c("A", "B"),
+#   vjust = 1,
+#   nrow = 1,
+#   # hjust = 0,
+#   label_size = 10,
+#   label_fontfamily = "Helvetica",
+#   align = "hv",
+#   axis = "lr",
+#   rel_widths = c(2.25, 1)
+# )
+# 
+# bottom <- plot_grid(
+#   rmn_area,
+#   # rmn_cellu,
+#   rmn_lig,
+#   rmn_s.g,
+#   rmn_benz,
+#   rmn_goh,
+#   rmn_gcho,
+#   # rmn_gcho.goh,
+#   # rmn_gcho_term.gcho_tot,
+#   labels = c("C", "D", "E", "F", "G", "H"),
+#   vjust = 1,
+#   # hjust = 0,
+#   nrow = 2,
+#   label_y = 1.05,
+#   label_size = 10,
+#   label_fontfamily = "Helvetica",
+#   align = "hv",
+#   axis = "lr"
+# )
+# 
+# pdf("IRX_figure_pop1.pdf", width = onecol, height = onecol * 0.95)
+# plot_grid(
+#   top,
+#   bottom,
+#   labels = c(""),
+#   vjust = 1,
+#   label_size = 10,
+#   label_fontfamily = "Helvetica",
+#   align = "hv",
+#   axis = "tlr",
+#   nrow = 2,
+#   rel_heights = c(1, 2)
+# )
+# dev.off()
 
-bottom <- plot_grid(
-  rmn_area,
-  # rmn_cellu,
-  rmn_lig,
-  rmn_s.g,
-  rmn_benz,
-  rmn_goh,
-  rmn_gcho,
-  # rmn_gcho.goh,
-  # rmn_gcho_term.gcho_tot,
-  labels = c("C", "D", "E", "F", "G", "H"),
-  vjust = 1,
-  # hjust = 0,
-  nrow = 2,
-  label_y = 1.05,
-  label_size = 10,
-  label_fontfamily = "Helvetica",
-  align = "hv",
-  axis = "lr"
-)
+layout = "
+123
+456"
 
-pdf("IRX_figure_pop1.pdf", width = onecol, height = onecol * 0.95)
-plot_grid(
-  top,
-  bottom,
-  labels = c(""),
-  vjust = 1,
-  label_size = 10,
-  label_fontfamily = "Helvetica",
-  align = "hv",
-  axis = "tlr",
-  nrow = 2,
-  rel_heights = c(1, 2)
-)
+pdf("IRX_figure_pop1_PC-resubmission.pdf", width = twocol, height = onecol * 0.7)
+wrap_elements(full = celltypes_WT) + rmn_nv + 
+  rmn_area + rmn_lig.cellu + rmn_s.g + rmn_gcho.goh +
+  plot_layout(design = layout) &
+  plot_annotation(
+    tag_levels = "A"
+  ) &
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
+
 ```
 ### Collapse 
 
@@ -7675,6 +7936,7 @@ pdf("casparian_strip.pdf", width = onecol * 0.5, height = onecol * 0.5)
 casp_plot
 dev.off()
 ```
+
 ##### Cell number
 
 ```{r}
@@ -7794,6 +8056,76 @@ pdf("casparian_strip_cells.pdf", width = onecol * 0.5, height = onecol * 0.5)
 casp_plot
 dev.off()
 ```
+
+## MD distributions
+
+### Load data
+
+```{r}
+gcho <- read_table("/home/leonard/Dropbox/2020_IRX manuscript/Submission/Plant Cell revised/Edits/lignin_MD/7mer-4O5-GCHO.dat",
+                   comment = "#",
+                   col_names = c("angle", "a-b", "b-O", "a-6")) %>% 
+  mutate(oligomer = "<b>G</b><sub>CHO</sub>")
+
+gchoh <- read_table("/home/leonard/Dropbox/2020_IRX manuscript/Submission/Plant Cell revised/Edits/lignin_MD/7mer-4O5-GCHOH.dat",
+                   comment = "#",
+                   col_names = c("angle", "a-b", "b-O", "a-6")) %>% 
+  mutate(oligomer = "<b>G</b><sub>CHOH</sub>")
+gchoha <- read_table("/home/leonard/Dropbox/2020_IRX manuscript/Submission/Plant Cell revised/Edits/lignin_MD/7mer-4O5-GCHOH-aOH.dat",
+                   comment = "#",
+                   col_names = c("angle", "a-b", "b-O", "a-6")) %>% 
+  mutate(oligomer = "<b>G</b><sub>CHOH</sub> with <sup>&alpha;</sup>C-OH")
+
+torsions <- bind_rows(gcho, gchoh, gchoha) %>% 
+  pivot_longer(c("a-b", "b-O", "a-6"), names_to = "bond", values_to = "density") %>% 
+  mutate(bond = ordered(recode(bond,
+         "a-b" = "<sup>&alpha;</sup>C &mdash; <sup>&beta;</sup>C",
+         "b-O" = "<sup>&beta;</sup>C &mdash; <sup>&beta;</sup>C-O",
+         "a-6" = "<sup>6</sup>C-O &mdash; <sup>&alpha;</sup>C"),
+         levels = c(
+           "<sup>6</sup>C-O &mdash; <sup>&alpha;</sup>C",
+           "<sup>&alpha;</sup>C &mdash; <sup>&beta;</sup>C",
+           "<sup>&beta;</sup>C &mdash; <sup>&beta;</sup>C-O"
+         )))
+```
+
+### Plot torsions
+
+```{r}
+torsion_plot <- ggplot(
+  torsions,
+  aes(
+    x = angle,
+    y = density,
+    colour = oligomer
+  )
+) +
+  geom_line(aes(linetype = oligomer),
+    size = 0.5
+  ) +
+  scale_colour_manual(values = pal_ostwald_disc[c(3, 1, 1)]) +
+  scale_linetype_manual(values = c(1, 1, 2)) +
+  scale_x_continuous(breaks = c(-180, -90, 0, 90, 180)) +
+  labs(
+    x = "Torsion angle [°]",
+    y = "Distribution density"
+  ) +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Heros"),
+    strip.text = element_markdown(family = "Heros", size = 10),
+    legend.title = element_blank(),
+    legend.text = element_markdown(family = "Heros"),
+    legend.position = c(0.1, 0.825)
+  ) +
+  facet_wrap(~bond)
+
+pdf("torsion_plot.pdf", width = twocol, height = onecol * 0.6)
+torsion_plot
+dev.off()
+```
+
+
 
 # Mutant table
 
