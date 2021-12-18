@@ -4201,170 +4201,6 @@ bending_lignin_violin
 dev.off()
 ```
 
-
-#### Biochemistry
-
-```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
-
-heights <- read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
-  select(genotype, height) %>%
-  filter(genotype %in% c("col-0", "fah1", "cad4xcad5")) %>%
-  mutate(genotype = recode(genotype, "col-0" = "WT")) %>%
-  group_by(genotype) %>%
-  summarise(
-    mean.height = mean(height),
-    sd.height = sd(height)
-  )
-
-biochem_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/bending_biochem.csv")) %>%
-  group_by(genotype) %>%
-  summarise(
-    mean.lig.py = mean(lignin.py),
-    sd.lig.py = sd(lignin.py),
-    mean.lig.tga = mean(lignin.tga),
-    sd.lig.tga = sd(lignin.tga),
-    mean.sg = mean(s.g),
-    sd.sg = sd(s.g),
-    mean.cho.choh = mean(gcho.gchoh),
-    sd.cho.choh = sd(gcho.gchoh)
-  ) %>%
-  ungroup() %>%
-  mutate(
-    scaled.lig.py = scale_range(mean.lig.py),
-    scaled.lig.tga = scale_range(mean.lig.tga),
-    scaled.sg = scale_range(mean.sg),
-    scaled.cho.choh = scale_range(mean.cho.choh)
-  ) %>%
-  left_join(heights)
-
-bending_avg <- stiffness_complete %>%
-  group_by(genotype, variable) %>%
-  summarise(mean = mean(value)) %>%
-  pivot_wider(
-    id_cols = genotype,
-    names_from = variable,
-    values_from = mean
-  ) %>%
-  left_join(biochem_data)
-
-biochem <- ggplot(
-  biochem_data,
-  aes(x = genotype)
-) +
-  annotate("rect",
-    ymin = c(0.5, 2.5),
-    ymax = c(1.5, 3.5),
-    xmin = -Inf,
-    xmax = Inf,
-    fill = "grey95",
-    colour = NA
-  ) +
-  geom_point(aes(
-    size = scaled.lig.tga,
-    y = 1,
-    colour = genotype,
-    # alpha = mean.lig.tga / 10
-  ),
-  alpha = 0.75,
-  # size = 8,
-  shape = 16
-  ) +
-  # geom_segment(aes(y = 0.75,
-  #                  yend = 0.75 + (scaled.lig.tga * 0.5),
-  #                  x = c(0.75, 1.75, 2.75),
-  #                  xend = c(0.75, 1.75, 2.75),
-  #              colour = genotype)) +
-  geom_point(aes(
-    size = scaled.sg,
-    y = 2,
-    colour = genotype,
-    # alpha = mean.sg
-  ),
-  alpha = 0.75,
-  # size = 8,
-  shape = 16
-  ) +
-  geom_point(aes(
-    size = scaled.cho.choh,
-    y = 3,
-    colour = genotype,
-    # alpha = mean.cho.choh / 10
-  ),
-  alpha = 0.75,
-  # size = 8,
-  shape = 16
-  ) +
-  geom_text(aes(
-    label = paste0(
-      round(mean.lig.tga, digits = 2), "\n±",
-      round(sd.lig.tga, digits = 2)
-    ),
-    y = 1
-  ),
-  family = "Helvetica",
-  size = ggtext_size,
-  lineheight = 0.75,
-  hjust = 0.5
-  ) +
-  geom_text(aes(
-    label = paste0(
-      round(mean.sg, digits = 2), "\n±",
-      round(sd.sg, digits = 2)
-    ),
-    y = 2
-  ),
-  family = "Helvetica",
-  size = ggtext_size,
-  lineheight = 0.75,
-  hjust = 0.5
-  ) +
-  geom_text(aes(
-    label = paste0(
-      round(mean.cho.choh, digits = 2), "\n±",
-      round(sd.cho.choh, digits = 2)
-    ),
-    y = 3
-  ),
-  family = "Helvetica",
-  size = ggtext_size,
-  lineheight = 0.75,
-  hjust = 0.5
-  ) +
-  theme_leo() +
-  scale_size_area(
-    max_size = 8
-  ) +
-  theme(
-    axis.text.y = element_blank(),
-    axis.title = element_blank(),
-    axis.ticks.y = element_blank(),
-    # panel.border = element_blank(),
-    # axis.line.x = element_line(size = 0.2)
-  ) +
-  scale_y_continuous(
-    limits = c(0.5, 3.5),
-    breaks = c(1, 2, 3),
-    labels = c(
-      "Total\nlignin",
-      expression(
-        bold("S") * "/" *
-          bold("G")
-      ),
-      expression(
-        bold("G")[CHO] * "/" *
-          bold("G")[CHOH]
-      )
-    )
-  ) +
-  scale_colour_manual(values = rev(c(
-    pal_ostwald_disc[1],
-    pal_ostwald_disc[3],
-    pal_ostwald_disc[3]
-  ))) +
-  scale_x_discrete(limits = rev(levels(stiffness_complete$genotype))) +
-  coord_flip()
-```
-
 ### Assemble figure
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
@@ -6086,6 +5922,10 @@ TGA <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/cell_TGA.csv") %>%
 TGA_united <- TGA %>%
   unite("ID", condition, dpi, sep = "_")
 
+TGA_n <- TGA %>% 
+  group_by(condition, dpi) %>% 
+  summarise(n = n())
+
 letters <- letter_groups(TGA_united,
   TGA,
   ID,
@@ -6160,9 +6000,26 @@ TGA_plot <- ggplot(
     family = "Helvetica",
     position = position_dodge(width = 5)
   ) +
+  geom_text(
+    data = TGA_n,
+    aes(
+      group = condition,
+      label = n,
+      y = 280
+    ),
+    size = ggtext_size,
+    family = "Helvetica",
+    position = position_dodge(width = 5)
+  ) +
+  annotate("text",
+           label = expression(paste(italic(n), " = ")),
+           x = 7,
+           y = 280,
+           family = "Helvetica",
+           size = ggtext_size) +
   # scale_fill_grey(start = 0.9, end = 0.1) +
   scale_fill_manual(values = c("grey50", pal_ostwald_disc[c(1, 3)]), aesthetics = c("colour", "fill")) +
-  scale_y_continuous(expand = expansion(mult = c(0.05, 0.05))) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.1))) +
   scale_x_continuous(breaks = c(10, 20, 30), expand = expansion(mult = c(0.05, 0.05))) +
   theme_leo() +
   theme(
@@ -7326,92 +7183,6 @@ medium_diameter_box <- ggplot(
 medium_diameter_box
 ```
 
-#### Coniferaldehyde position
-
-```{r}
-position <- read_csv(paste0(datapath, "PhD/IRX/Bending/coniferaldehyde_position.csv")) %>%
-  mutate(total = internal + terminal,
-         ratio = terminal / total * 100,
-         genotype = ordered(genotype, levels = c("WT", "fah1", "cad4xcad5")))
-
-letters <- letter_groups(position,
-                         ratio,
-                         genotype,
-                         "tukey",
-                         print_position = "below")
-
-stat_tab <- position %>% 
-  group_by(genotype) %>%
-  mutate(
-    "n" = n(),
-    genotype = paste0(genotype, " (n = ", n, ")")
-  ) %>%
-  letter_groups(.,
-    ratio,
-    genotype,
-    "tukey",
-    table = TRUE
-  )
-
-  anova_tab <- stat_tab$anova %>% 
-    distinct()
-  write_csv(anova_tab, paste0(stat_path, "S09D_anova.csv"))
-
-  tukey_tab <- stat_tab$tukey %>%
-    distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S09D_tukey.csv"))
-
-position_violin <- ggplot(
-  position,
-  aes(x = genotype, y = ratio)
-) +
-  geom_quasirandom(
-    aes(fill = genotype),
-    dodge.width = 0.6,
-    shape = 21,
-    # width = 0.1,
-    # colour = NA,
-    alpha = 0.75,
-    size = 1,
-    stroke = 0.2
-  ) +
-  stat_summary(geom = "crossbar", 
-               fun = "mean",
-               fatten = 1,
-               size = 0.2,
-               width = 0.3) +
-  geom_text(
-    data = letters,
-    aes(label = Letters),
-    size = ggtext_size,
-    family = "Helvetica",
-    position = position_dodge(width = 0.6)
-  ) +
-  scale_fill_manual(values = c(
-    pal_ostwald_disc[1],
-    pal_ostwald_disc[3],
-    pal_ostwald_disc[3]
-  )) +
-  expand_limits(y = 0) +
-  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05)),
-                     breaks = c(0, 20, 40)) +
-  scale_x_discrete(labels = c(
-    "WT",
-    expression(italic("fah1")),
-    expression(paste(italic("cad4"), "x", italic("cad5")))
-  )) +
-  labs(y = "Terminal <b>G</b><sub>CHO</sub> [%]") +
-  theme_leo() +
-  theme(
-    text = element_text(family = "Helvetica"),
-    legend.position = "none",
-    axis.title.y = ggtext::element_textbox_simple(orientation = "left-rotated",
-                                                  halign = 0.5),
-    axis.title.x = element_blank()
-  )
-```
-
-
 #### Composition influence
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
@@ -7428,20 +7199,7 @@ s_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/stiffness_s.csv")) %>%
     type = ordered(type, levels = c("Basal", "Mid", "Apical"))
   )
 
-heights <- read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
-  select(genotype, height) %>%
-  mutate(genotype = recode(genotype, "cad4xcad5" = "cad4x5")) %>% 
-  filter(genotype %in% c("col-0", "fah1", "cad4x5")) %>%
-  mutate(
-    genotype = recode(genotype, "col-0" = "WT"),
-    genotype = ordered(genotype, levels = c("WT", "fah1", "cad4x5"))
-  )
 
-heights_fold <- heights %>%
-  group_by(genotype) %>% 
-  summarise(height = median(height)) %>%
-  ungroup() %>%
-  mutate(height_fold = height / height[genotype == "WT"])
 
 widths_fold <- s_data %>%
   group_by(genotype) %>% 
@@ -7555,44 +7313,83 @@ mutant_diameter_box <- ggplot(
     legend.position = "none",
     axis.title.x = element_blank()
   )
+```
 
-letters <- letter_groups(heights,
-  height,
-  genotype,
-  "tukey",
-  print_position = "below",
-  print_adjust = 2
-)
+#### Biochemistry
 
-stat_tab <- heights %>% 
-  group_by(genotype) %>%
+```{r}
+
+biochem_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/bending_biochem.csv")) %>% 
+  group_by(genotype) %>% 
+  mutate(replicate = row_number()) %>% 
+  full_join(read_csv(paste0(datapath, "PhD/IRX/Bending/coniferaldehyde_position.csv"))) %>% 
+  full_join(read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>% mutate(genotype = recode(genotype, "col-0" = "WT"))) %>% 
+  filter(genotype %in% c("WT", "fah1", "cad4xcad5")) %>% 
+  mutate(total = internal + terminal,
+         term.gcho = terminal / total,
+         genotype = ordered(genotype, levels = c("WT", "fah1", "cad4xcad5"))) %>% 
+  select(genotype, 
+         replicate, 
+         "<sup>TGA lignin</sup>" = lignin.tga, 
+         "<sup>Py-GC/MS lignin</sup>" = lignin.py, 
+         "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = s.g, 
+         "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = gcho.gchoh, 
+         "<sup>Terminal **G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>total **G**<sub>CHO</sub></sub>" = term.gcho,
+         "<sup>Plant height [cm]</sup>" = height) %>% 
+  pivot_longer(-c(genotype, replicate), names_to = "variable", values_to = "value") %>% 
+  mutate(variable = ordered(variable, levels = c(
+    "<sup>Plant height [cm]</sup>",
+    "<sup>TGA lignin</sup>",
+    "<sup>Py-GC/MS lignin</sup>",
+    "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
+    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>",
+    "<sup>Terminal **G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>total **G**<sub>CHO</sub></sub>"
+  )))
+
+heights <- read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
+  select(genotype, height) %>%
+  mutate(genotype = recode(genotype, "cad4xcad5" = "cad4x5")) %>% 
+  filter(genotype %in% c("col-0", "fah1", "cad4x5")) %>%
   mutate(
-    "n" = n(),
-    genotype = paste0(genotype, " (n = ", n, ")")
-  ) %>%
-  letter_groups(.,
-    height,
-    genotype,
-    "tukey",
-    table = TRUE
+    genotype = recode(genotype, "col-0" = "WT"),
+    genotype = ordered(genotype, levels = c("WT", "fah1", "cad4x5"))
   )
 
-  anova_tab <- stat_tab$anova %>% 
-    distinct()
-  write_csv(anova_tab, paste0(stat_path, "S09H_anova.csv"))
+letters <- letter_groups(biochem_data,
+                         value,
+                         genotype,
+                         "tukey",
+                         variable,
+                         print_position = "above",
+                         print_adjust = 0.5) %>% 
+  mutate(value = case_when(variable == "<sup>Plant height [cm]</sup>" ~ value + 5,
+                           TRUE ~ value))
+# 
+# stat_tab <- position %>% 
+#   group_by(genotype) %>%
+#   mutate(
+#     "n" = n(),
+#     genotype = paste0(genotype, " (n = ", n, ")")
+#   ) %>%
+#   letter_groups(.,
+#     ratio,
+#     genotype,
+#     "tukey",
+#     table = TRUE
+#   )
+# 
+#   anova_tab <- stat_tab$anova %>% 
+#     distinct()
+#   write_csv(anova_tab, paste0(stat_path, "S09D_anova.csv"))
+# 
+#   tukey_tab <- stat_tab$tukey %>%
+#     distinct()
+#   write_csv(tukey_tab, paste0(stat_path, "S09D_tukey.csv"))
 
-  tukey_tab <- stat_tab$tukey %>%
-    distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S09H_tukey.csv"))
-
-
-mutant_height_box <- ggplot(
-  data = heights,
-  aes(x = genotype, y = height)
+biochem_plot <- ggplot(
+  biochem_data,
+  aes(x = genotype, y = value)
 ) +
-  # geom_line(aes(group = interaction(cell.type, variable, cell, measurement)),
-  #           size = 0.2,
-  #           alpha = 0.25) +
   geom_quasirandom(
     aes(fill = genotype),
     dodge.width = 0.6,
@@ -7603,73 +7400,52 @@ mutant_height_box <- ggplot(
     size = 1,
     stroke = 0.2
   ) +
-  # geom_boxplot(
-  #   aes(group = interaction(cell.type, variable), fill = cell.type),
-  #   # fill = "white",
-  #   alpha = 0.5,
-  #   width = 0.6,
-  #   position = position_dodge2(width = 1),
-  #   outlier.alpha = 0,
-  #   lwd = 0.25,
-  #   fatten = 1,
-  #   width = 0.25
-  # ) +
-  geom_violin(
-    # aes(group = interaction(days, cell.type),
-    # fill = cell.type
-    # ),
-    draw_quantiles = 0.5,
-    adjust = 2,
-    fill = "white",
-    colour = "black",
-    alpha = 0.85,
-    width = 0.2,
-    position = position_dodge(width = 0.6),
-    size = 0.2,
-    scale = "width"
-  ) +
+  stat_summary(geom = "crossbar", 
+               fun = "mean",
+               fatten = 1,
+               size = 0.2,
+               width = 0.3) +
   geom_text(
     data = letters,
     aes(label = Letters),
     size = ggtext_size,
     family = "Helvetica",
-    position = position_dodge(width = 0.6)
   ) +
-  scale_x_discrete(labels = c(
-    "WT",
-    expression(italic("fah1")),
-    expression(paste(italic("cad4"), "x", italic("5")))
-  )) +
-  # scale_fill_manual(values = pal_flame_disc) +
   scale_fill_manual(values = c(
     pal_ostwald_disc[1],
     pal_ostwald_disc[3],
     pal_ostwald_disc[3]
   )) +
   expand_limits(y = 0) +
-  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
-  labs(y = "Plant height [cm]") +
+  # scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05)),
+  #                    breaks = c(0, 20, 40)) +
+  scale_x_discrete(labels = c(
+    "WT",
+    expression(italic("fah1")),
+    expression(paste(italic("cad4"), "x", italic("cad5")))
+  )) +
+  # labs(y = "Terminal <b>G</b><sub>CHO</sub> [%]") +
   theme_leo() +
   theme(
-    text = element_text(family = "Helvetica"),
+    strip.text.x.bottom = element_textbox_simple(halign = 0.5, size = 8),
     legend.position = "none",
+    strip.placement = "outside",
+    axis.title.y = element_blank(),
     axis.title.x = element_blank()
-  )
+  ) +
+  coord_flip() +
+  facet_wrap(~ variable, 
+             strip.position = "bottom",
+             scales = "free_x",
+             nrow = 1)
 
-right <- plot_grid(medium_diameter_box,
-  mutant_diameter_box,
-  mutant_height_box,
-  labels = c("B", "C", "D"),
-  align = "v",
-  axis = "l",
-  label_fontfamily = "Helvetica",
-  label_size = 10,
-  nrow = 3
-)
-
+pdf("biochem.pdf", width = twocol, height = onecol * 0.4)
+biochem_plot
+dev.off()
 ```
 
 #### Assemble figure
+
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
 # pdf("bending_supplemental.pdf", width = onecol, height = onecol)
@@ -7691,9 +7467,10 @@ right <- plot_grid(medium_diameter_box,
 
 patch <- 
   curves_media |
-  (medium_strength / medium_diameter_box / position_violin) |
+  (medium_strength / medium_diameter_box) |
   curves | 
-  (violin_strength / mutant_diameter_box / mutant_height_box)
+  (violin_strength / mutant_diameter_box) |
+  biochem_plot
 
 pdf("bending_supplemental.pdf", width = twocol, height = onecol)
 patch + plot_annotation(tag_levels = 'A') & 
