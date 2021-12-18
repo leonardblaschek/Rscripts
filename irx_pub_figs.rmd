@@ -7469,11 +7469,11 @@ patch <-
   curves_media |
   (medium_strength / medium_diameter_box) |
   curves | 
-  (violin_strength / mutant_diameter_box) |
-  biochem_plot
+  (violin_strength / mutant_diameter_box)
 
-pdf("bending_supplemental.pdf", width = twocol, height = onecol)
-patch + plot_annotation(tag_levels = 'A') & 
+pdf("bending_supplemental_top.pdf", width = twocol, height = onecol)
+patch +
+  plot_annotation(tag_levels = 'A') & 
   theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
 ```
