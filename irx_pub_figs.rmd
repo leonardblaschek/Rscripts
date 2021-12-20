@@ -5292,7 +5292,7 @@ readr::write_file(coef_tab, "sem_coef_tab.txt")
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 rmn_irx_long <- rmn_irx %>%
   mutate(n_v = n_v * 100) %>%
-  select(genotype:cell.type, n_v, Area, Perim., Circ., convexity, total_lignin, G_rel, GOH_rel, S_rel, cellulose, mean.OD1, GCHO_rel, S.G, P_rel, Benz_rel) %>%
+  select(genotype:cell.type, n_v, Area, Perim., Circ., convexity, total_lignin, G_rel, GOH_rel, S_rel, cellulose, mean.OD1, GCHO_rel, S.G, GCHO_term.GCHOH, P_rel, Benz_rel) %>%
   pivot_longer(cols = -c(genotype:cell.type), names_to = "variable", values_to = "value") %>%
   mutate(
     variable = factor(variable,
@@ -5311,6 +5311,7 @@ rmn_irx_long <- rmn_irx %>%
         "P_rel",
         "Benz_rel",
         "S.G",
+        "GCHO_term.GCHOH",
         "cellulose"
       ),
       labels = c(
@@ -5328,6 +5329,7 @@ rmn_irx_long <- rmn_irx %>%
         "bold(P)",
         "Benzaldehydes",
         "bold(S)~'/'~bold(G)",
+        "bold(G)[CHO]~'/'~bold(G)[CHOH]",
         "Cellulose"
       )
     ),
@@ -5362,10 +5364,10 @@ rmn_irx_letters <- letter_groups(
 ) %>%
   mutate(value = case_when(variable == "Area [µm²]" & cell.type %in% c("PX", "SMX") ~
            value + 20,
-           variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type %in% c("PX", "SMX") ~
-             value + 0.5,
-           variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type == "PMX" ~
-             value + 0.2,
+           # variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type %in% c("PX", "SMX") ~
+           #   value + 0.5,
+           # variable == "bold(G)[CHO]~'/'~bold(G)[CHOH]" & cell.type == "PMX" ~
+           #   value + 0.2,
            variable == "Term~'/'~tot~bold(G)[CHO]" & cell.type %in% c("PMX", "SMX") ~
              value + 2,
          TRUE ~ value))
@@ -5601,7 +5603,7 @@ dev.off()
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 rmn_irx_long <- model_data_pop %>%
   ungroup() %>%
-  select(genotype, cell_type, Distance, n_v, Area, Perim., Circ., Solidity, total_lignin, G_rel, GOH_rel, S_rel, cellulose, wiesner_avg, GCHO_rel, S.G, P_rel, Benz_rel) %>%
+  select(genotype, cell_type, Distance, n_v, Area, Perim., Circ., Solidity, total_lignin, G_rel, GOH_rel, S_rel, cellulose, wiesner_avg, GCHO_rel, S.G, GCHO.GOH, P_rel, Benz_rel) %>%
   pivot_longer(cols = -c(genotype, cell_type), names_to = "variable", values_to = "value") %>%
   mutate(
     variable = factor(variable,
@@ -5621,6 +5623,7 @@ rmn_irx_long <- model_data_pop %>%
       "P_rel",
       "Benz_rel",
       "S.G",
+      "GCHO.GOH",
       "cellulose"
     ),
     labels = c("'Area [µm²]'",
@@ -5638,6 +5641,7 @@ rmn_irx_long <- model_data_pop %>%
                "bold(P)",
                "Benzald.",
                "bold(S)~'/'~bold(G)",
+               "bold(G)[CHO]~'/'~bold(G)[CHOH]",
                "Cellulose"
                )),
     genotype = ordered(genotype,
@@ -5903,7 +5907,7 @@ pop_S1 <- ggplot(
     switch = "y"
   )
 
-pdf("IRX_FigureS1_pop.pdf", width = onecol * 1.5, height = twocol * 1.2)
+pdf("IRX_FigureS1_pop.pdf", width = onecol * 1.5, height = twocol * 1.3)
 pop_S1
 dev.off()
 ```
@@ -6114,6 +6118,10 @@ regressions <- rmn_lignin_dist %>%
                                  data = .x)),
     pred = map(fit, predict),
     tidied = map(fit, broom.mixed::glance),
+    coefs = map(fit, broom.mixed::tidy),
+    slope = map(coefs, "estimate"),
+    slope = map(slope, 2),
+    slope = as.numeric(slope),
     r2 = map(fit, MuMIn::r.squaredGLMM),
     r2 = map(r2, 2),
     r2 = as.numeric(r2),
@@ -6172,7 +6180,9 @@ dist_lig1 <- ggplot(
     aes(label =
           paste0(genotype,
                  ": R<sup>2</sup> = ",
-                 format(round(r2, 2), nsmall = 2)
+                 format(round(r2, 2), nsmall = 2),
+                 "; slope = ",
+                 format(round(slope, 2), nsmall = 2)
                  # ", <i>P</i> = ",
                  # format(p.value, scientific = TRUE, digits = 2)
                  ),
