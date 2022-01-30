@@ -9133,6 +9133,147 @@ corrplot::corrplot.mixed(cor(as.matrix(corr_data)))
 # dev.off()
 ```
 
+# Cell corner adhesion
+
+## Load data
+
+```{r}
+CC_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2021_lac_manuscript/CC_measurements/",
+    pattern = "*.csv",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_CC <- function(flnm) {
+  read_csv(flnm) %>%
+    mutate(file = basename(flnm)) %>%
+    separate(file, into = c("date", "genotype", "replicate", "notes"), sep = "_", extra = "merge") %>%
+    mutate(speed = as.numeric(str_remove(str_extract(notes, "[:digit:]speed"), "speed")),
+           sum = as.numeric(str_remove(str_extract(notes, "[:digit:]sum"), "sum"))) %>% 
+    select(-notes) %>% 
+    pivot_longer(-c("date", "genotype", "replicate", "speed", "sum"), names_to = "ROI", values_to = "value") %>%
+    mutate(ROI = str_remove(ROI, "Roi_"))
+}
+
+CC_data <- map_dfr(CC_files, read_CC) %>%
+  mutate(genotype = ordered(case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    levels = c(WT, triple_it, quad_it, Q_it)
+    )) %>% 
+  group_by(date, genotype, replicate, ROI) %>%
+  mutate(
+    pixel = row_number(),
+    CC = median(pixel),
+    position = pixel - CC,
+    adjusted = value / sum,
+    scaled = (value - min(value)) / (max(value) - min(value)),
+    layer = case_when(position < -29 & position > -41 ~ "CML",
+                      position > 14 & position < 26 ~ "SCW",
+                      position > -6 & position < 6 ~ "CC"),
+    layer = ordered(layer, levels = c("CML", "CC", "SCW"))
+  )
+```
+
+## Plot profiles
+
+```{r}
+CC_plot <- ggplot(CC_data,
+       aes(x = position,
+           y = adjusted,
+           colour = genotype)) +
+  annotate("rect",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = -5,
+           xmax = 5,
+           fill = "grey95") +
+  geom_line(aes(group = interaction(genotype, replicate, ROI)),
+                size = 0.2,
+                alpha = 0.5) +
+  geom_smooth(method = "loess",
+              span = 0.2) +
+  scale_x_continuous(breaks = c(-25, 0, 25),
+                     labels = c("CML", "CC", "SCW"),
+                     limits = c(-50, 50)) +
+  scale_colour_manual(values = pal_dawn[c(1, 5, 7)]) +
+  theme_leo() +
+  theme(legend.position = "bottom",
+        legend.text = element_markdown())
+
+pdf("CC_plot.pdf", width = onecol, height = onecol)
+CC_plot
+dev.off()
+```
+
+## Layer violins
+
+```{r}
+CC_plot <- ggplot(
+  drop_na(CC_data),
+  aes(
+    x = genotype,
+    y = adjusted
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.25,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  # geom_point(data = CC_avg,
+  #            shape = 21,
+  #            fill = "white",
+  #            stroke = 0.2,
+  #            size = 1,
+  #            alpha = 0.5) +
+  # geom_text(
+  #   data = letters,
+  #   aes(label = Letters),
+  #   size = ggtext_size,
+  #   family = "Helvetica"
+  # ) +
+  labs(y = "UV autofluorescence") +
+  scale_fill_manual(values = pal_dawn[c(1, 5, 7)]) +
+  # scale_y_continuous(breaks = c(0.5, 0.75, 1)) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title = element_blank(),
+    # axis.title.y = element_textbox_simple(
+    #   orientation = "left-rotated",
+    #   halign = 0.5,
+    #   width = unit(25, "mm")
+    # ),
+    axis.text.x = element_markdown(),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5)
+  ) +
+  facet_wrap(~layer)
+
+pdf("lac_CC.pdf", width = onecol, height = onecol * 0.5)
+CC_plot
+dev.off()
+```
+
+
+
 # Multivariate analysis
 
 ```{r}
