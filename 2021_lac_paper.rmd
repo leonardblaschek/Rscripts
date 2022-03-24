@@ -3867,7 +3867,8 @@ dev.off()
 Wiesner_files <-
   list.files(
     path = c(paste0(datapath, "PhD/Wiesner/2021-05_Wiesner/Stitched/Measurements/"),
-             paste0(datapath, "PhD/Wiesner/2021-05_Wiesner/2021-09-03_wonky-images/Measurements/")),
+             paste0(datapath, "PhD/Wiesner/2021-05_Wiesner/2021-09-03_wonky-images/Measurements/"),
+             "/home/leonard/Dropbox/2021_lac_manuscript/Wiesner/CC_points/Measurements/"),
     pattern = "*.csv",
     recursive = TRUE,
     full.names = TRUE
@@ -3877,10 +3878,13 @@ Wiesner_data <- map_dfr(Wiesner_files, read_csv) %>%
   separate(image, into = c("date", "genotype", "replicate", "first_image"), sep = "_") %>%
   mutate(date = str_replace(date, "^021", "2021")) %>%
   mutate(
+    cell_type = recode(cell_type,
+                       "CC" = "IF-CC"),
     cell_type = ordered(cell_type,
       levels = c(
         "IF",
         "IF-CML",
+        "IF-CC",
         "LP",
         "XF",
         "XF-CML",
@@ -3901,7 +3905,7 @@ Wiesner_data <- map_dfr(Wiesner_files, read_csv) %>%
       TRUE ~ "2"
     )
   ) %>%
-  filter(cell_type %in% c("IF", "IF-CML", "XF", "PX", "MX", "PH", "BG"))
+  filter(cell_type %in% c("IF", "IF-CML", "IF-CC", "XF", "PX", "MX", "PH", "BG"))
 
 if (any(Wiesner_data$first_image != "unstained")) warning("Stained and unstained values might be inverted in some images.")
 
@@ -3922,6 +3926,7 @@ Wiesner_n <- Wiesner_data %>%
   group_by(genotype) %>%
   summarise(replicates = paste0(unique(replicate), collapse = ","))
 ```
+
 ### Instance differences
 
 ```{r}
@@ -4024,7 +4029,7 @@ Wiesner_plot <- ggplot(
       halign = 0.5,
       width = unit(25, "mm")
     ),
-    axis.text.x = element_markdown(),
+    axis.text.x = element_markdown(angle = 45, hjust = 1, vjust = 1),
     panel.spacing = unit(0.5, "mm")
   ) +
   facet_wrap(~cell_type, nrow = 1)
@@ -4242,6 +4247,11 @@ dev.off()
 #### Load data 
 
 ```{r}
+
+Wiesner_clearing <- Wiesner_data %>% 
+  select(genotype, replicate, tissue_clearing) %>% 
+  distinct()
+
 CC_Wiesner_files <-
   list.files(
     path = "/home/leonard/Dropbox/2021_lac_manuscript/Heatmaps/",
@@ -4280,6 +4290,12 @@ CC_Wiesner <- map_dfr(CC_Wiesner_files, read_CC) %>%
     layer = ordered(layer, levels = c("CML", "CC"))
   )
 
+CC_Wiesner_line <- CC_Wiesner %>% 
+  group_by(genotype, replicate, ROI, layer) %>% 
+  summarise(value = mean(value)) %>% 
+  left_join(Wiesner_clearing) %>% 
+  mutate(value_corrected = value - tissue_clearing)
+
 CC_Wiesner_avg <- CC_Wiesner %>% 
   drop_na() %>% 
   group_by(genotype, replicate, layer) %>% 
@@ -4296,7 +4312,7 @@ letters <- letter_groups(CC_Wiesner_avg,
                          "tukey",
                          layer)
 
-ggplot(CC_Wiesner %>% drop_na(), 
+ggplot(CC_Wiesner_line %>% drop_na(), 
        aes(x = genotype,
            y = value)) +
   geom_quasirandom(
