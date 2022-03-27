@@ -1103,7 +1103,15 @@ rmn_irx <- left_join(rmn_irx, wiesner.data.pre) %>%
     cell.type = ordered(cell.type,
                         levels = c("PX", "MX", "SX"))
   )
-# write.csv(rmn_irx, file = "SEM_data.csv"))
+
+# write.csv(rmn_irx, file = "SEM_data.csv")
+
+rmn_data_n <- rmn_irx %>% 
+  group_by(genotype, replicate, cell.type) %>% 
+  summarise(n = n()) %>% 
+  pivot_wider(names_from = cell.type, values_from = n)
+
+writexl::write_xlsx(rmn_data_n, "Raman_replicates.xlsx")
 ```
 
 ### Violin plots
@@ -1124,6 +1132,24 @@ rmn_sum_long <- rmn_irx %>%
     names_to = "variable",
     values_to = "value"
   )
+
+rmn_variation <- rmn_sum_long %>% 
+  filter(variable %in% c("lig.cellu", "S.G", "GCHO_term.GCHOH")) %>% 
+  mutate(variable = recode(variable,
+                           lig.cellu = "lignin/cellulose",
+                           S.G = "S/G",
+                           GCHO_term.GCHOH = "terminal GCHO/GCHOH")) %>% 
+  group_by(cell.type, replicate, variable) %>% 
+  summarise(within_mean = mean(value),
+            within_sd = sd(value)) %>% 
+  group_by(cell.type, variable) %>% 
+  summarise(across_mean = mean(within_mean),
+            across_sd = sd(within_mean),
+            average_within_sd = mean(within_sd)) %>% 
+  mutate(within_cov = average_within_sd / across_mean,
+         across_cov = across_sd / across_mean)
+
+writexl::write_xlsx(rmn_variation, "WT_Raman_variation.xlsx")
 
 rmn_adj <- rmn_sum_long %>%
   filter(variable %in% c("n_v", "n_f", "n_p")) %>%
@@ -5290,6 +5316,8 @@ readr::write_file(coef_tab, "sem_coef_tab.txt")
 
 #### Arabidopsis
 
+##### By genotype
+
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 rmn_irx_long <- rmn_irx %>%
   mutate(n_v = n_v * 100) %>%
@@ -5599,7 +5627,123 @@ rmn_irx_lig
 dev.off()
 ```
 
+##### Overall variation
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+rmn_irx_long <- rmn_irx %>%
+  mutate(n_v = n_v * 100) %>%
+  select(genotype:cell.type, convexity, total_lignin, G_rel, GOH_rel, S_rel, cellulose, mean.OD1, GCHO_rel, S.G, GCHO_term.GCHOH, P_rel, Benz_rel) %>%
+  pivot_longer(cols = -c(genotype:cell.type), names_to = "variable", values_to = "value") %>%
+  mutate(
+    variable = factor(variable,
+      levels = c(
+        # "Area",
+        # "Perim.",
+        # "n_v",
+        # "Circ.",
+        "convexity",
+        "total_lignin",
+        "G_rel",
+        "GOH_rel",
+        "mean.OD1",
+        "GCHO_rel",
+        "S_rel",
+        "P_rel",
+        "Benz_rel",
+        "S.G",
+        "GCHO_term.GCHOH",
+        "cellulose"
+      ),
+      labels = c(
+        # "Area [µm²]",
+        # "Perimeter [µm]",
+        # "Adj. TEs [%]",
+        # "Circularity",
+        "Convexity",
+        "Lignin",
+        "bold(G)",
+        "bold(G)[CHOH]",
+        "Total~bold(G)[CHO]",
+        "Terminal~bold(G)[CHO]",
+        "bold(S)",
+        "bold(P)",
+        "Benzaldehydes",
+        "bold(S)~'/'~bold(G)",
+        "bold(G)[CHO]~'/'~bold(G)[CHOH]",
+        "Cellulose"
+      )
+    ),
+    genotype = ordered(genotype,
+      levels = c(
+        "Col-0",
+        "4cl1",
+        "4cl2",
+        "4cl1x4cl2",
+        "ccoaomt1",
+        "fah1",
+        "omt1",
+        "ccr1-3",
+        "cad4",
+        "cad5",
+        "cad4xcad5"
+      )
+    ),
+    cell.type = ordered(cell.type, levels = c("PX", "MX", "SX"))
+  )
+
+rmn_irx_n <- rmn_irx_long%>% 
+  filter(variable == "Lignin") %>% 
+  group_by(cell.type) %>% 
+  summarise(n = n())
+
+letters <- letter_groups(rmn_irx_long,
+                         value,
+                         cell.type,
+                         "kruskal",
+                         variable,
+                         print_position = "below",
+                         print_adjust = 1)
+
+rmn_irx_lig <- ggplot(
+  rmn_irx_long,
+  aes(
+    x = value,
+    y = cell.type,
+    fill = cell.type
+  )
+) +
+  geom_density_ridges(colour = "black",
+                      size = 0.2,
+                      alpha = 0.8,
+                      quantile_lines = TRUE,
+                      quantiles = 2) +
+  geom_text(data = letters,
+            aes(label = Letters),
+            family = "Helvetica",
+            size = ggtext_size,
+            vjust = -0.2) +
+  scale_fill_manual(values = pal_flame_disc) +
+  theme_leo() +
+  theme(
+    axis.title = element_blank(),
+    # panel.spacing = unit(1, "mm"),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5),
+  ) +
+  facet_wrap(~ variable,
+    scales = "free_x",
+    labeller = labeller(variable = label_parsed, cell.type = label_value),
+    switch = "x"
+  )
+
+pdf("IRX_FigureS1b.pdf", width = twocol, height = onecol)
+rmn_irx_lig
+dev.off()
+```
+
 #### Poplar
+
+##### By genotype
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 rmn_irx_long <- model_data_pop %>%
@@ -5913,6 +6057,106 @@ pop_S1
 dev.off()
 ```
 
+##### Overall variation
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+rmn_irx_long <- model_data_pop %>%
+  ungroup() %>%
+  select(genotype, cell_type, Solidity, total_lignin, G_rel, GOH_rel, S_rel, cellulose, wiesner_avg, GCHO_rel, S.G, GCHO.GOH, P_rel, Benz_rel) %>%
+  pivot_longer(cols = -c(genotype, cell_type), names_to = "variable", values_to = "value") %>%
+  mutate(
+    variable = factor(variable,
+                      levels = c(
+      # "Area",
+      # "Perim.",
+      # "Distance",
+      # "n_v",
+      # "Circ.",
+      "Solidity",
+      "total_lignin",
+      "G_rel",
+      "GOH_rel",
+      "wiesner_avg",
+      "GCHO_rel",
+      "S_rel",
+      "P_rel",
+      "Benz_rel",
+      "S.G",
+      "GCHO.GOH",
+      "cellulose"
+    ),
+    labels = c(
+      # "'Area [µm²]'",
+      #          "'Perim. [µm]'",
+      #          "'Dist. [µm]'",
+      #          "'Adj. TEs [%]'",
+      #          "Circularity",
+               "Convexity",
+               "Lignin",
+               "bold(G)",
+               "bold(G)[CHOH]",
+               "Total~bold(G)[CHO]",
+               "Term.~bold(G)[CHO]",
+               "bold(S)",
+               "bold(P)",
+               "Benzald.",
+               "bold(S)~'/'~bold(G)",
+               "bold(G)[CHO]~'/'~bold(G)[CHOH]",
+               "Cellulose"
+               )),
+    cell_type = ordered(cell_type, levels = c("PV", "Old SV", "Young SV"))
+  )
+
+rmn_irx_n <- rmn_irx_long%>% 
+  filter(variable == "Lignin") %>% 
+  group_by(cell_type) %>% 
+  summarise(n = n())
+
+letters <- letter_groups(rmn_irx_long,
+                         value,
+                         cell_type,
+                         "kruskal",
+                         variable,
+                         print_position = "below",
+                         print_adjust = 1)
+
+poplar_variation <- ggplot(
+  rmn_irx_long,
+  aes(
+    x = value,
+    y = cell_type,
+    fill = cell_type
+  )
+) +
+  geom_density_ridges(colour = "black",
+                      size = 0.2,
+                      alpha = 0.8,
+                      quantile_lines = TRUE,
+                      quantiles = 2) +
+  geom_text(data = letters,
+            aes(label = Letters),
+            family = "Helvetica",
+            size = ggtext_size,
+            vjust = -0.2) +
+  scale_fill_manual(values = pal_flame_disc) +
+  theme_leo() +
+  theme(
+    axis.title = element_blank(),
+    # panel.spacing = unit(1, "mm"),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5),
+  ) +
+  facet_wrap(~ variable,
+    scales = "free_x",
+    labeller = labeller(variable = label_parsed, cell_type = label_value),
+    switch = "x"
+  )
+
+pdf("IRX_FigureS1_pop.pdf", width = twocol, height = onecol)
+poplar_variation
+dev.off()
+```
+
 ### Post-mortem lignification
 
 #### TGA
@@ -6204,8 +6448,11 @@ dist_lig1 <- ggplot(
              labeller = label_parsed,
              nrow = 1)
 
-pdf("individual_intercept.pdf", width = twocol, height = onecol * 0.5)
-dist_lig1
+pdf("individual_intercept.pdf", width = twocol, height = onecol * 1.5)
+(dist_lig1) + (poplar_variation) +
+  plot_layout(nrow = 2, heights = c(0.5, 1)) &
+  plot_annotation(tag_levels = 'A') & 
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
 
 ```
@@ -8176,11 +8423,11 @@ Pt_model_data <- model_data_pop %>%
     "Circularity" = Circ.,
     "Adj. vessels" = n_v,
     total_lignin,
-    G_rel,
-    GOH_rel,
-    GCHO_rel,
-    S_rel,
-    P_rel,
+    "G units" = G_rel,
+    "G-CHOH" = GOH_rel,
+    "G-CHO" = GCHO_rel,
+    "S units" = S_rel,
+    "P units" = P_rel,
     cellulose,
     "S/G" = S.G,
     "Benzaldehydes_rel" = Benz_rel,
@@ -8273,6 +8520,8 @@ col_names = TRUE,
 format_headers = TRUE,
 use_zip64 = FALSE
 )
+
+writexl::write_xlsx(At_model_data, "At_model_data.xlsx")
 
 ```
 # Export Raman spectra

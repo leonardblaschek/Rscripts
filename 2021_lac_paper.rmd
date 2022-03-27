@@ -2236,7 +2236,7 @@ ctrl_slopes <- avg_pH_slopes %>%
   summarise(mean_estimate = mean(mean_estimate))
 
 pygl_slopes <- nested_pH_data %>%
-  filter(substrate == "PYGL") %>%
+  filter(substrate == "PYGL" & treatment == "untreated" & cell_type %in% c("IF", "IF-CML", "IF-CC", "XF", "PX", "MX")) %>%
   left_join(ctrl_slopes) %>%
   mutate(
     corrected_estimate = case_when(
@@ -2366,23 +2366,12 @@ pygl_slopes_cont <- pygl_slopes %>%
   summarise(mean_estimate = mean(corrected_estimate))
 
 ph_cont <- ggplot(
-  pygl_slopes_cont %>% filter(cell_type %in% c("IF-CML", "IF-CC", "IF", "XF", "MX", "PX")),
+  pygl_slopes_cont,
   aes(
     x = pH,
-    y = mean_estimate
+    y = mean_estimate * 1000
   )
 ) +
-  # geom_hline(
-  #   yintercept = 0,
-  #   size = 0.2
-  # ) +
-  geom_line(aes(
-    colour = genotype,
-    group = interaction(replicate, genotype)
-  ),
-  size = 0.2,
-  alpha = 0.25
-  ) +
   # geom_point(aes(colour = genotype),
   #            size = 1,
   #            alpha = 0.25,
@@ -2394,16 +2383,30 @@ ph_cont <- ggplot(
   #             size = 0.2,
   #             alpha = 0.25,
   #             se = F) +
+  geom_line(aes(
+    colour = genotype,
+    group = interaction(replicate, genotype)
+  ),
+  size = 0.2,
+  alpha = 0.25
+  ) +
   geom_smooth(aes(colour = genotype),
     span = 1.25,
     size = 0.5,
     alpha = 1,
     se = F
   ) +
-  # scale_colour_manual(values = c("#275d95")) +
+  labs(y = "PYGL oxidation rate") +
+  # scale_colour_manual(values = c("#d25952", "#275d95")) +
   scale_color_manual(values = pal_dawn[c(1,7)], aesthetics = c("colour", "fill")) +
-  expand_limits(y = 0) +
+  # scale_y_continuous(breaks = c(0, 0.5, 1)) +
   theme_leo() +
+  theme(
+    legend.position = c(0.06, 0.9),
+    legend.title = element_blank(),
+    legend.direction = "horizontal",
+    legend.text = element_markdown()
+  ) +
   facet_wrap(
     ~cell_type,
     nrow = 1,
@@ -4410,6 +4413,136 @@ CC_profiles_full
 dev.off()
 ```
 
+# Mäule 
+
+## Load data
+
+```{r}
+maule_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Mäule/maule_hue.csv") %>%
+  mutate(
+    hue = hue255 / 255 * 360,
+    hue = case_when(
+      hue < 100 ~ hue + 360,
+      TRUE ~ hue
+    ),
+    cell_type = recode(cell_type,
+                       "CML" = "IF-CML",
+                       "CC" = "IF-CC"),
+    cell_type = ordered(cell_type,
+      levels = c(
+        "IF",
+        "IF-CML",
+        "IF-CC",
+        "XF",
+        "PX",
+        "MX"
+      )
+    ),
+    genotype = ordered(case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    levels = c(WT, triple_it, quad_it, Q_it)
+    )
+  )
+```
+
+## Mäule violins
+
+```{r}
+
+hue_palette1 <- scales::hue_pal(h = c(330, 360), c = 150, l = 45, direction = 1)
+hue_palette2 <- scales::hue_pal(h = c(10, 50), c = 150, l = 45, direction = 1)
+hue_palette <- c(hue_palette1(n = 4), hue_palette2(n = 5))
+scales::show_col(hue_palette)
+
+bar_data <- tibble(
+  colour = as.character(c(1:9)),
+  hue = seq(from = 330, to = 410, by = 10)
+) %>%
+  mutate(
+    cell_type = ordered("MX",
+      levels = c(
+        "IF",
+        "IF-CML",
+        "IF-CC",
+        "XF",
+        "PX",
+        "MX"
+      )
+    ),
+    genotype = "<i>Q</i>"
+  )
+
+maule_plot <- ggplot(
+  maule_data,
+  aes(
+    x = genotype,
+    y = hue
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.25,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  scale_fill_manual(values = pal_dawn) +
+  ggnewscale::new_scale("fill") +
+  geom_tile(
+    data = bar_data,
+    aes(fill = colour,
+        height = 10.2, 
+        y = hue),
+    position = position_nudge(y = 0, x = 1.25)
+  ) +
+  geom_text(data = bar_data %>% filter(colour == 9),
+            position = position_nudge(y = 5, x = 2.1),
+            label = "Visual hue scale",
+            angle = -90,
+            hjust = 0,
+            family = "Helvetica",
+            size = ggtext_size) +
+  scale_fill_manual(values = hue_palette) +
+  scale_y_continuous(limits = c(324, 416), 
+                     expand = expansion(add = 0),
+                     breaks = c(340, 360, 380, 400),
+                     labels = c("340", "360", "20", "40")) +
+  coord_cartesian(clip = "off",
+                  xlim = c(1,7)) +
+  labs(y = "Mäule stain hue [°]") +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(25, "mm")
+    ),
+    axis.text.x = element_markdown(angle = 45, hjust = 1, vjust = 1),
+    panel.spacing = unit(0.5, "mm"),
+    plot.margin = unit(c(1, 7, 1, 1), "mm") 
+  ) +
+  facet_wrap(~cell_type, nrow = 1)
+
+pdf("maule_plot.pdf", width = twocol, height = onecol * 0.4)
+maule_plot
+dev.off()
+```
+
+
+
 
 
 # Raman microspectroscopy
@@ -6170,20 +6303,22 @@ dev.off()
 ```{r, message=FALSE}
 collapse_files <-
   list.files(
-    path = paste0(datapath, "PhD/Wiesner/2021-05_Wiesner/Collapse/Measurements/"),
+    path = c(paste0(datapath, "PhD/Wiesner/2021-05_Wiesner/Collapse/Measurements/"),
+             "/home/leonard/Dropbox/2021_lac_manuscript/Wiesner/Collapse/Measurements/"),
     pattern = "*.csv",
     recursive = TRUE,
     full.names = TRUE
   )
 
 collapse_data <- vroom::vroom(collapse_files) %>%
-  separate(image, into = c("date", "genotype", "replicate", "stained", "size"), sep = "_") %>%
+  separate(image, into = c("date", "genotype", "replicate", "stained", "size"), sep = "_", extra = "merge") %>%
   mutate(date = str_replace(date, "^021", "2021")) %>%
   mutate(
     cell_type = ordered(cell_type,
       levels = c(
         "PX",
-        "MX"
+        "MX",
+        "SX"
       )
     ),
     genotype = ordered(case_when(
@@ -6197,6 +6332,7 @@ collapse_data <- vroom::vroom(collapse_files) %>%
       TRUE ~ "2"
     )
   ) %>%
+  distinct() %>% 
   group_by(genotype, replicate, point) %>%
   mutate(cell = case_when(
     point == 0 ~ row_number(),
@@ -6204,24 +6340,77 @@ collapse_data <- vroom::vroom(collapse_files) %>%
   )) %>%
   ungroup() %>%
   fill(cell)
+
+collapse_data_full <- collapse_data
+collapse_data <- collapse_data %>% filter(cell_type != "SX")
 ```
+
+#### Calculate perimeters
+
+```{r}
+perimeters <- collapse_data_full %>%
+  group_by(genotype, replicate, cell_type, cell) %>% 
+  select(point, x, y)
+
+perimeters_sf <- perimeters %>%
+  unite("ID", genotype:cell, remove = FALSE, sep = "_") %>%
+  group_by(ID) %>%
+  mutate(
+    x = x - mean(x, na.rm = TRUE),
+    y = y - mean(y, na.rm = TRUE)
+  ) %>%
+  group_by(ID, point) %>%
+  summarise(xy = list(c(x, y))) %>%
+  group_by(ID) %>%
+  mutate(
+    max_point = max(point)
+  ) %>%
+  bind_rows(filter(., point == 0) %>%
+    group_by(ID) %>%
+    mutate(point = max_point + 1)) %>%
+  arrange(ID, point) %>%
+  summarise(xy = list(c(xy))) %>%
+  mutate(geometry = map(
+    xy,
+    ~ do.call(rbind, .) %>% # make each list a matrix
+      list() %>% # st_polygon() requires a list
+      st_polygon()
+  )) %>%
+  st_as_sf() %>% 
+  group_by(ID) %>%
+  mutate(
+    smooth_geometry = smoothr::smooth(geometry, method = "ksmooth", smoothness = 2),
+    area = st_area(smooth_geometry),
+    convex_hull = st_convex_hull(smooth_geometry),
+    convex_area = st_area(convex_hull),
+    convexity = area / convex_area,
+    circularity = 4 * pi * (area / (lwgeom::st_perimeter(smooth_geometry)^2))
+  ) %>%
+  separate(ID, into = c("genotype", "replicate", "cell_type", "cell"), sep = "_") %>%
+  mutate(
+    genotype = ordered(genotype, levels = c(levels = c(WT, triple_it, quad_it, Q_it))),
+    cell.type = ordered(cell_type, levels = c("PX", "MX"))
+  )
+```
+
 
 ### Plot collapse
 
 ```{r}
-collapse_stats <- collapse_data %>%
-  group_by(genotype, replicate, cell_type, cell, instance) %>%
+collapse_stats <- perimeters_sf %>%
+  filter(cell_type != "SX") %>% 
+  group_by(genotype, replicate, cell_type, cell) %>%
   summarise(
-    "Area" = unique(Area) * 4^2, # analysed images were scaled down to 0.25, this corrects the scale
-    "Perim." = unique(Perim.) * 4, # analysed images were scaled down to 0.25, this corrects the scale
-    "Circ." = unique(Circ.),
-    "Solidity" = unique(Solidity)
+    # "Area" = unique(Area) * 4^2, # analysed images were scaled down to 0.25, this corrects the scale
+    # "Perim." = unique(Perim.) * 4, # analysed images were scaled down to 0.25, this corrects the scale
+    # "Circ." = unique(Circ.),
+    "Solidity" = unique(convexity)
   ) %>% 
   mutate(cell_type = paste0(cell_type, " convexity"))
 
 collapse_avg <- collapse_stats %>% 
   group_by(genotype, cell_type, replicate) %>% 
-  summarise("Solidity" = mean(Solidity))
+  summarise("Solidity" = median(Solidity))
 
 collapse_n <- collapse_stats %>%
   group_by(genotype) %>%
@@ -6230,7 +6419,7 @@ collapse_n <- collapse_stats %>%
 letters_tech <- letter_groups(collapse_stats,
   Solidity,
   genotype,
-  "kruskal",
+  "tukey",
   cell_type,
   print_position = "below"
 ) %>% 
@@ -6302,6 +6491,106 @@ collapse_plot <- ggplot(
   facet_wrap(~cell_type, nrow = 2, strip.position = "left")
 
 pdf("lac_collapse.pdf", width = onecol, height = onecol * 0.5)
+collapse_plot
+dev.off()
+```
+
+#### Including SX
+
+```{r}
+collapse_stats <- perimeters_sf %>%
+  group_by(genotype, replicate, cell_type, cell) %>%
+  summarise(
+    # "Area" = unique(Area) * 4^2, # analysed images were scaled down to 0.25, this corrects the scale
+    # "Perim." = unique(Perim.) * 4, # analysed images were scaled down to 0.25, this corrects the scale
+    # "Circ." = unique(Circ.),
+    "Solidity" = unique(convexity)
+  ) %>% 
+  mutate(cell_type = paste0(cell_type, " convexity"))
+
+collapse_avg <- collapse_stats %>% 
+  group_by(genotype, cell_type, replicate) %>% 
+  summarise("Solidity" = mean(Solidity))
+
+collapse_n <- collapse_stats %>%
+  group_by(genotype) %>%
+  summarise(replicates = paste0(unique(replicate), collapse = ","))
+
+letters_tech <- letter_groups(collapse_stats,
+  Solidity,
+  genotype,
+  "tukey",
+  cell_type,
+  print_position = "below"
+) %>% 
+  select(-Letters)
+
+letters <- letter_groups(collapse_avg,
+  Solidity,
+  genotype,
+  "tukey",
+  cell_type,
+  print_position = "below"
+) %>% 
+  select(-Solidity) %>% 
+  left_join(letters_tech)
+
+collapse_plot <- ggplot(
+  collapse_stats,
+  aes(
+    x = genotype,
+    y = Solidity
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.25,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  # geom_point(data = collapse_avg,
+  #            shape = 21,
+  #            fill = "white",
+  #            stroke = 0.2,
+  #            size = 1,
+  #            alpha = 0.5) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "TE convexity") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  scale_y_continuous(breaks = c(0.5, 0.75, 1)) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title = element_blank(),
+    # axis.title.y = element_textbox_simple(
+    #   orientation = "left-rotated",
+    #   halign = 0.5,
+    #   width = unit(25, "mm")
+    # ),
+    axis.text.x = element_markdown(),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5)
+  ) +
+  facet_wrap(~cell_type, nrow = 3, strip.position = "left")
+
+pdf("lac_collapse_full.pdf", width = onecol, height = onecol * 0.8)
 collapse_plot
 dev.off()
 ```
@@ -6408,56 +6697,6 @@ dev.off()
 ```
 
 ### Draw perimeters
-
-#### Calculate perimeters
-
-```{r}
-perimeters <- collapse_data %>%
-  group_by(genotype, replicate, cell_type, cell) %>% 
-  select(point, x, y)
-
-perimeters_sf <- perimeters %>%
-  unite("ID", genotype:cell, remove = FALSE, sep = "_") %>%
-  group_by(ID) %>%
-  mutate(
-    x = x - mean(x, na.rm = TRUE),
-    y = y - mean(y, na.rm = TRUE)
-  ) %>%
-  group_by(ID, point) %>%
-  summarise(xy = list(c(x, y))) %>%
-  group_by(ID) %>%
-  mutate(
-    max_point = max(point)
-  ) %>%
-  bind_rows(filter(., point == 0) %>%
-    group_by(ID) %>%
-    mutate(point = max_point + 1)) %>%
-  arrange(ID, point) %>%
-  summarise(xy = list(c(xy))) %>%
-  mutate(geometry = map(
-    xy,
-    ~ do.call(rbind, .) %>% # make each list a matrix
-      list() %>% # st_polygon() requires a list
-      st_polygon()
-  )) %>%
-  st_as_sf() %>% 
-  group_by(ID) %>%
-  mutate(
-    smooth_geometry = smoothr::smooth(geometry, method = "ksmooth", smoothness = 2),
-    area = st_area(geometry),
-    convex_hull = st_convex_hull(geometry),
-    convex_area = st_area(convex_hull),
-    convexity = area / convex_area,
-    circularity = 4 * pi * (area / (lwgeom::st_perimeter(geometry)^2))
-  ) %>%
-  separate(ID, into = c("genotype", "replicate", "cell_type", "cell"), sep = "_") %>%
-  mutate(
-    genotype = ordered(genotype, levels = c(levels = c(WT, triple_it, quad_it, Q_it))),
-    cell.type = ordered(cell_type, levels = c("PX", "MX"))
-  )
-```
-
-#### Plot perimeters
 
 ```{r}
 perimeters_sf_sample <- perimeters_sf %>% 
