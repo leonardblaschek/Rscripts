@@ -6341,14 +6341,12 @@ collapse_data <- vroom::vroom(collapse_files) %>%
   ungroup() %>%
   fill(cell)
 
-collapse_data_full <- collapse_data
-collapse_data <- collapse_data %>% filter(cell_type != "SX")
 ```
 
 #### Calculate perimeters
 
 ```{r}
-perimeters <- collapse_data_full %>%
+perimeters <- collapse_data %>%
   group_by(genotype, replicate, cell_type, cell) %>% 
   select(point, x, y)
 
@@ -6410,7 +6408,7 @@ collapse_stats <- perimeters_sf %>%
 
 collapse_avg <- collapse_stats %>% 
   group_by(genotype, cell_type, replicate) %>% 
-  summarise("Solidity" = median(Solidity))
+  summarise("Solidity" = mean(Solidity))
 
 collapse_n <- collapse_stats %>%
   group_by(genotype) %>%
