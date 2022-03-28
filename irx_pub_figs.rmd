@@ -5627,6 +5627,127 @@ rmn_irx_lig
 dev.off()
 ```
 
+##### Neighbouring TEs
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+rmn_irx_long <- rmn_irx %>%
+  mutate(n_v = n_v * 100) %>%
+  select(genotype:cell.type, n_v) %>%
+  pivot_longer(cols = -c(genotype:cell.type), names_to = "variable", values_to = "value") %>%
+  mutate(
+    variable = factor(variable,
+      levels = c(
+        "n_v"
+      ),
+      labels = c(
+        "Adj. TEs [%]"
+      )
+    ),
+    genotype = ordered(genotype,
+      levels = c(
+        "Col-0",
+        "4cl1",
+        "4cl2",
+        "4cl1x4cl2",
+        "ccoaomt1",
+        "fah1",
+        "omt1",
+        "ccr1-3",
+        "cad4",
+        "cad5",
+        "cad4xcad5"
+      )
+    ),
+    cell.type = ordered(cell.type, levels = c("PX", "MX", "SX"))
+  )
+
+# compare only within cell types 
+rmn_irx_letters <- letter_groups(
+  rmn_irx_long,
+  value,
+  genotype,
+  "tukey",
+  cell.type,
+  variable,
+  print_position = "above",
+  print_adjust = 1
+)
+
+adj_TE <- ggplot(
+  rmn_irx_long,
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
+  geom_quasirandom(
+    aes(fill = cell.type),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  # geom_boxplot(
+  #   fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_violin(
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_text(
+    data = rmn_irx_letters,
+    aes(label = Letters),
+    size = 6 / (14 / 5),
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = pal_flame_disc) +
+  scale_x_discrete(
+    labels = c(
+      "Col-0",
+      expression(italic("4cl1")),
+      expression(italic("4cl2")),
+      expression(paste(italic("4cl1"), "x", italic("4cl2"))),
+      expression(italic("ccoaomt1")),
+      expression(italic("fah1")),
+      expression(italic("omt1")),
+      expression(italic("ccr1")),
+      expression(italic("cad4")),
+      expression(italic("cad5")),
+      expression(paste(italic("cad4"), "x", italic("cad5")))
+    )
+  ) +
+  theme_leo() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+    axis.title = element_blank(),
+    # panel.spacing = unit(1, "mm"),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5),
+  ) +
+  facet_grid(variable ~ cell.type,
+    scales = "free_y",
+    # labeller = labeller(variable = label_parsed, cell.type = label_value),
+    switch = "y"
+  )
+
+pdf("IRX_adj_TE.pdf", width = twocol, height = onecol * 0.4)
+adj_TE
+dev.off()
+```
+
 ##### Overall variation
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
@@ -5736,8 +5857,11 @@ rmn_irx_lig <- ggplot(
     switch = "x"
   )
 
-pdf("IRX_FigureS1b.pdf", width = twocol, height = onecol)
-rmn_irx_lig
+pdf("IRX_FigureS1b.pdf", width = twocol, height = onecol * 1.5)
+adj_TE + rmn_irx_lig +
+  plot_layout(nrow = 2, heights = c(1, 4)) &
+  plot_annotation(tag_levels = 'A') & 
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
 ```
 
