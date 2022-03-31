@@ -6181,6 +6181,111 @@ pop_S1
 dev.off()
 ```
 
+##### Neighbouring TEs
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+rmn_irx_long <- model_data_pop %>%
+  mutate(n_v = n_v * 100) %>%
+  select(genotype, replicate, technical, cell_type, n_v) %>%
+  pivot_longer(cols = -c(genotype:cell_type), names_to = "variable", values_to = "value") %>%
+  mutate(
+    variable = factor(variable,
+      levels = c(
+        "n_v"
+      ),
+      labels = c(
+        "Adj. TEs [%]"
+      )
+    ),
+    genotype = ordered(genotype,
+                       levels = c(
+        "WT",
+        "CCR1",
+        "C4H"
+      )
+    ),
+    cell_type = ordered(cell_type, levels = c("PV", "Old SV", "Young SV"))
+  )
+
+# compare only within cell types 
+rmn_irx_letters <- letter_groups(
+  rmn_irx_long,
+  value,
+  genotype,
+  "tukey",
+  cell_type,
+  variable,
+  print_position = "above",
+  print_adjust = 1
+)
+
+adj_TE_pop <- ggplot(
+  rmn_irx_long,
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
+  geom_quasirandom(
+    aes(fill = cell_type),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  # geom_boxplot(
+  #   fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_violin(
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_text(
+    data = rmn_irx_letters,
+    aes(label = Letters),
+    size = 6 / (14 / 5),
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = pal_flame_disc) +
+  scale_x_discrete(
+    labels = c(
+      "WT",
+      expression(paste(italic("CCR1"), "-RNAi")),
+      expression(paste(italic("C4H"), "-RNAi"))
+    )
+  ) +
+  theme_leo() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+    axis.title = element_blank(),
+    # panel.spacing = unit(1, "mm"),
+    strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5),
+  ) +
+  facet_grid(variable ~ cell_type,
+    scales = "free_y",
+    # labeller = labeller(variable = label_parsed, cell.type = label_value),
+    switch = "y"
+  )
+
+pdf("IRX_adj_TE.pdf", width = twocol, height = onecol * 0.4)
+adj_TE_pop
+dev.off()
+```
+
 ##### Overall variation
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
@@ -6276,8 +6381,11 @@ poplar_variation <- ggplot(
     switch = "x"
   )
 
-pdf("IRX_FigureS1_pop.pdf", width = twocol, height = onecol)
-poplar_variation
+pdf("IRX_FigureS1_pop.pdf", width = twocol, height = onecol * 1.5)
+adj_TE_pop + poplar_variation +
+  plot_layout(nrow = 2, heights = c(1, 4)) &
+  plot_annotation(tag_levels = 'A') & 
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
 ```
 
@@ -6455,7 +6563,7 @@ rmn_lignin_dist <- model_data_pop %>%
          # "Relative S-units" = S_rel, 
          # "Relative aldehyde end-units" = GCHO_rel,
          "bold(S)~'/'~bold(G)" = S.G,
-         "Term.~bold(G)[CHO]~'/'~bold(G)[CHOH]" = GCHO.GOH,
+         "bold(G)[CHO]~'/'~bold(G)[CHOH]" = GCHO.GOH,
          # "Convexity" = Solidity
          ) %>%
   drop_na() %>%
@@ -6465,7 +6573,7 @@ rmn_lignin_dist <- model_data_pop %>%
   mutate(variable = ordered(variable, levels = c(
     "'Lignin / Cellulose'",
     "bold(S)~'/'~bold(G)",
-    "Term.~bold(G)[CHO]~'/'~bold(G)[CHOH]"
+    "bold(G)[CHO]~'/'~bold(G)[CHOH]"
   ))) %>%
   anti_join(read_csv("/home/leonard/Dropbox/2020_IRX manuscript/pop_g_layers.csv",
                      col_types = "cccc"))
@@ -6572,9 +6680,9 @@ dist_lig1 <- ggplot(
              labeller = label_parsed,
              nrow = 1)
 
-pdf("individual_intercept.pdf", width = twocol, height = onecol * 1.5)
-(dist_lig1) + (poplar_variation) +
-  plot_layout(nrow = 2, heights = c(0.5, 1)) &
+pdf("individual_intercept.pdf", width = twocol, height = onecol * 1.8)
+dist_lig1 + adj_TE_pop + poplar_variation +
+  plot_layout(nrow = 3, heights = c(0.5, 0.3, 1)) &
   plot_annotation(tag_levels = 'A') & 
   theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
