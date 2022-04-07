@@ -4549,6 +4549,8 @@ dev.off()
 
 ## Load spectra
 
+### Laccase
+
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 rmn_files <-
   list.files(
@@ -4698,9 +4700,164 @@ rmn_lac_sum <- rmn_lac_scaled %>%
     "Benz_rel" = O4_van_rel + other_van_rel + O4_syr_rel + other_syr_rel,
     "AUC" = mean(AUC)
   )
+
+```
+
+### Phenylpropanoid references
+
+```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
+rmn_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2021_lac_manuscript/Raman_refs/",
+    pattern = "*.txt",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_tsv(flnm,
+    comment = "#",
+    col_names = c("wavenumber", "intensity"),
+    col_types = "cc",
+    # locale = locale(decimal_mark = ",")
+  ) %>%
+    mutate(
+      filename = basename(flnm)
+    ) %>%
+    separate(filename, into = c("genotype", "cell_type"), sep = "-") %>%
+    mutate(
+      wavenumber = as.numeric(str_replace(wavenumber, fixed(","), fixed("."))),
+      intensity = as.numeric(str_replace(intensity, fixed(","), fixed("."))),
+      replicate = str_extract(cell_type, "[:digit:]"),
+      cell_type = str_remove(cell_type, "[:digit:]\\.txt"),
+    ) %>%
+    filter(wavenumber > 300) %>%
+    pivot_wider(
+      id_cols = c(genotype, replicate, cell_type),
+      names_from = wavenumber,
+      values_from = intensity
+    ) %>%
+    group_by(genotype, replicate, cell_type) %>%
+    nest()
+}
+
+rmn_ref <- map_dfr(rmn_files, read_plus)
+
+#### baseline correction ####
+rmn_als <- function(x) {
+  corrected_spectra <- baseline.als(as.matrix(x),
+    lambda = 5,
+    p = 0.01,
+    maxit = 100
+  )
+  as_tibble(corrected_spectra$corrected, rownames = NA)
+}
+
+rmn_ref_corrected <- rmn_ref %>%
+  mutate(corrected_data = map(data, rmn_als)) %>%
+  select(-data) %>%
+  unnest() %>%
+  pivot_longer(-c(genotype, cell_type, replicate),
+    names_to = "wavenumber",
+    values_to = "corrected.intensity"
+  ) %>%
+  drop_na() %>%
+  mutate(wavenumber = as.numeric(wavenumber))
+
+#### filtering and scaling ####
+
+# alignment
+lig_peak <- rmn_ref_corrected %>%
+  unite("ID",
+    genotype, cell_type, replicate,
+    remove = F,
+    sep = "_"
+  ) %>%
+  filter(round(wavenumber, digits = 0) %in% c(370:390)) %>%
+  group_by(genotype, replicate, cell_type) %>%
+  mutate(
+    peak_pos = wavenumber[which.max(corrected.intensity)]
+  ) %>%
+  select(-wavenumber, -corrected.intensity) %>%
+  unique() %>%
+  group_by(cell_type) %>%
+  mutate(peak_pos_ref = 378.561) # align to the LAC data
+
+rmn_ref_aligned <- rmn_ref_corrected %>%
+  left_join(lig_peak) %>%
+  group_by(genotype, replicate, cell_type, wavenumber) %>%
+  mutate(wavenumber = wavenumber + (peak_pos_ref - peak_pos))
+
+# scaling and filtering
+rmn_ref_scaled <- rmn_ref_aligned %>%
+  group_by(genotype, cell_type, replicate) %>%
+  mutate(
+    AUC = MESS::auc(wavenumber, corrected.intensity),
+    scaled = corrected.intensity / AUC,
+    scaled_lig = corrected.intensity / (
+      (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) + corrected.intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1]
+    ),
+    scaled_cellu = corrected.intensity /
+      corrected.intensity[abs(wavenumber - 378) == min(abs(wavenumber - 378))][1]
+  )
+
+rmn_ref_avg <- rmn_ref_scaled %>%
+  mutate(wavenumber = round(wavenumber, digits = 1)) %>%
+  group_by(genotype, cell_type) %>%
+  arrange(genotype, cell_type, wavenumber) %>%
+  summarise(
+    roll_mean = slider::slide_index_dbl(scaled, wavenumber, mean, .before = 1.5, .after = 1.5),
+    roll_sd = slider::slide_index_dbl(scaled, wavenumber, sd, .before = 2, .after = 2),
+    roll_scaled_cellu = slider::slide_index_dbl(scaled_cellu, wavenumber, mean, .before = 1.5, .after = 1.5),
+    wavenumber = wavenumber
+  )
+
+rmn_ref_sum <- rmn_ref_scaled %>%
+  group_by(genotype, cell_type, replicate) %>%
+  summarise(
+    "unscaled_lignin" =
+      (corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
+        corrected.intensity[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
+    "broad_lignin" =
+      corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] +
+        corrected.intensity[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1] +
+        corrected.intensity[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1] +
+        corrected.intensity[abs(wavenumber - 1624) == min(abs(wavenumber - 1624))][1],
+    "total_lignin" = (scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
+      scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
+    "P_rel" = scaled_lig[abs(wavenumber - 993) == min(abs(wavenumber - 993))][1],
+    "G_rel" = scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "G_tot" = scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "GOH_rel" = scaled_lig[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1],
+    "GCHO_rel" = scaled_lig[abs(wavenumber - 1624) == min(abs(wavenumber - 1624))][1],
+    "GCHO_tot" = scaled[abs(wavenumber - 1624) == min(abs(wavenumber - 1624))][1],
+    "S_rel" = scaled_lig[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
+    "S_tot" = scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
+    "cellulose" =
+      # scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1] +
+        scaled[abs(wavenumber - 378) == min(abs(wavenumber - 378))][1],
+        # scaled[abs(wavenumber - 1120) == min(abs(wavenumber - 1120))][1],
+    "cellu_cryst" = scaled[abs(wavenumber - 378) == min(abs(wavenumber - 378))][1] /
+      scaled[abs(wavenumber - 1095) == min(abs(wavenumber - 1095))][1],
+    "lig.cellu" = total_lignin / cellulose,
+    "S.G" = scaled_lig[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1] /
+      scaled_lig[abs(wavenumber - 1273) == min(abs(wavenumber - 1273))][1],
+    "GOH.G" = scaled_lig[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1] /
+      scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
+    "GCHO.GOH" = scaled_lig[abs(wavenumber - 1624) == min(abs(wavenumber - 1624))][1] /
+      scaled_lig[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1],
+    "O4_van_rel" = scaled_lig[abs(wavenumber - 1303) == min(abs(wavenumber - 1303))][1],
+    "other_van_rel" = scaled_lig[abs(wavenumber - 785) == min(abs(wavenumber - 785))][1],
+    "O4_syr_rel" = scaled_lig[abs(wavenumber - 1297) == min(abs(wavenumber - 1297))][1],
+    "other_syr_rel" = scaled_lig[abs(wavenumber - 450) == min(abs(wavenumber - 450))][1],
+    "Benz_rel" = O4_van_rel + other_van_rel + O4_syr_rel + other_syr_rel,
+    "AUC" = mean(AUC)
+  )
 ```
 
 ## Plot spectra
+
+### Laccase
 
 ```{r}
 
@@ -4761,6 +4918,59 @@ partial_spec <- function(min_wn, max_wn) {
 full <- partial_spec(300, 1700)
 
 pdf("spectra.pdf", width = twocol, height = onecol * 0.3)
+full
+dev.off()
+
+```
+
+### Phenylpropanoid references
+
+```{r}
+
+partial_spec <- function(min_wn, max_wn) {
+  data <- rmn_ref_scaled %>%
+    filter(
+      wavenumber >= min_wn & wavenumber <= max_wn &
+        cell_type == "IF"
+    )
+
+  ggplot(
+    data,
+    aes(
+      x = wavenumber,
+      y = scaled_cellu,
+      colour = genotype
+    )
+  ) +
+    geom_vline(
+      xintercept = c(378, 1273, 1334, 1600, 1624, 1658),
+      linetype = 2,
+      size = 0.2
+    ) +
+    geom_line(aes(group = interaction(genotype)),
+      alpha = 0.5,
+      size = 0.2
+    ) +
+    # geom_smooth(se = F,
+    #             linetype = 1,
+    #             size = 0.2) +
+    labs(
+      y = "Normalised intensity",
+      x = "Wavenumber [cm<sup>-1</sup>]"
+    ) +
+    scale_x_reverse(expand = expansion(mult = 0.01)) +
+    theme_leo() +
+    theme(
+      axis.title.x = element_textbox_simple(halign = 0.5),
+      plot.margin = unit(c(1, 1, 1, 6), "mm"),
+      legend.position = "right",
+      legend.text = element_markdown()
+    )
+}
+
+full <- partial_spec(300, 1700)
+
+pdf("spectra_ref.pdf", width = twocol, height = onecol * 0.3)
 full
 dev.off()
 
@@ -4910,6 +5120,8 @@ writexl::write_xlsx(excel_data, "Raman_relative_to_WT.xlsx")
 
 ### Main figure
 
+#### Format dataframes
+
 ```{r}
 violin_data <- rmn_lac_sum %>%
   select(
@@ -4955,10 +5167,48 @@ violin_data <- rmn_lac_sum %>%
     )
   )
 
+ref_labels <- tribble(
+  ~genotype, ~cell_type, ~variable, ~label,
+  "fah1", "PMX", "<sup>**S**</sup>&frasl;<sub>**G**</sub>", "<i>fah1</i> MX (traces of <b>S</b>)",
+  "ccr1_3", "IF", "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>", "<i>ccr1-3</i> IF (traces of lignin)",
+  "cad4x5", "IF", "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>", "<i>cad4</i>x<i>5</i> IF (overaccumulates <b>G</b><sub>CHO</sub>)"
+)
+
+ref_data <- rmn_ref_sum %>% 
+  select(
+    genotype,
+    cell_type,
+    replicate,
+    "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>" = lig.cellu,
+    "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S.G,
+    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO.GOH
+  ) %>%
+  pivot_longer(
+    cols = -c(genotype:replicate),
+    names_to = "variable",
+    values_to = "value"
+  ) %>% 
+  right_join(ref_labels) %>% 
+  ungroup() %>% 
+  mutate(cell_type = c("IF", "MX", "IF"),
+         cell_type = ordered(cell_type,
+      levels = c(
+        "IF",
+        "LP",
+        "XF",
+        "PX",
+        "MX"
+      )
+    ))
+
 violin_data_avg <- violin_data %>%
   group_by(genotype, cell_type, replicate, variable, instance) %>%
   summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+```
 
+#### Plot figure
+
+```{r}
 letters <- letter_groups(violin_data,
   value,
   genotype,
@@ -4993,6 +5243,21 @@ lig_violin <- ggplot(
     y = value
   )
 ) +
+  geom_hline(data = ref_data %>% select(-cell_type),
+             aes(yintercept = value),
+             size = 0.2,
+             linetype = 2,
+             colour = "grey") +
+  geom_richtext(data = ref_data,
+            aes(y = value,
+                label = label),
+            label.size = NA,
+            x = 4,
+            hjust = 0.5,
+            vjust = c(0.6, 0.5, 0.5),
+            family = "Helvetica",
+            size = ggtext_size,
+            colour = "grey") +
   geom_quasirandom(
     shape = 16,
     alpha = 0.25,
@@ -5374,6 +5639,21 @@ lig_violin_WT <- ggplot(
     y = value
   )
 ) +
+  geom_hline(data = ref_data %>% select(-cell_type),
+             aes(yintercept = value),
+             size = 0.2,
+             linetype = 2,
+             colour = "grey") +
+  geom_richtext(data = ref_data %>% select(-cell_type),
+            aes(y = value,
+                label = label),
+            label.size = NA,
+            x = 2.5,
+            hjust = 0.5,
+            vjust = c(0.6, 0.5, 0.5),
+            family = "Helvetica",
+            size = ggtext_size,
+            colour = "grey") +
   geom_quasirandom(
     shape = 16,
     alpha = 0.25,
@@ -5418,6 +5698,8 @@ dev.off()
 ```
 
 #### Complete lignin
+
+##### Format dataframes
 
 ```{r}
 violin_data <- rmn_lac_sum %>%
@@ -5468,13 +5750,53 @@ violin_data_avg <- violin_data %>%
   group_by(genotype, cell_type, replicate, variable, instance) %>%
   summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
 
+ref_labels <- tribble(
+  ~genotype, ~cell_type, ~variable, ~label,
+  "fah1", "PMX", "<b>S</b>", "<i>fah1</i> MX (traces of <b>S</b>)",
+  "fah1", "PMX", "<b>G</b>", "<i>fah1</i> MX (traces of <b>S</b>)",
+  "cad4x5", "IF", "<b>G</b><sub>CHOH</sub>", "<i>cad4</i>x<i>5</i> IF (depleted of <b>G</b><sub>CHOH</sub>)",
+  "cad4x5", "IF", "<b>G</b><sub>CHO</sub>", "<i>cad4</i>x<i>5</i> IF (overaccumulates <b>G</b><sub>CHOH</sub>)"
+)
+
+ref_data <- rmn_ref_sum %>% 
+  select(
+    genotype,
+    cell_type,
+    replicate,
+    "<b>S</b>" = S_rel,
+    "<b>G</b>" = G_rel,
+    "<b>G</b><sub>CHOH</sub>" = GOH_rel,
+    "<b>G</b><sub>CHO</sub>" = GCHO_rel
+  ) %>%
+  pivot_longer(
+    cols = -c(genotype:replicate),
+    names_to = "variable",
+    values_to = "value"
+  ) %>% 
+  right_join(ref_labels) %>% 
+  ungroup() %>% 
+  mutate(cell_type = "IF",
+         cell_type = ordered(cell_type,
+      levels = c(
+        "IF",
+        "LP",
+        "XF",
+        "PX",
+        "MX"
+      )
+    ))
+```
+
+##### Plot figure
+
+```{r}
 letters <- letter_groups(violin_data,
   value,
   genotype,
   "tukey",
   variable,
   cell_type,
-  print_position = "above",
+  print_position = "below",
   print_adjust = 1.5
 ) %>%
   mutate(value = case_when(
@@ -5489,7 +5811,7 @@ letters_avg <- letter_groups(violin_data_avg,
   "tukey",
   variable,
   cell_type,
-  print_position = "above"
+  print_position = "below"
 ) %>%
   select(-value) %>%
   left_join(select(letters, -Letters), by = c("variable", "cell_type", "genotype"))
@@ -5502,6 +5824,21 @@ lig_violin <- ggplot(
     y = value
   )
 ) +
+  geom_hline(data = ref_data %>% select(-cell_type),
+             aes(yintercept = value),
+             size = 0.2,
+             linetype = 2,
+             colour = "grey") +
+  geom_richtext(data = ref_data,
+            aes(y = value,
+                label = label),
+            label.size = NA,
+            x = 4,
+            hjust = 0.5,
+            vjust = c(0.2, 1, 1, 0.5),
+            family = "Helvetica",
+            size = ggtext_size,
+            colour = "grey") +
   geom_quasirandom(
     shape = 16,
     alpha = 0.25,
@@ -5538,12 +5875,16 @@ lig_violin <- ggplot(
                                                orientation = "left-rotated"),
   ) +
   facet_grid(variable ~ cell_type, scales = "free_y", switch = "y")
+
+pdf("lig_complete.pdf", width = twocol, height = onecol * 1.5)
+lig_violin
+dev.off()
 ```
 
 #### Assemble figure 
 
 ```{r}
-pdf("Raman_supp_fig.pdf", width = twocol, height = onecol * 1.5)
+pdf("Raman_supp_fig.pdf", width = twocol, height = twocol)
 lig_violin_WT + lig_violin +
   plot_layout(ncol = 1, heights = c(1, 4)) &
   plot_annotation(
@@ -5749,7 +6090,9 @@ corrplot::corrplot.mixed(cor(as.matrix(corr_data)))
 
 # Cell corner fluorescence
 
-## Load data
+## Relative fluorescence
+
+### Load data
 
 ```{r}
 CC_files <-
@@ -5801,96 +6144,7 @@ CC_data_avg <- CC_data %>%
   summarise(scaled_CML = mean(scaled_CML))
 ```
 
-## Scale to WT
-
-```{r}
-CC_data_scaled <- CC_data %>% 
-  mutate(scaled = value / (sum * laser),
-         mean_CML = mean_CML / (sum * laser),
-         detector = case_when(date == "2021-12-14" ~ "low",
-                              TRUE ~ "high")) %>% 
-  group_by(detector) %>% 
-  mutate(WT_CML = mean(mean_CML[genotype == "WT"]),
-         scaled = case_when(genotype == "<i>Q-12</i>" & replicate == "5" ~ (scaled / (2^16-1)) * (2^8-1),
-                            TRUE ~ scaled),
-         scaled_WT = scaled / WT_CML) 
-  # filter(!(genotype == "<i>Q-12</i>" & replicate == "5"))
-
-CC_data_scaled_avg <- CC_data_scaled %>% 
-  group_by(genotype, layer, replicate) %>% 
-  summarise(scaled_WT = mean(scaled_WT))
-
-scaled_plot <- ggplot(CC_data_scaled %>% drop_na(),
-       aes(x = genotype,
-           y = scaled_WT)) +
-  # geom_hline(yintercept = 1,
-  #            size = 0.2,
-  #            linetype = 2) +
-  geom_quasirandom(
-    shape = 16,
-    alpha = 0.25,
-    size = 0.5,
-    width = 0.5
-  ) +
-  # annotate("text",
-  #          label = " CML",
-  #          x = 0,
-  #          y = 0.95,
-  #          hjust = 0,
-  #          vjust = 1,
-  #          family = "Helvetica",
-  #          size = ggtext_size
-  #          ) +
-  geom_violin(
-    aes(fill = genotype),
-    draw_quantiles = 0.5,
-    # fill = "white",
-    colour = "black",
-    alpha = 0.75,
-    width = 0.5,
-    size = 0.2,
-    adjust = 1,
-    scale = "width"
-  ) +
-  # geom_point(data = CC_data_avg %>% filter(layer == "CC"),
-  #            shape = 21,
-  #            fill = "white",
-  #            stroke = 0.2,
-  #            size = 2,
-  #            alpha = 1) +
-  # geom_text(
-  #   data = letters,
-  #   aes(label = Letters),
-  #   size = ggtext_size,
-  #   family = "Helvetica"
-  # ) +
-  labs(y = "Autofluorescence<br>relative to the WT CML") +
-  scale_fill_manual(values = pal_dawn) +
-  # scale_y_continuous(breaks = c(0.5, 0.75, 1)) +
-  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
-  theme_leo() +
-  theme(
-    axis.title.y = element_blank(),
-    axis.title.x = element_textbox_simple(valign = 0.5,
-                                              halign = 0.5),
-    # axis.title.y = element_textbox_simple(
-    #   orientation = "left-rotated",
-    #   halign = 0.5,
-    #   width = unit(25, "mm")
-    # ),
-    axis.text.y = element_markdown(),
-    # strip.placement = "outside",
-    strip.text = element_text(hjust = 0.5)
-  ) +
-  coord_flip() +
-  facet_wrap(~ layer, ncol = 1)
-
-pdf("CML_scaled.pdf", width = twocol, height = twocol)
-scaled_plot
-dev.off()
-```
-
-## Plot profiles
+### Plot profiles
 
 ```{r}
 CC_profiles <- ggplot(CC_data %>% filter(genotype %in% c("WT", "<i>Q</i>", "<i>Q-12</i>")),
@@ -5932,7 +6186,7 @@ CC_profiles
 dev.off()
 ```
 
-### All profiles
+#### All profiles
 
 ```{r}
 CC_profiles_full <- ggplot(CC_data,
@@ -5951,7 +6205,7 @@ CC_profiles_full <- ggplot(CC_data,
   geom_smooth(method = "loess",
               span = 0.2,
               se = FALSE) +
-  labs(y = "Autofluorescence<br>normalised to CML",
+  labs(y = "Autofluorescence normalised to CML",
        x = "Cell wall layer") +
   scale_x_continuous(breaks = c(-35, 0, 20),
                      labels = c("CML", "CC", "SCW"),
@@ -5976,7 +6230,7 @@ CC_profiles_full
 dev.off()
 ```
 
-## CC violins
+### CC violins
 
 ```{r}
 
@@ -6068,99 +6322,7 @@ CC_plot
 dev.off()
 ```
 
-## SCW violins
-
-```{r}
-
-letters_tech <- letter_groups(CC_data %>% filter(layer == "SCW"),
-                         scaled_CML,
-                         genotype,
-                         "tukey",
-                         print_position = "below") %>% 
-  select(-Letters)
-
-letters <- letter_groups(CC_data_avg %>% filter(layer == "SCW"),
-                         scaled_CML,
-                         genotype,
-                         "tukey",
-                         print_position = "below") %>% 
-  select(-scaled_CML) %>% 
-  left_join(letters_tech)
-
-SCW_plot <- ggplot(
-  CC_data %>% filter(layer == "SCW"),
-  aes(
-    x = genotype,
-    y = scaled_CML
-  )
-) +
-  geom_hline(yintercept = 1,
-             size = 0.2,
-             linetype = 2) +
-  geom_quasirandom(
-    shape = 16,
-    alpha = 0.25,
-    size = 0.5,
-    width = 0.5
-  ) +
-  annotate("text",
-           label = " CML",
-           x = 0.25,
-           y = 0.95,
-           hjust = 0,
-           vjust = 1,
-           family = "Helvetica",
-           size = ggtext_size
-           ) +
-  geom_violin(
-    aes(fill = genotype),
-    draw_quantiles = 0.5,
-    # fill = "white",
-    colour = "black",
-    alpha = 0.75,
-    width = 0.5,
-    size = 0.2,
-    adjust = 1,
-    scale = "width"
-  ) +
-  # geom_point(data = CC_data_avg %>% filter(layer == "SCW"),
-  #            shape = 21,
-  #            fill = "white",
-  #            stroke = 0.2,
-  #            size = 2,
-  #            alpha = 1) +
-  geom_text(
-    data = letters,
-    aes(label = Letters),
-    size = ggtext_size,
-    family = "Helvetica"
-  ) +
-  labs(y = "SCW autofluorescence<br>normalised to CML") +
-  scale_fill_manual(values = pal_dawn) +
-  # scale_y_continuous(breaks = c(0.5, 0.75, 1)) +
-  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
-  theme_leo() +
-  theme(
-    axis.title.y = element_textbox_simple(valign = 0.5,
-                                              halign = 0.5,
-                                              orientation = "left-rotated"),
-    # axis.title.y = element_textbox_simple(
-    #   orientation = "left-rotated",
-    #   halign = 0.5,
-    #   width = unit(25, "mm")
-    # ),
-    axis.text.x = element_markdown(),
-    axis.title.x.bottom = element_blank(),
-    # strip.placement = "outside",
-    strip.text = element_text(hjust = 0.5)
-  )
-
-pdf("lac_SCW.pdf", width = onecol, height = onecol * 0.5)
-SCW_plot
-dev.off()
-```
-
-## S2/S3 layers
+### S2/S3 layers
 
 ```{r}
 layers <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/CC_measurements/SCW/2022-03-02_SCW.csv") %>% 
@@ -6268,6 +6430,148 @@ pdf("lac_SCW_layers.pdf", width = onecol * 0.4, height = onecol * 0.5)
 layers_plot
 dev.off()
 ```
+## Absolute fluorescence
+
+### Load data
+
+```{r}
+CC_files <-
+  list.files(
+    path = "/home/leonard/Dropbox/2021_lac_manuscript/CC_measurements/absolute/Measurements/",
+    pattern = "*.csv",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_CC <- function(flnm) {
+  read_csv(flnm, show_col_types = FALSE) %>%
+    mutate(file = str_remove(basename(flnm), fixed(".csv"))) %>%
+    separate(file, into = c("date", "genotype", "replicate"), sep = "_")
+}
+
+CC_abs <- map_dfr(CC_files, read_CC) %>%
+  mutate(genotype = ordered(case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    levels = c(WT, triple_it, quad_it, Q_it)
+    ))
+
+CC_abs_avg <- CC_abs %>% 
+  drop_na() %>% 
+  group_by(genotype, replicate, layer) %>% 
+  summarise(value = mean(value))
+```
+
+### Layer violins
+
+```{r}
+
+# letter within panels
+letters_tech <- letter_groups(CC_abs,
+                         value,
+                         genotype,
+                         "tukey",
+                         layer,
+                         print_position = "above") %>%
+  select(-Letters)
+
+letters <- letter_groups(CC_abs_avg,
+                         value,
+                         genotype,
+                         "tukey",
+                         layer,
+                         print_position = "above") %>%
+  select(-value) %>%
+  left_join(letters_tech)
+
+# letters across panels
+# letters_tech <- CC_abs %>%
+#   unite("ID", genotype, layer) %>%
+#   letter_groups(.,
+#     value,
+#     ID,
+#     "tukey",
+#     print_position = "above"
+#   ) %>%
+#   select(-Letters)
+# 
+# letters <- CC_abs_avg %>%
+#   unite("ID", genotype, layer) %>%
+#   letter_groups(.,
+#     value,
+#     ID,
+#     "tukey",
+#     print_position = "above"
+#   ) %>%
+#   select(-value) %>%
+#   left_join(letters_tech) %>%
+#   separate(ID, into = c("genotype", "layer"), sep = "_") %>%
+#   mutate(genotype = ordered(genotype,
+#     levels = c(WT, triple_it, quad_it, Q_it)
+#   ))
+
+layer_plot <- ggplot(
+  CC_abs,
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.25,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  # geom_point(data = CC_data_avg %>% filter(layer == "CC"),
+  #            shape = 21,
+  #            fill = "white",
+  #            stroke = 0.2,
+  #            size = 2,
+  #            alpha = 1) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Absolute autofluorescence") +
+  scale_fill_manual(values = pal_dawn) +
+  scale_y_continuous(breaks = c(0, 20000, 40000)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title.y = element_blank(),
+    axis.title.x = element_textbox_simple(valign = 0.5,
+                                              halign = 0.5),
+    # axis.title.y = element_textbox_simple(
+    #   orientation = "left-rotated",
+    #   halign = 0.5,
+    #   width = unit(25, "mm")
+    # ),
+    axis.text.y = element_markdown(),
+    # strip.placement = "outside",
+    strip.text = element_text(hjust = 0.5)
+  ) +
+  facet_wrap(~layer, ncol = 1) +
+  coord_flip()
+
+pdf("lac_layers.pdf", height = onecol * 1.5, width = onecol * 0.7)
+layer_plot
+dev.off()
+```
 
 
 ## Combined figure
@@ -6282,15 +6586,9 @@ dev.off()
 ## Supplementary figure
 
 ```{r}
-layout = "
-ACC
-ACC
-ACC
-BCC
-"
-pdf("CC_figure_supp.pdf", width = onecol * 1.3, height = onecol * 1.5)
-scaled_plot + layers_plot + CC_profiles_full +
-  plot_layout(design = layout)
+pdf("CC_figure_supp.pdf", width = twocol * 0.6, height = onecol * 1.5)
+layer_plot + CC_profiles_full +
+  plot_layout(widths = c(1,2))
 dev.off()
 ```
 
@@ -6493,10 +6791,11 @@ collapse_plot
 dev.off()
 ```
 
-#### Including SX
+#### SX
 
 ```{r}
 collapse_stats <- perimeters_sf %>%
+  filter(cell_type == "SX") %>%
   group_by(genotype, replicate, cell_type, cell) %>%
   summarise(
     # "Area" = unique(Area) * 4^2, # analysed images were scaled down to 0.25, this corrects the scale
@@ -6588,7 +6887,7 @@ collapse_plot <- ggplot(
   ) +
   facet_wrap(~cell_type, nrow = 3, strip.position = "left")
 
-pdf("lac_collapse_full.pdf", width = onecol, height = onecol * 0.8)
+pdf("lac_collapse_SX.pdf", width = onecol, height = onecol * 0.4)
 collapse_plot
 dev.off()
 ```
@@ -6699,7 +6998,8 @@ dev.off()
 ```{r}
 perimeters_sf_sample <- perimeters_sf %>% 
   group_by(genotype, cell_type, replicate) %>% 
-  slice_sample(n = 3)
+  slice_sample(n = 3) %>% 
+  filter(cell_type != "SX")
 
 perimeter_plot <- ggplot() +
   geom_sf(
@@ -6729,6 +7029,46 @@ perimeter_plot <- ggplot() +
   facet_grid(cell_type ~ genotype, switch = "y")
 
 pdf("lac_perimeters.pdf", width = onecol * 0.9, height = onecol * 0.5)
+perimeter_plot
+dev.off()
+```
+
+#### SX
+
+```{r}
+perimeters_sf_sample <- perimeters_sf %>% 
+  group_by(genotype, cell_type, replicate) %>% 
+  slice_sample(n = 3) %>% 
+  filter(cell_type == "SX")
+
+perimeter_plot <- ggplot() +
+  geom_sf(
+    data = perimeters_sf_sample,
+    aes(colour = convexity,
+        geometry = smooth_geometry,),
+    # colour = "black",
+    fill = NA,
+    lwd = 0.1,
+    key_glyph = "point"
+  ) +
+  theme_leo() +
+  scale_x_continuous(expand = expansion(mult = 0)) +
+  scale_y_continuous(expand = expansion(mult = 0)) +
+  scale_colour_gradientn(colours = pal_ostwald_cont, trans = "reverse", name = "Convexity") +
+  guides(colour = guide_colourbar(barheight = unit(1, "mm"))) +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "bottom",
+    panel.border = element_blank(),
+    # panel.background = element_rect(fill = "black"),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank(),
+    strip.text = element_textbox_simple(halign = 0.5)
+  ) +
+  facet_grid(cell_type ~ genotype, switch = "y")
+
+pdf("lac_perimeters_SX.pdf", width = onecol * 0.9, height = onecol * 0.25)
 perimeter_plot
 dev.off()
 ```

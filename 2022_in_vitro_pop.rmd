@@ -1,0 +1,850 @@
+---
+title: "In vitro poplar"
+author: "Leonard Blaschek"
+date: '2022-04-01'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(baseline)
+library(interactions)
+# library(effects)
+library(grid)
+library(png)
+library(magick)
+library(ggthemes)
+library(showtext)
+# library(zoo)
+library(cowplot)
+library(kableExtra)
+library(tidyverse)
+library(ggbeeswarm)
+library(ggridges)
+library(sf)
+library(piecewiseSEM)
+library(tukeygrps)
+library(scales)
+library(patchwork)
+library(ggtext)
+library(rvest)
+
+
+pal_ostwald_cont <- c(
+  "#155DA7",
+  "#0A75B9",
+  # "#0C89C9",
+  "#FED32F",
+  # "#F8A63A",
+  "#EF663A",
+  "#ED4137"
+)
+pal_ostwald_cont2 <- c(
+  "#275d95",
+  "#286e9b",
+  "#e8c245",
+  "#d37456",
+  "#d25952"
+)
+pal_ostwald_disc <- c(
+  "#275d95",
+  "#e8c245",
+  "#d25952"
+)
+pal_ostwald_disc2 <- c(
+  "#8fab1d",
+  "#2d7d73",
+  "#1d566f"
+)
+pal_ostwald_disc3 <- c(
+  "#275d95",
+  "#275d95",
+  "#e8c245",
+  "#d25952",
+  "#d25952"
+)
+pal_flame <- c(
+  "#1F265D",
+  "#203F8F",
+  "#404678",
+  "#897B88",
+  "#E7BBA2",
+  "#FFEDC3",
+  "#FEFEFE"
+)
+pal_flame_disc <- c(
+  "#ffedc3",
+  "#897b88",
+  "#1f265d"
+)
+pal_ylgnbu <- c(
+  "#c7e9b4",
+  "#7fcdbb",
+  "#41b6c4",
+  "#1d91c0",
+  "#225ea8",
+  "#253494",
+  "#081d58"
+)
+
+
+#### import Helvetica ####
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+
+font_add(
+  "Heros",
+  regular = "/tex-gyre/texgyreheros-regular.otf",
+  bold = "/tex-gyre/texgyreheros-bold.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 6,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, 
+                                # face = "italic"
+                                ),
+      axis.ticks = element_line(
+        size = 0.125,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        size = 6,
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        size = 6,
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.title = element_text(
+        colour = "black",
+        size = 6
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = 6),
+      legend.key.height = unit(4, "mm"),
+      plot.title = element_text(
+        size = 6,
+        hjust = 0
+      ),
+      complete = TRUE
+    )
+}
+
+scale_range <- function(x) {
+  (x) / (max(x))
+}
+
+strip_html <- function(s) {
+    html_text(read_html(charToRaw(as.character(s))))
+}
+
+ggtext_size <- 6 / (14 / 5)
+twocol <- 18 / 2.54
+onehalfcol <- 14 / 2.54
+onecol <- 9 / 2.54
+
+#### machine dependent paths ####
+datapath <- ifelse(dir.exists("/data/"), "/data/",
+  ifelse(dir.exists("/run/media/leonard/data/grsync/data/"), "/run/media/leonard/data/grsync/data/",
+    ifelse(dir.exists("/run/media/leonard/data/"), "/run/media/leonard/data/", "/home/leonard/Documents/Uni/")
+  )
+)
+
+stat_path <- "/home/leonard/Dropbox/2020_IRX manuscript/Submission/Plant Cell revised/Supplemental/statistics/"
+
+```
+
+### In vitro Poplar
+
+#### Load data
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE}
+
+pop_irx <- read_csv(paste0(datapath, "PhD/IRX/Poplar/poplar_irx.csv"))
+
+#### create reference at the height of the cambium for distance calculation ####
+pop_irx_ref <- pop_irx %>%
+  filter(object == "ref") %>%
+  select(c(
+    "genotype",
+    "replicate",
+    "technical",
+    "X",
+    "Y",
+    "Length"
+  ))
+pop_irx_ref$ref.y1 <- pop_irx_ref$Y
+pop_irx_ref$ref.y2 <- pop_irx_ref$Y
+pop_irx_ref$ref.x1 <- pop_irx_ref$X - (pop_irx_ref$Length / 2)
+pop_irx_ref$ref.x2 <- pop_irx_ref$X + (pop_irx_ref$Length / 2)
+
+#### merge reference into data frame ####
+pop_irx <- pop_irx %>%
+  filter(object != "ref") %>%
+  full_join(select(pop_irx_ref, -X, -Y, -Length),
+    by = c("genotype", "replicate", "technical")
+  ) %>%
+  mutate(genotype = ordered(genotype, levels = c("WT", "c4h", "ccr1")))
+
+#### calculate difference of the centre of each vessel to the cambium ####
+pop_irx$Distance <-
+  apply(
+    pop_irx[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
+    1,
+    function(x) {
+      a <- c(x[1], x[2])
+      b <- c(x[3], x[5])
+      c <- c(x[4], x[6])
+      v1 <- b - c
+      v2 <- a - b
+      m <- cbind(v1, v2)
+      d <- abs(det(m)) / sqrt(sum(v1 * v1))
+      d
+    }
+  )
+
+pop_irx <- pop_irx %>%
+  mutate(bin = cut(
+    Distance,
+    breaks = c(-Inf, 50, 100, Inf),
+    labels = c("I", "II", "III")
+  ))
+
+pop_irx <- pop_irx %>%
+  mutate(
+    convexity = Area / ConvexArea,
+    Mean = Mean / 255,
+    type = recode(type,
+      "P" = "PX",
+      "S" = "SX"
+    )
+  )
+```
+
+#### Wiesner by distance
+
+```{r}
+
+pop_irx_dist <- pop_irx %>%
+  mutate(genotype = recode(genotype, 
+                           "c4h" = "C4H-RNAi",
+                           "ccr1" = "CCR1-RNAi"),
+         type = recode(type, 
+                       "PX" = "PV",
+                       "SX" = "SV")) %>%
+  group_by(genotype, replicate) %>%
+  mutate(rel_dist = Distance / max(Distance))
+
+pop_dist <- ggplot(pop_irx_dist,
+       aes(x = rel_dist,
+           y = Mean)) +
+  geom_point(aes(fill = type),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25) +
+  geom_smooth(aes(colour = type),
+              method = "lm",
+              size = 0.4) +
+  labs(x = "Relative distance",
+       y = expression(paste("Relative "*bold(G)[CHO]))) +
+  scale_x_continuous(breaks = c(0.05,0.95), labels = c("Cambium", "Pith")) +
+  scale_colour_manual(values = pal_flame_disc[c(1,3)]) +
+  scale_fill_manual(values = pal_flame_disc[c(1,3)]) +
+  theme_leo() +
+  theme(legend.position = "right",
+        legend.title = element_blank()) +
+  facet_wrap(~ genotype)
+
+pdf("pop_dist.pdf", width = twocol * 0.975, height = onecol * 0.33)
+pop_dist
+
+```
+
+#### Mutant overview
+
+```{r}
+
+pop_irx_overview <- pop_irx %>%
+  ungroup() %>%
+  select(
+    genotype = genotype,
+    type = type,
+    `Adj. vessels` = n_v,
+    Area = Area,
+    Circularity = Circ.,
+    Distance = Distance,
+    Convexity = convexity
+  ) %>%
+  pivot_longer(`Adj. vessels`:Convexity, names_to = "variable", values_to = "value") %>%
+  drop_na()
+
+write_csv(
+  pop_irx_overview %>%
+    filter(genotype == "WT") %>%
+    group_by(genotype, type, variable) %>%
+    summarise(value = mean(value)),
+  "WT_values.csv"
+)
+
+
+pop_letters <- letter_groups(pop_irx_overview,
+  value,
+  genotype,
+  "kruskal",
+  type,
+  variable,
+  print_position = "below",
+  print_adjust = 0.75
+) %>%
+  mutate(value = case_when(
+    variable == "Convexity" ~ value - 0.1,
+    variable == "Circularity" ~ value - 0.1,
+    TRUE ~ value
+  ))
+
+pop_overview <- ggplot(
+  pop_irx_overview,
+  aes(
+    x = genotype,
+    y = value
+  )
+) +
+  geom_quasirandom(
+    aes(fill = type),
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  geom_violin(aes(
+    group = genotype,
+    # fill = cell.type
+  ),
+  draw_quantiles = 0.5,
+  fill = "white",
+  colour = "black",
+  alpha = 0.85,
+  width = 0.2,
+  position = position_dodge(width = 0.6),
+  size = 0.2,
+  scale = "width"
+  ) +
+  # geom_boxplot(
+  #   fill = "white",
+  #   colour = "black",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_text(
+    data = pop_letters,
+    aes(label = Letters),
+    size = 6 / (14 / 5),
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = pal_flame_disc[c(1, 3)]) +
+  scale_x_discrete(
+    labels = c(
+      "WT",
+      expression(paste(italic("C4H"), "-RNAi")),
+      expression(paste(italic("CCR"), "-RNAi"))
+    )
+  ) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.1, 0.05))) +
+  theme_leo() +
+  theme(
+    # axis.text.x = element_text(angle = 90,
+    #                                hjust = 1),
+    axis.title = element_blank()
+  ) +
+  expand_limits(y = 0) +
+  facet_grid(variable ~ type,
+    scales = "free_y"
+  )
+
+
+# pop_neighbourhood <- ggplot(pop_irx, aes(x = n_v, y = convexity)) +
+#   geom_point(aes(fill = genotype),
+#     shape = 21,
+#     size = 2,
+#     alpha = 0.75,
+#     stroke = 0.2
+#   ) +
+#   scale_fill_few() +
+#   scale_y_continuous(limits = c(0.7,1)) +
+#   labs(x = "Fraction of perimeter adjacent to other vessels") +
+#   theme_leo() +
+#   geom_smooth(
+#     method = "loess",
+#     span = 1,
+#     colour = "black",
+#     linetype = 2
+#   ) +
+#   facet_wrap(~ bin, ncol = 1)
+#
+# pop_distance <- ggplot(pop_irx, aes(x = Distance, y = convexity)) +
+#   geom_point(aes(fill = genotype),
+#     shape = 21,
+#     size = 2,
+#     alpha = 0.75,
+#     stroke = 0.2
+#   ) +
+#   scale_fill_few() +
+#   scale_y_continuous(limits = c(0.7,1)) +
+#   labs(x = "Distance from the cambium [µm]") +
+#   theme_leo() +
+#   geom_smooth(
+#     method = "loess",
+#     span = 1,
+#     colour = "black",
+#     linetype = 2
+#   ) +
+#   facet_wrap(~ bin, ncol = 1)
+
+pdf("pop_overview.pdf", width = onecol * 0.9, height = onecol * 0.9)
+pop_overview
+dev.off()
+```
+
+#### WT overview
+
+```{r}
+
+pop_adj <- pop_irx %>%
+  select(genotype:n_v) %>%
+  filter(genotype == "WT") %>%
+  pivot_longer(n_r:n_v, names_to = "variable", values_to = "value")
+
+p_values <- pop_adj %>%
+  group_by(variable) %>%
+  summarise(p_value = broom::tidy(
+    wilcox.test(value[type == "PX"], value[type == "SX"])
+  )[["p.value"]]) %>%
+  mutate(
+    p_value = formatC(p_value, format = "e", digits = 1)
+    #        case_when(
+    # p_value > 0.001 ~ round(p_value, digits = 3),
+    # p_value > 0.0001 ~ round(p_value, digits = 4),
+    # p_value > 0.00001 ~ round(p_value, digits = 5),
+    # p_value > 0.000001 ~ round(p_value, digits = 6),
+    # p_value > 0.0000001 ~ round(p_value, digits = 7),
+    # TRUE ~ round(p_value, digits = 8)
+  )
+
+pop_adj_box <- ggplot(
+  data = pop_adj,
+  aes(x = variable, y = value * 100)
+) +
+  geom_quasirandom(
+    aes(
+      group = interaction(type, variable),
+      fill = type
+    ),
+    dodge.width = 0.6,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.25
+  ) +
+  # geom_boxplot(
+  #   aes(group = interaction(cell.type, variable), fill = cell.type),
+  #   # fill = "white",
+  #   alpha = 0.5,
+  #   width = 0.6,
+  #   position = position_dodge2(width = 1),
+  #   outlier.alpha = 0,
+  #   lwd = 0.25,
+  #   fatten = 1,
+  #   width = 0.25
+  # ) +
+  geom_violin(aes(
+    group = interaction(type, variable),
+    # fill = cell.type
+  ),
+  draw_quantiles = 0.5,
+  fill = "white",
+  colour = "black",
+  alpha = 0.85,
+  width = 0.2,
+  position = position_dodge(width = 0.6),
+  size = 0.2,
+  scale = "width"
+  ) +
+  geom_text(
+    data = p_values,
+    aes(label = paste(("P ="), p_value)),
+    # x = 0.5,
+    y = -5,
+    hjust = 0.5,
+    vjust = 1,
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  annotate("text",
+    x = c(0.6, 1.4),
+    y = c(100, 100),
+    label = c("PV", "SV"),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  annotate("segment",
+    x = c(0.7, 1.3),
+    xend = c(0.8, 1.2),
+    y = c(100, 100),
+    yend = c(100, 100),
+    colour = "black",
+    size = 0.2
+  ) +
+  scale_x_discrete(labels = c("Fibres", "Parenchyma", "Rays", "Vessels")) +
+  scale_y_continuous(expand = expand_scale(mult = c(0.15, 0.05))) +
+  # scale_fill_grey(start = 1, end = 0) +
+  # scale_fill_brewer(palette = "Greys") +
+  scale_fill_manual(values = pal_flame_disc[c(1, 3)]) +
+  # scale_fill_manual(values = pal_ostwald[c(3, 4, 6)]) +
+  # scale_colour_manual(values = pal_ostwald[c(3, 4, 6)]) +
+  labs(
+    x = "Neighbouring cell type",
+    y = "CW adjacent [%]"
+  ) +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none"
+  )
+
+pdf("pop_adj_box.pdf", width = 9 / 2.54, height = 1.5)
+pop_adj_box
+dev.off()
+
+
+rmn_violin <- function(x) {
+  pop_irx_overview <- pop_irx %>%
+    filter(genotype == "WT") %>%
+    select(genotype:type, Mean, Distance, Area) %>%
+    pivot_longer(c(Mean, Distance, Area), names_to = "variable", values_to = "value")
+
+  p_values <- pop_irx_overview %>%
+    filter(variable == x) %>%
+    summarise(p_value = broom::tidy(
+      t.test(value[type == "PX"], value[type == "SX"])
+    )[["p.value"]]) %>%
+    mutate(p_value = formatC(p_value, format = "e", digits = 1))
+
+  ggplot(
+    data = pop_irx_overview %>% filter(variable == x),
+    aes(x = type, y = value)
+  ) +
+    geom_quasirandom(
+      aes(fill = type),
+      dodge.width = 0.6,
+      shape = 21,
+      # width = 0.1,
+      # colour = NA,
+      alpha = 0.75,
+      size = 1,
+      stroke = 0.2
+    ) +
+    # geom_boxplot(
+    #   aes(group = interaction(cell.type, variable), fill = cell.type),
+    #   # fill = "white",
+    #   alpha = 0.5,
+    #   width = 0.6,
+    #   position = position_dodge2(width = 1),
+    #   outlier.alpha = 0,
+    #   lwd = 0.25,
+    #   fatten = 1,
+    #   width = 0.25
+    # ) +
+    geom_violin(aes(
+      group = type,
+      # fill = cell.type
+    ),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 0.2,
+    position = position_dodge(width = 0.6),
+    size = 0.2,
+    scale = "width"
+    ) +
+    geom_text(
+      data = p_values,
+      aes(label = paste(("P ="), p_value)),
+      x = 1.5,
+      y = -0,
+      hjust = 0.5,
+      vjust = 1,
+      family = "Helvetica",
+      size = ggtext_size
+    ) +
+    scale_x_discrete(labels = c("PV", "SV")) +
+    scale_fill_manual(values = pal_flame_disc[c(1, 3)]) +
+    scale_y_continuous(expand = expand_scale(mult = c(0.15, 0.05))) +
+    expand_limits(y = 0) +
+    theme_leo() +
+    theme(
+      text = element_text(family = "Helvetica"),
+      legend.position = "none",
+    )
+}
+
+pop_area <- rmn_violin("Area") +
+  labs(
+    x = "",
+    y = expression(paste("Area [µm"^2, "]"))
+  )
+
+pop_wiesner <- rmn_violin("Mean") +
+  labs(
+    x = "",
+    y = expression(paste(bold(G)[CHO]))
+  )
+
+pop_distance <- rmn_violin("Distance") +
+  labs(
+    x = "",
+    y = expression(paste("Distance [µm]"))
+  )
+
+
+celltypes_WT <-
+  rasterGrob(readPNG(
+    "/home/leonard/Dropbox/IRX manuscript/Submission/Edits/poplarWT.png"
+  ))
+
+
+right_low <- plot_grid(
+  pop_area,
+  pop_distance,
+  pop_wiesner,
+  labels = c("C", "D", "E"),
+  nrow = 1,
+  # rel_widths = c(1, 2.2),
+  vjust = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica"
+)
+
+right <- plot_grid(
+  pop_adj_box,
+  right_low,
+  labels = c("B", ""),
+  nrow = 2,
+  # rel_widths = c(1, 2.2),
+  vjust = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica"
+)
+
+pdf("IRX_figure2_pop.pdf", width = onecol * 1.15, height = onecol * 0.75)
+plot_grid(
+  celltypes_WT,
+  right,
+  labels = c("A", ""),
+  nrow = 1,
+  # rel_widths = c(1, 2.2),
+  vjust = 1,
+  label_size = 10,
+  label_fontfamily = "Helvetica",
+  rel_widths = c(1, 2)
+)
+dev.off()
+```
+
+#### SEMs
+
+```{r}
+
+pop_irx <- as.data.frame(pop_irx)
+poplar_psem <- psem(
+  lm(Circ. ~
+  n_v +
+    Distance +
+    # n_p +
+    convexity,
+  data = filter(pop_irx, type == "PX")
+  ),
+  lm(convexity ~
+  n_v +
+    # n_p +
+    Mean +
+    Distance +
+    Perim.,
+  data = filter(pop_irx, type == "PX")
+  ),
+  data = filter(pop_irx, type == "PX")
+)
+
+ind_claims <- ind_claims %>%
+  bind_rows(summary(poplar_psem)[["dTable"]][, c(1, 4, 5)] %>%
+    mutate(
+      model = "PX",
+      species = "Populus",
+      fishC = summary(poplar_psem)[["Cstat"]][["Fisher.C"]],
+      fishP = summary(poplar_psem)[["Cstat"]][["P.Value"]]
+    ))
+
+coefs <- coefs %>%
+  bind_rows(summary(poplar_psem)[["coefficients"]][, c(1:8)] %>%
+    mutate(
+      model = "PX",
+      species = "Populus"
+    ))
+plot(poplar_psem)
+
+poplar_psem <- psem(
+  lm(Circ. ~
+  n_v +
+    Distance +
+    # n_p +
+    convexity,
+  data = filter(pop_irx, type == "SX")
+  ),
+  lm(convexity ~
+  n_v +
+    # n_p +
+    Mean +
+    Distance +
+    Perim.,
+  data = filter(pop_irx, type == "SX")
+  ),
+  data = filter(pop_irx, type == "SX")
+)
+
+ind_claims <- ind_claims %>%
+  bind_rows(summary(poplar_psem)[["dTable"]][, c(1, 4, 5)] %>%
+    mutate(
+      model = "SX",
+      species = "Populus",
+      fishC = summary(poplar_psem)[["Cstat"]][["Fisher.C"]],
+      fishP = summary(poplar_psem)[["Cstat"]][["P.Value"]]
+    ))
+
+coefs <- coefs %>%
+  bind_rows(summary(poplar_psem)[["coefficients"]][, c(1:8)] %>%
+    mutate(
+      model = "SX",
+      species = "Populus"
+    ))
+plot(poplar_psem)
+```
+
+#### Interactions 
+```{r}
+find_interactions <- function(x) {
+  pop_irx <- filter(pop_irx, type == x) %>%
+    select(
+      convexity,
+      Perim.,
+      Mean,
+      # n_f,
+      # n_p,
+      n_v,
+      Distance
+    ) %>%
+    drop_na()
+
+  model.null <- lm(convexity ~ 1,
+    data = pop_irx
+  )
+  model.full <- lm(convexity ~ (.)^2,
+    data = pop_irx
+  )
+
+  best_model <- step(model.null,
+    scope = list(upper = model.full),
+    direction = "both",
+    data = pop_irx
+  )
+
+  print(tidy(best_model) %>%
+    select(term) %>%
+    filter(str_detect(term, fixed(":"))))
+
+  best_model
+}
+
+#### protoxylem ####
+best_model <- find_interactions("S")
+
+Distance_n_v <- interact_plot(best_model,
+  pred = Distance, modx = n_v,
+  colors = c("white", "white", "white"),
+  x.label = "Distance [µm]",
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = "none",
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  )
+Distance_n_v$layers[[1]]$aes_params$size <- 0.2
+
+Mean_n_v <- interact_plot(best_model,
+  pred = n_v, modx = Mean,
+  colors = c("white", "white", "white"),
+  x.label = "Adjacent vessels",
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = "none",
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  )
+Mean_n_v$layers[[1]]$aes_params$size <- 0.2
+
+Mean_Distance <- interact_plot(best_model,
+  pred = Distance, modx = Mean,
+  colors = c("white", "white", "white"),
+  x.label = "Distance [µm]",
+  y.label = "Convexity"
+) +
+  theme_leo() +
+  theme(
+    legend.position = "none",
+    panel.background = element_rect(fill = alpha(pal_flame_disc[3], 0.5))
+  )
+Mean_Distance$layers[[1]]$aes_params$size <- 0.2
+
+pdf("pop_interactions.pdf", width = onecol, height = onecol / 3)
+plot_grid(Distance_n_v,
+  Mean_Distance,
+  Mean_n_v,
+  nrow = 1
+)
+dev.off()
+```
+

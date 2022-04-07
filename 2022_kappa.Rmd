@@ -1,0 +1,1554 @@
+---
+title: "Figures for the kappa"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(baseline)
+library(broom)
+library(colorspace)
+library(gganimate)
+library(ggbeeswarm)
+library(ggrepel)
+library(ggridges)
+library(ggtext)
+library(glue)
+library(jsonlite)
+library(lubridate)
+library(patchwork)
+library(showtext)
+library(slider)
+library(tidyverse)
+library(tukeygrps)
+library(vroom)
+library(sf)
+
+## import Helvetica ####
+font_add(
+  "Helvetica",
+  regular = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Lt.otf",
+  italic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-LtIt.otf",
+  bold = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-Bd.otf",
+  bolditalic = "/prop_fonts/01. Helvetica   [1957 - Max Miedinger]/HelveticaNeueLTStd-BdIt.otf"
+)
+font_add(
+  "biolinum",
+  regular = "/ttf-linux-libertine/LinBiolinum_R.otf",
+  italic = "/ttf-linux-libertine/LinBiolinum_RI.otf",
+  bold = "/ttf-linux-libertine/LinBiolinum_RB.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 6,
+                      base_family = "Helvetica") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(
+        hjust = 0,
+        # face = "italic"
+      ),
+      # axis.ticks = element_line(
+      #   size = 0.125,
+      #   lineend = "square",
+      #   color = "black"
+      # ),
+      axis.text.x = element_text(
+        size = 6,
+        colour = "black",
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        size = 6,
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.title = element_text(
+        colour = "black",
+        size = 6
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      # panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "none",
+      legend.text = element_text(size = 6),
+      legend.key.height = unit(4, "mm"),
+      plot.title = element_text(
+        size = 6,
+        hjust = 0
+      ),
+      complete = TRUE
+    )
+}
+
+pal_ostwald_disc <- c(
+  "#275d95",
+  "#e8c245",
+  "#d25952"
+)
+
+pal_ostwald_disc_long <- c(
+  "#8fab1d",
+  "#2d7d73",
+  "#1d566f",
+  "#275d95",
+  "#e8c245",
+  "#d25952"
+)
+
+pal_ostwald_cont <- c(
+  "#155DA7",
+  "#0A75B9",
+  # "#0C89C9",
+  "#FED32F",
+  # "#F8A63A",
+  "#EF663A",
+  "#ED4137"
+)
+
+pal_ostwald_5 <- c(
+  "#155DA7",
+  "#929c67",
+  "#FED32F",
+  "#f79333",
+  "#ED4137"
+)
+
+pal_pedersen_disc <- c(
+  "#264653",
+  "#2a9d8f",
+  "#e9c46a",
+  "#f4a261",
+  "#e76f51"
+)
+
+pal_dawn <- c(
+  "#434c52ff",
+  "#46636fff",
+  "#6088a0ff",
+  "#ab6c82ff",
+  "#d8737fff",
+  "#eaa05fff",
+  "#ffd175ff"
+)
+
+# convenience vectors of mutant types
+Q <- "Q"
+quad <- c("Q-4", "Q-5", "Q-10", "Q-12", "Q-17")
+triple <- c("Q-4/10", "Q-4/12", "Q-4/17", "Q-5/10", "Q-5/12", "Q-5/17", "Q-10/12", "Q-12/17")
+WT <- "WT"
+
+Q_it <- "<i>Q</i>"
+quad_it <- c("<i>Q-4</i>", "<i>Q-5</i>", "<i>Q-10</i>", "<i>Q-12</i>", "<i>Q-17</i>")
+triple_it <- c("<i>Q-4/10</i>", "<i>Q-4/12</i>", "<i>Q-4/17</i>", "<i>Q-5/10</i>", "<i>Q-5/12</i>", "<i>Q-5/17</i>", "<i>Q-10/12</i>", "<i>Q-12/17</i>")
+
+# convenience figure size functions
+ggtext_size <- 6 / (14 / 5)
+cm_size <- function(x) x / 2.54
+twocol <- 18 / 2.54
+onehalfcol <- 14 / 2.54
+onecol <- 9 / 2.54
+
+#### machine dependent paths ####
+datapath <- ifelse(dir.exists("/data/"), "/data/",
+  ifelse(dir.exists("/run/media/leonard/data/grsync/data/"), "/run/media/leonard/data/grsync/data/",
+    ifelse(dir.exists("/run/media/leonard/data/"), "/run/media/leonard/data/", "/home/leonard/Documents/Uni/")
+  )
+)
+```
+
+# Correlation of irx with plant height
+
+## Load data
+
+### lac data
+
+#### Convexity
+
+```{r, message=FALSE}
+collapse_files <-
+  list.files(
+    path = paste0(datapath, "PhD/Wiesner/2021-05_Wiesner/Collapse/Measurements/"),
+    pattern = "*.csv",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+collapse_data <- vroom::vroom(collapse_files) %>%
+  separate(image, into = c("date", "genotype", "replicate", "stained", "size"), sep = "_") %>%
+  mutate(date = str_replace(date, "^021", "2021")) %>%
+  mutate(
+    cell_type = ordered(cell_type,
+      levels = c(
+        "PX",
+        "MX"
+      )
+    ),
+    genotype = ordered(case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    levels = c(WT, triple_it, quad_it, Q_it)
+    ),
+    instance = case_when(
+      replicate %in% c(1:5) ~ "1",
+      TRUE ~ "2"
+    )
+  ) %>%
+  group_by(genotype, replicate, point) %>%
+  mutate(cell = case_when(
+    point == 0 ~ row_number(),
+    TRUE ~ NA_integer_
+  )) %>%
+  ungroup() %>%
+  fill(cell) %>% 
+  group_by(genotype, replicate, cell_type) %>% 
+  summarise(convexity = mean(Solidity),
+            circularity = mean(Circ.))
+```
+
+#### Plant height
+
+```{r message=FALSE}
+# format silique data from growth instance III
+sil_III <- read_csv(paste0(
+  datapath, "PhD/Phenotyping/2021-04_lac_mutants/2021-07_harvesting.csv"
+)) %>%
+  left_join(read_csv(paste0(datapath, "PhD/Phenotyping/2021-04_lac_mutants/plant_order.csv"))) %>%
+  select(genotype, genotype, "rep" = replicate, "length" = sil.length) %>%
+  separate_rows(length, sep = ",") %>%
+  mutate(
+    length = as.numeric(length),
+    rep = as.character(rep)
+  )
+
+# combine silique data
+siliques <- read_csv(paste0(
+  datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_siliques.csv"
+)) %>%
+  bind_rows(read_csv(paste0(
+    datapath, "PhD/Phenotyping/2020-09_lac_mutants/2020-11-05_siliques.csv"
+  )) %>%
+    select(-plant)) %>%
+  mutate(rep = as.character(rep)) %>%
+  pivot_longer(-c(genotype, rep), names_to = "sil", values_to = "length") %>%
+  select(-sil) %>%
+  bind_rows(sil_III) %>%
+  mutate(genotype = recode(genotype,
+    "Col-0" = "WT",
+    "lac4/5/10/12/17" = "Q",
+    "lac5/10/12/17" = "Q-4",
+    "lac4/10/12/17" = "Q-5",
+    "lac4/5/12/17" = "Q-10",
+    "lac4/5/10/17" = "Q-12",
+    "lac4/5/10/12" = "Q-17"
+  )) %>%
+  mutate(genotype = ordered(case_when(
+    genotype == "WT" ~ genotype,
+    TRUE ~ paste0("<i>", genotype, "</i>")
+  ),
+  levels = c(WT, triple_it, quad_it, Q_it)
+  ))
+
+
+# format stem data from growth instance III
+stems_III <- read_csv(paste0(
+  datapath, "PhD/Phenotyping/2021-04_lac_mutants/2021-07_harvesting.csv"
+)) %>%
+  left_join(read_csv(paste0(datapath, "PhD/Phenotyping/2021-04_lac_mutants/plant_order.csv"))) %>%
+  select(-sil.length, -stem.weight) %>%
+  rename("rep" = replicate)
+
+# combine stem data
+pheno_data <- read_csv(paste0(
+  datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_harvesting.csv"
+)) %>%
+  rename("stem.weight" = stem.w) %>%
+  bind_rows(read_csv(paste0(
+    datapath, "PhD/Phenotyping/2020-09_lac_mutants/2020-11-05_harvesting.csv"
+  )) %>%
+    bind_rows(stems_III) %>%
+    select(-plant)) %>%
+  mutate(genotype = recode(genotype,
+    "Col-0" = "WT",
+    "lac4/5/10/12/17" = "Q",
+    "lac5/10/12/17" = "Q-4",
+    "lac4/10/12/17" = "Q-5",
+    "lac4/5/12/17" = "Q-10",
+    "lac4/5/10/17" = "Q-12",
+    "lac4/5/10/12" = "Q-17"
+  )) %>%
+  mutate(rep = as.character(rep)) %>%
+  mutate(genotype = ordered(case_when(
+    genotype == "WT" ~ genotype,
+    TRUE ~ paste0("<i>", genotype, "</i>")
+  ),
+  levels = c(WT, triple_it, quad_it, Q_it)
+  )) %>%
+  left_join(siliques %>%
+    group_by(genotype, rep) %>%
+    summarise(mean.sil.length = mean(length))) %>%
+  select(genotype, "replicate" = rep, stretched.height) %>%
+  filter(genotype %in% c(WT, quad_it, Q_it))
+```
+
+#### Merge
+
+```{r}
+lac_data <- collapse_data %>% 
+  left_join(pheno_data) %>% 
+  drop_na() %>% 
+  mutate(instance = "polymerisation")
+```
+
+
+### Collapse data
+
+#### Convexity
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+irx_data <-
+  read.csv(paste0(datapath,"PhD/IRX/irx_measurements.csv"), sep = "\t")
+irx_ref <- subset(irx_data, object == "ref", select = c(1, 2, 3, 6, 7, 27))
+irx_ref$ref.y1 <- irx_ref$Y
+irx_ref$ref.y2 <- irx_ref$Y
+irx_ref$ref.x1 <- irx_ref$X - (irx_ref$Length / 2)
+irx_ref$ref.x2 <- irx_ref$X + (irx_ref$Length / 2)
+
+
+irx_data <- irx_data %>%
+  filter(object != "ref") %>%
+  left_join(irx_ref[, c(1, 2, 3, 7, 8, 9, 10)],
+    by = c("genotype", "replicate", "technical")
+  )
+
+irx_data$Distance <-
+  apply(
+    irx_data[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
+    1,
+    function(x) {
+      a <- c(x[1], x[2])
+      b <- c(x[3], x[5])
+      c <- c(x[4], x[6])
+      v1 <- b - c
+      v2 <- a - b
+      m <- cbind(v1, v2)
+      d <- abs(det(m)) / sqrt(sum(v1 * v1))
+      d
+    }
+  )
+
+irx_data <- irx_data %>%
+  rownames_to_column(var = "number") %>% 
+  rename("cell_type" = "object") %>% 
+  mutate(cell_type = recode(cell_type, "PMX" = "MX")) %>% 
+  group_by(genotype, replicate, cell_type) %>% 
+  summarise(convexity = mean(Solidity),
+            circularity = mean(Circ.))
+```
+
+#### Plant height
+
+```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
+heights <- read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>% 
+  select(genotype, replicate, "stretched.height" = height) %>% 
+  mutate(replicate = as.character(replicate)) 
+
+heights_haris <- read_csv(paste0(datapath, "PhD/IRX/heights_haris.csv")) %>% 
+  rename("stretched.height" = Plant.height) %>% 
+  mutate(replicate = as.character(replicate)) 
+
+heights <- bind_rows(heights, heights_haris)
+```
+
+#### Merge
+
+```{r}
+synth_data <- irx_data %>% 
+  left_join(heights) %>% 
+  drop_na() %>% 
+  mutate("instance" = "biosynthesis")
+```
+
+### Combine data
+
+```{r}
+corr_data <- bind_rows(lac_data, synth_data) %>% 
+  mutate(instance = case_when(genotype == "col-0" | genotype == "WT" ~ "WT",
+                              TRUE ~ instance),
+         instance = ordered(instance, levels = c("WT", "biosynthesis", "polymerisation"))) %>% 
+  filter(cell_type == "MX" &
+           stretched.height < 60)
+
+corr_data_avg <- corr_data %>% 
+  # filter(cell_type == "MX") %>% 
+  group_by(genotype, instance) %>% 
+  summarise(stretched.height = mean(stretched.height),
+            circularity = mean(circularity))
+```
+
+## Model correlation
+
+```{r}
+simple_linear <- lm(stretched.height ~ circularity, data = corr_data)
+
+quadratic <- lm(stretched.height ~ circularity + I(circularity^2), data = corr_data)
+
+log <- lm(log(stretched.height) ~ circularity, data = corr_data)
+
+mixed <- lme4::lmer(stretched.height ~ circularity + (1 | instance),
+                                 data = corr_data)
+
+summary(simple_linear)
+summary(quadratic)
+summary(log)
+MuMIn::r.squaredGLMM(mixed)
+```
+
+
+## Plot correlation
+
+```{r}
+r_sq <- round(summary(simple_linear)$adj.r.squared, digits = 2) * 100 
+
+reg_plot <- ggplot(corr_data,
+       aes(x = stretched.height,
+           y = circularity)) +
+  geom_point(aes(fill = instance),
+             shape = 21,
+             stroke = 0.2,
+             size = 2,
+             colour = "white") +
+  annotate("richtext",
+           label = paste0(r_sq, "% of variation in<br>plant height is explained by<br>MX circularity"),
+           x = 55,
+           y = 0.6,
+           hjust = 1,
+           vjust = 1,
+           label.size = NA,
+           family = "Helvetica",
+           size = ggtext_size) +
+  annotate("curve",
+           x = 45.5,
+           xend = 42,
+           y = 0.55,
+           yend = 0.75,
+           curvature = -0.2,
+           lineend = "round",
+           size = 0.2,
+           arrow = arrow(length = unit(0.03, "npc"), type = "closed")) +
+  geom_smooth(method = "lm",
+              size = 0.5,
+              se = F,
+              colour = "black",
+              linetype = 2) +
+  scale_fill_manual(values = pal_ostwald_disc,
+                    name = "Type of mutant") +
+  labs(y = "Metaxylem circularity",
+       x = "Plant height [cm]") +
+  theme_leo() +
+  theme(legend.position = c(0.13, 0.75),
+        legend.key.width = unit(3, "mm"),
+        legend.key.height = unit(3, "mm"),
+        legend.background = element_rect(colour = NA, fill = "grey95"))
+
+pdf("height_circ.pdf", width = onecol, height = onecol * 0.4)
+reg_plot
+dev.off()
+```
+
+# Correlation between G-CHO and G-CHOH
+
+## Load data
+
+### Arabidopsis
+
+#### Lac mutants
+
+```{r}
+#### select path to the folder containing your spectra (.txt) files ####
+spectra_path <- paste0(datapath, "PhD/Raman/2020-11_lac_mutants")
+
+#### write function to make sure required packages are installed ####
+install_and_load <- function(x) {
+  for (i in x) {
+    if (!require(i, character.only = TRUE)) {
+      install.packages(i, dependencies = TRUE)
+      require(i, character.only = TRUE)
+    }
+  }
+}
+
+#### load packages (and install if necessary) ####
+install_and_load(c("baseline", "tidyverse", "MESS", "writexl", "zoo"))
+
+#### list Raman spectra files ####
+Raman_files <-
+  list.files(
+    path = spectra_path,
+    pattern = "*.txt",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+#### write function to read spectra ####
+read_Raman <- function(flnm) {
+  read_tsv(flnm,
+    comment = "#",
+    col_names = c("wavenumber", "intensity"),
+    col_types = "cc",
+  ) %>%
+    mutate(
+      filename = basename(flnm)
+    ) %>%
+    mutate(
+      wavenumber = as.numeric(str_replace(wavenumber, fixed(","), fixed("."))),
+      intensity = as.numeric(str_replace(intensity, fixed(","), fixed("."))),
+    ) %>%
+    filter(wavenumber > 300) %>%
+    pivot_wider(
+      id_cols = filename,
+      names_from = wavenumber,
+      values_from = intensity
+    ) %>%
+    group_by(filename) %>%
+    nest()
+}
+
+#### read spectra and combine into a tibble ####
+Raman_spectra <- map_dfr(Raman_files, read_Raman)
+
+#### write baseline correction function ####
+Raman_als <- function(x) {
+  corrected_spectra <- baseline::baseline.als(as.matrix(x),
+    lambda = 5,
+    p = 0.01,
+    maxit = 100
+  )
+  as_tibble(corrected_spectra$corrected, rownames = NA)
+}
+
+#### baseline correction ####
+Raman_spectra_corrected <- Raman_spectra %>%
+  mutate(corrected_data = map(data, Raman_als)) %>%
+  select(-data) %>%
+  unnest(cols = c(corrected_data)) %>%
+  pivot_longer(-filename,
+    names_to = "wavenumber",
+    values_to = "corrected_intensity"
+  ) %>%
+  drop_na() %>%
+  mutate(wavenumber = as.numeric(wavenumber))
+
+#### find the cellulose band around 380 cm-1 ####
+cellulose_peak <- Raman_spectra_corrected %>%
+  filter(round(wavenumber, digits = 0) %in% c(370:390)) %>%
+  group_by(filename) %>%
+  mutate(
+    peak_pos = wavenumber[which.max(corrected_intensity)]
+  ) %>%
+  select(-wavenumber, -corrected_intensity) %>%
+  unique() %>%
+  ungroup() %>%
+  mutate(peak_pos_ref = peak_pos[1])
+
+#### align spectra at the cellulose band around 380 cm-1 ####
+Raman_spectra_aligned <- Raman_spectra_corrected %>%
+  left_join(cellulose_peak) %>%
+  ungroup() %>%
+  mutate(wavenumber = wavenumber + (peak_pos_ref - peak_pos))
+
+#### normalise spectra to AUC ("scaled") and to total lignin ("scaled_lig") ####
+Raman_spectra_scaled <- Raman_spectra_aligned %>%
+  group_by(filename) %>%
+  mutate(
+    AUC = MESS::auc(wavenumber, corrected_intensity),
+    scaled = corrected_intensity / AUC,
+    scaled_lig = corrected_intensity / (
+      (corrected_intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) + corrected_intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1]
+    )
+  )
+
+#### view spectra to check their alignment ####
+ggplot(
+  Raman_spectra_scaled,
+  aes(
+    x = wavenumber,
+    y = scaled,
+    group = filename
+  )
+) +
+  geom_vline(xintercept = c(380, 1334, 1600, 1624, 1658)) +
+  geom_line()
+
+#### fill missing values by linear interpolation from adjacent values ####
+Raman_spectra_filled <- Raman_spectra_scaled %>%
+  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
+  complete(wavenumber = seq(300, 1800)) %>%
+  arrange(filename, wavenumber) %>%
+  group_by(filename) %>%
+  mutate(raw_full = zoo::na.approx(corrected_intensity, na.rm = F),
+         scaled_full = zoo::na.approx(scaled, na.rm = F),
+         scaled_lig_full = zoo::na.approx(scaled_lig, na.rm = F))
+
+#### view example spectrum to check that the interpolated values are correct ####
+ggplot(Raman_spectra_filled %>% filter(filename == Raman_spectra_filled$filename[1])) +
+  geom_line(aes(
+    x = wavenumber,
+    y = scaled
+  ),
+  colour = "blue",
+  size = 0.2
+  ) +
+  geom_line(aes(
+    x = wavenumber,
+    y = scaled_full
+  ),
+  colour = "red",
+  size = 0.2
+  )
+
+Raman_lac <- Raman_spectra_filled %>% 
+  separate(filename, into = c("date", "genotype", "replicate", "cell_type", "cell"), sep = "_") %>% 
+  group_by(genotype, replicate, cell_type, cell) %>% 
+  summarise("<b>G</b><sub>CHO</sub>" = scaled_lig_full[wavenumber == 1624],
+            "<b>G</b><sub>CHOH</sub>" = scaled_lig_full[wavenumber == 1658],
+            "<b>S</b>" = scaled_lig_full[wavenumber == 1334],
+            "species" = "<i>A. thaliana</i>") %>% 
+  mutate("type" = case_when(genotype == "WT" ~ "WT",
+                               TRUE ~ "polymerisation"))
+```
+
+#### Biosynthesis mutants
+
+```{r}
+#### select path to the folder containing your spectra (.txt) files ####
+spectra_path <- paste0(datapath, "PhD/IRX/RAMAN/nuoendagula/")
+
+#### write function to make sure required packages are installed ####
+install_and_load <- function(x) {
+  for (i in x) {
+    if (!require(i, character.only = TRUE)) {
+      install.packages(i, dependencies = TRUE)
+      require(i, character.only = TRUE)
+    }
+  }
+}
+
+#### load packages (and install if necessary) ####
+install_and_load(c("baseline", "tidyverse", "MESS", "writexl", "zoo"))
+
+#### list Raman spectra files ####
+Raman_files <-
+  list.files(
+    path = spectra_path,
+    pattern = "*.txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+#### write function to read spectra ####
+read_Raman <- function(flnm) {
+  read_tsv(flnm,
+    skip = 25,
+    col_names = c("wavenumber", "intensity"),
+    col_types = "cc",
+  ) %>%
+    mutate(
+      filename = basename(flnm)
+    ) %>%
+    mutate(
+      wavenumber = as.numeric(str_replace(wavenumber, fixed(","), fixed("."))),
+      intensity = as.numeric(str_replace(intensity, fixed(","), fixed("."))),
+    ) %>%
+    filter(wavenumber > 300) %>%
+    pivot_wider(
+      id_cols = filename,
+      names_from = wavenumber,
+      values_from = intensity
+    ) %>%
+    group_by(filename) %>%
+    nest()
+}
+
+#### read spectra and combine into a tibble ####
+Raman_spectra <- map_dfr(Raman_files, read_Raman) %>% 
+  distinct(filename, .keep_all = TRUE)
+
+#### write baseline correction function ####
+Raman_als <- function(x) {
+  corrected_spectra <- baseline::baseline.als(as.matrix(x),
+    lambda = 5,
+    p = 0.01,
+    maxit = 100
+  )
+  as_tibble(corrected_spectra$corrected, rownames = NA)
+}
+
+#### baseline correction ####
+Raman_spectra_corrected <- Raman_spectra %>%
+  mutate(corrected_data = map(data, Raman_als)) %>%
+  select(-data) %>%
+  unnest(cols = c(corrected_data)) %>%
+  pivot_longer(-filename,
+    names_to = "wavenumber",
+    values_to = "corrected_intensity"
+  ) %>%
+  drop_na() %>%
+  mutate(wavenumber = as.numeric(wavenumber))
+
+#### find the cellulose band around 380 cm-1 ####
+cellulose_peak <- Raman_spectra_corrected %>%
+  filter(round(wavenumber, digits = 0) %in% c(370:390)) %>%
+  group_by(filename) %>%
+  mutate(
+    peak_pos = wavenumber[which.max(corrected_intensity)]
+  ) %>%
+  select(-wavenumber, -corrected_intensity) %>%
+  unique() %>%
+  ungroup() %>%
+  mutate(peak_pos_ref = peak_pos[1])
+
+#### align spectra at the cellulose band around 380 cm-1 ####
+Raman_spectra_aligned <- Raman_spectra_corrected %>%
+  left_join(cellulose_peak) %>%
+  ungroup() %>%
+  mutate(wavenumber = wavenumber + (peak_pos_ref - peak_pos))
+
+#### normalise spectra to AUC ("scaled") and to total lignin ("scaled_lig") ####
+Raman_spectra_scaled <- Raman_spectra_aligned %>%
+  group_by(filename) %>%
+  mutate(
+    AUC = MESS::auc(wavenumber, corrected_intensity),
+    scaled = corrected_intensity / AUC,
+    scaled_lig = corrected_intensity / (
+      (corrected_intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) + corrected_intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1]
+    )
+  )
+
+#### view spectra to check their alignment ####
+ggplot(
+  Raman_spectra_scaled %>% filter(filename == Raman_spectra_scaled$filename[1]),
+  aes(
+    x = wavenumber,
+    y = scaled,
+    group = filename
+  )
+) +
+  geom_vline(xintercept = c(380, 1334, 1600, 1624, 1658)) +
+  geom_line()
+
+#### fill missing values by linear interpolation from adjacent values ####
+Raman_spectra_filled <- Raman_spectra_scaled %>%
+  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
+  complete(wavenumber = seq(300, 1800)) %>%
+  arrange(filename, wavenumber) %>%
+  group_by(filename) %>%
+  mutate(raw_full = zoo::na.approx(corrected_intensity, na.rm = F),
+         scaled_full = zoo::na.approx(scaled, na.rm = F),
+         scaled_lig_full = zoo::na.approx(scaled_lig, na.rm = F))
+
+#### view example spectrum to check that the interpolated values are correct ####
+ggplot(Raman_spectra_filled %>% filter(filename == Raman_spectra_filled$filename[1])) +
+  geom_line(aes(
+    x = wavenumber,
+    y = scaled
+  ),
+  colour = "blue",
+  size = 0.2
+  ) +
+  geom_line(aes(
+    x = wavenumber,
+    y = scaled_full
+  ),
+  colour = "red",
+  size = 0.2
+  )
+
+Raman_biosynth <- Raman_spectra_filled %>% 
+  separate(
+    filename,
+    into = c("genotype", "replicate", "cell_type", "cell"),
+    sep = "\\s*#|-|\\s",
+    extra = "merge"
+  ) %>%
+  mutate(
+    genotype = recode(
+      genotype,
+      "4cl1＆2" = "4cl1x4cl2",
+      "cad4＆5" = "cad4xcad5",
+      "ccoaomt" = "ccoaomt1",
+      "ccr1" = "ccr1-3",
+      "col.o" = "WT",
+      "Col.0" = "WT",
+      "ccr1＆fah1" = "ccr1xfah1"
+    ),
+    cell_type = recode(cell_type,
+      "px" = "PX"
+    ),
+    replicate = str_extract(
+      replicate,
+      "\\d"
+    ),
+    cell = str_extract(
+      cell,
+      "(\\d)+"
+    )) %>%
+  filter(cell_type != "？？") %>% 
+  group_by(genotype, replicate, cell_type, cell) %>% 
+  summarise("<b>G</b><sub>CHO</sub>" = scaled_lig_full[wavenumber == 1624],
+            "<b>G</b><sub>CHOH</sub>" = scaled_lig_full[wavenumber == 1658],
+            "<b>S</b>" = scaled_lig_full[wavenumber == 1334],
+            "species" = "<i>A. thaliana</i>") %>% 
+  mutate("type" = case_when(genotype == "WT" ~ "WT",
+                               TRUE ~ "biosynthesis"))
+```
+
+### Populus
+
+```{r}
+#### select path to the folder containing your spectra (.txt) files ####
+spectra_path <- paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar")
+
+#### write function to make sure required packages are installed ####
+install_and_load <- function(x) {
+  for (i in x) {
+    if (!require(i, character.only = TRUE)) {
+      install.packages(i, dependencies = TRUE)
+      require(i, character.only = TRUE)
+    }
+  }
+}
+
+#### load packages (and install if necessary) ####
+install_and_load(c("baseline", "tidyverse", "MESS", "writexl", "zoo"))
+
+#### list Raman spectra files ####
+Raman_files <-
+  list.files(
+    path = spectra_path,
+    pattern = "(TE|FI|RP)(.*).txt",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+#### write function to read spectra ####
+read_Raman <- function(flnm) {
+  read_tsv(flnm,
+    comment = "#",
+    col_names = c("wavenumber", "intensity"),
+    col_types = "cc",
+  ) %>%
+    mutate(
+      filename = str_remove(
+        flnm,
+        fixed(paste0(datapath, "PhD/IRX/Poplar/2020-08_soil_poplar/"))
+      )
+    ) %>%
+    mutate(
+      wavenumber = as.numeric(str_replace(wavenumber, fixed(","), fixed("."))),
+      intensity = as.numeric(str_replace(intensity, fixed(","), fixed("."))),
+    ) %>%
+    filter(wavenumber > 300) %>%
+    pivot_wider(
+      id_cols = filename,
+      names_from = wavenumber,
+      values_from = intensity
+    ) %>%
+    group_by(filename) %>%
+    nest()
+}
+
+test <- read_Raman(Raman_files[1])
+
+#### read spectra and combine into a tibble ####
+Raman_spectra <- map_dfr(Raman_files, read_Raman)
+
+#### write baseline correction function ####
+Raman_als <- function(x) {
+  corrected_spectra <- baseline::baseline.als(as.matrix(x),
+    lambda = 5,
+    p = 0.01,
+    maxit = 100
+  )
+  as_tibble(corrected_spectra$corrected, rownames = NA)
+}
+
+#### baseline correction ####
+Raman_spectra_corrected <- Raman_spectra %>%
+  mutate(corrected_data = map(data, Raman_als)) %>%
+  select(-data) %>%
+  unnest(cols = c(corrected_data)) %>%
+  pivot_longer(-filename,
+    names_to = "wavenumber",
+    values_to = "corrected_intensity"
+  ) %>%
+  drop_na() %>%
+  mutate(wavenumber = as.numeric(wavenumber))
+
+#### find the cellulose band around 380 cm-1 ####
+cellulose_peak <- Raman_spectra_corrected %>%
+  filter(round(wavenumber, digits = 0) %in% c(345:390)) %>%
+  group_by(filename) %>%
+  mutate(
+    peak_pos = wavenumber[which.max(corrected_intensity)]
+  ) %>%
+  select(-wavenumber, -corrected_intensity) %>%
+  unique() %>%
+  ungroup() %>%
+  mutate(peak_pos_ref = peak_pos[100])
+
+#### align spectra at the cellulose band around 380 cm-1 ####
+Raman_spectra_aligned <- Raman_spectra_corrected %>%
+  left_join(cellulose_peak) %>%
+  ungroup() %>%
+  mutate(wavenumber = wavenumber + (peak_pos_ref - peak_pos))
+
+#### normalise spectra to AUC ("scaled") and to total lignin ("scaled_lig") ####
+Raman_spectra_scaled <- Raman_spectra_aligned %>%
+  group_by(filename) %>%
+  mutate(
+    AUC = MESS::auc(wavenumber, corrected_intensity),
+    scaled = corrected_intensity / AUC,
+    scaled_lig = corrected_intensity / (
+      (corrected_intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) + corrected_intensity[abs(wavenumber - 1330) == min(abs(wavenumber - 1330))][1]
+    )
+  )
+
+#### view spectra to check their alignment ####
+ggplot(
+  Raman_spectra_scaled,
+  aes(
+    x = wavenumber,
+    y = scaled,
+    group = filename
+  )
+) +
+  geom_vline(xintercept = c(380, 1334, 1602, 1627, 1662)) +
+  geom_line()
+
+#### fill missing values by linear interpolation from adjacent values ####
+Raman_spectra_filled <- Raman_spectra_scaled %>%
+  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
+  complete(wavenumber = seq(300, 1800)) %>%
+  arrange(filename, wavenumber) %>%
+  group_by(filename) %>%
+  mutate(raw_full = zoo::na.approx(corrected_intensity, na.rm = F),
+         scaled_full = zoo::na.approx(scaled, na.rm = F),
+         scaled_lig_full = zoo::na.approx(scaled_lig, na.rm = F))
+
+#### view example spectrum to check that the interpolated values are correct ####
+ggplot(Raman_spectra_filled %>% filter(filename == Raman_spectra_filled$filename[1])) +
+  geom_line(aes(
+    x = wavenumber,
+    y = scaled
+  ),
+  colour = "blue",
+  size = 0.2
+  ) +
+  geom_line(aes(
+    x = wavenumber,
+    y = scaled_full
+  ),
+  colour = "red",
+  size = 0.2
+  )
+
+Raman_pop <- Raman_spectra_filled %>% 
+  separate(filename, into = c("genotype", "replicate", "TE"), sep = "([/-])") %>%
+  mutate(
+      TE = str_remove(TE, fixed(".txt")),
+      technical = unlist(str_extract_all(TE, "[:alpha:]+")),
+      cell = unlist(str_extract_all(TE, "[:digit:]+")),
+      cell_type = case_when(
+        str_detect(technical, "TE") ~ "TE",
+        str_detect(technical, "FI") ~ "fibre",
+        TRUE ~ "ray"
+      )
+  ) %>% 
+  select(-TE, -technical) %>% 
+  group_by(genotype, replicate, cell_type, cell) %>% 
+  summarise("<b>G</b><sub>CHO</sub>" = scaled_lig_full[wavenumber == 1627],
+            "<b>G</b><sub>CHOH</sub>" = scaled_lig_full[wavenumber == 1662],
+            "<b>S</b>" = scaled_lig_full[wavenumber == 1334],
+            "species" = "<i>Populus</i>") %>% 
+  mutate("type" = case_when(genotype == "T89" ~ "WT",
+                               TRUE ~ "biosynthesis"))
+```
+
+## Combine data
+
+```{r}
+Raman_data <- bind_rows(Raman_lac, Raman_biosynth, Raman_pop)
+
+write_csv(Raman_data, "raman_data_kappa.csv")
+
+Raman_data <- read_csv("raman_data_kappa.csv")
+
+Raman_data <- Raman_data %>% 
+  mutate(type = ordered(type, levels = c("WT", "biosynthesis", "polymerisation"))) %>% 
+  filter(`<b>G</b><sub>CHO</sub>` < 2 & `<b>G</b><sub>CHO</sub>` < 1.3)
+```
+
+## Model correlation
+
+```{r}
+simple_linear <- lm(`<b>G</b><sub>CHO</sub>` ~ `<b>G</b><sub>CHOH</sub>`, data = Raman_data)
+summary(simple_linear)
+
+mixed <- lme4::lmer(`<b>G</b><sub>CHO</sub>` ~ `<b>G</b><sub>CHOH</sub>` + (1 | type) + (1 | species),
+                                 data = Raman_data)
+MuMIn::r.squaredGLMM(mixed)
+```
+
+## Plot correlation
+
+```{r}
+r_sq <- round(summary(simple_linear)$adj.r.squared, digits = 2) * 100 
+
+reg_plot <- ggplot(Raman_data,
+       aes(x = `<b>G</b><sub>CHOH</sub>`,
+           y = `<b>G</b><sub>CHO</sub>`)) +
+  geom_point(aes(
+    fill = type,
+    shape = species),
+             # shape = 21,
+             stroke = 0.2,
+             size = 1,
+             alpha = 0.75,
+             colour = "white") +
+  annotate("richtext",
+           label = paste0(r_sq, "% of variation in <b>G</b><sub>CHO</sub><br>is explained by <b>G</b><sub>CHOH</sub>"),
+           x = 1.25,
+           y = 0.6,
+           hjust = 1,
+           vjust = 1,
+           label.size = NA,
+           family = "Helvetica",
+           size = ggtext_size) +
+  annotate("curve",
+           x = 0.87,
+           xend = 0.75,
+           y = 0.475,
+           yend = 0.7,
+           curvature = -0.2,
+           lineend = "round",
+           size = 0.2,
+           arrow = arrow(length = unit(0.03, "npc"), type = "closed")) +
+  geom_smooth(method = "lm",
+              size = 0.4,
+              se = F,
+              colour = "black",
+              linetype = 2) +
+  scale_fill_manual(values = pal_ostwald_disc,
+                    guide = guide_legend(
+                      title = "Type of mutant",
+                      title.position = "top",
+                      override.aes = list(shape = 21))
+                    ) +
+  scale_shape_manual(values = c(21, 23),
+                     guide = guide_legend(
+                      title = "Species",
+                      title.position = "top",
+                      override.aes = list(fill = "white", colour = "black"))
+                     ) +
+  labs(y = "Relative <b>G</b><sub>CHO</sub>",
+       x = "Relative <b>G</b><sub>CHOH</sub>") +
+  theme_leo() +
+  theme(legend.position = "top",
+        legend.text = element_markdown(),
+        legend.key.width = unit(3, "mm"),
+        legend.key.height = unit(3, "mm"),
+        legend.background = element_rect(colour = NA, fill = "grey95"),
+        axis.title.x = element_textbox_simple(halign = 0.5),
+        axis.title.y = element_textbox_simple(orientation = "left-rotated", halign = 0.5)
+        )
+
+pdf("ald_alc.pdf", width = onecol, height = onecol * 0.4)
+reg_plot
+dev.off()
+```
+
+
+
+
+# Illustration of substrate oxidation rates
+
+## Data from pH optimum
+
+### Load data
+
+```{r, message=FALSE}
+# Define the boundaries of the linear phase for each substrate and pH
+lm_bounds <- tribble(
+  ~substrate, ~pH, ~lm_start, ~lm_stop,
+  "PYGL", "4", 210, 600,
+  "PYGL", "5", 90, 200,
+  "PYGL", "6", 90, 200,
+  "PYGL", "7", 30, 90,
+  "DAF", "4", 70, 140,
+  "DAF", "5", 80, 160,
+  "DAF", "6", 90, 200,
+  "DAF", "7", 90, 200
+)
+
+# remove points that moved outside the field-of-view due to section movement
+sample_rm <- tribble(
+  ~substrate, ~genotype, ~replicate, ~pH, ~treatment, ~cell_type, ~time,
+  "DAF", "Q", "7", "6", "untreated", "PX", seq(0, 500, 10),
+  "DAF", "WT", "8", "5", "autoclaved", c("IF", "CML", "LP", "MX", "PX", "XF", "PH", "BG"), seq(280, 500, 10)
+) %>%
+  unnest(time) %>%
+  unnest(cell_type)
+
+# load individual .csv files (from after the initial file became too large)
+activity_opt_files <-
+  list.files(
+    path = paste0(datapath, "PhD/Laccase_activity/2021-01_optimal_pH/ROIs/Measurements/"),
+    pattern = "*.csv$",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+pH_data_single_files <- map_dfr(activity_opt_files, read_csv)
+
+pH_data <- read_csv(paste0(
+  datapath,
+  "PhD/Laccase_activity/2021-01_optimal_pH/pH_data.csv"
+),
+comment = '"#'
+) %>%
+  bind_rows(pH_data_single_files) %>%
+  mutate(time = slice * interval) %>%
+  select(-c(slice, interval)) %>%
+  separate(image,
+    into = c("date", "substrate", "genotype", "replicate", "pH", "treatment"),
+    sep = "_"
+  ) %>%
+  mutate(
+    pH = str_remove(pH, "pH"),
+    treatment = str_remove(treatment, fixed(".tiff"))
+  ) %>%
+  anti_join(sample_rm) %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  mutate(point = row_number()) %>%
+  left_join(lm_bounds) %>%
+  filter(cell_type != "LP" & cell_type != "PX")
+
+#### subtract water column and background ####
+pH_data <- pH_data %>%
+  group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
+  mutate(
+    corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
+  ) %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
+  mutate(
+    zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == lm_start]
+  ) %>%
+  filter(cell_type %in% c("IF", "CML", "LP", "MX", "PX", "XF"))
+
+nested_pH_data <- pH_data %>%
+  filter(time >= lm_start & time <= lm_stop) %>%
+  select(-mean_absorbance, -corrected_absorbance) %>%
+  nest(data = c(time, zeroed_absorbance, median_hue)) %>%
+  mutate(
+    fit = map(data, ~ lm(zeroed_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  filter(term == "time")
+
+avg_pH_slopes <- nested_pH_data %>%
+  group_by(genotype, replicate, substrate, treatment, pH, date, cell_type) %>%
+  summarise(mean_estimate = mean(estimate)) %>%
+  mutate(genotype = ordered(case_when(
+    genotype == "WT" ~ genotype,
+    TRUE ~ paste0("<i>", genotype, "</i>")
+  ),
+  levels = c(WT, triple_it, quad_it, Q_it)
+  ))
+```
+
+### Select single condition
+
+```{r}
+
+pH_data_sample <- pH_data %>%
+  filter(genotype == "WT" &
+    cell_type == "XF" &
+    pH == 6 &
+    substrate == "DAF")
+
+pre <- pH_data_sample %>%
+  filter(time < lm_start)
+
+mid <- pH_data_sample %>%
+  filter(time %in% c(unique(lm_start):unique(lm_stop)))
+
+post <- pH_data_sample %>%
+  filter(time > lm_stop)
+```
+
+### Plot absorbance over time
+
+```{r}
+raw_absorbance <- ggplot(
+  pH_data_sample,
+  aes(
+    x = time,
+    y = zeroed_absorbance,
+    colour = treatment
+  )
+) +
+  annotate("rect",
+    ymin = -Inf,
+    ymax = Inf,
+    xmin = unique(pH_data_sample$lm_start),
+    xmax = unique(pH_data_sample$lm_stop),
+    fill = "grey95"
+  ) +
+  geom_line(aes(group = interaction(genotype, replicate, point, date, treatment)),
+    alpha = 0.1,
+    size = 0.1
+  ) +
+  geom_smooth(
+    data = pre,
+    aes(group = treatment),
+    # method = "lm",
+    se = F,
+    size = 0.5
+  ) +
+  geom_smooth(
+    data = mid,
+    aes(group = treatment),
+    # method = "lm",
+    se = F,
+    size = 0.5
+  ) +
+  geom_smooth(
+    data = post,
+    aes(group = treatment),
+    # method = "lm",
+    se = F,
+    size = 0.5
+  ) +
+  scale_colour_manual(values = c("grey50", pal_ostwald_cont[1])) +
+  labs(
+    x = "Time [min]",
+    y = "Corrected & zeroed absorbance"
+  ) +
+  theme_leo() +
+  # theme(legend.position = "bottom") +
+  coord_cartesian(xlim = c(0, 600))
+
+pdf("daf_6_XF_WT_timeline.pdf", width = onecol, height = onecol * 0.5)
+raw_absorbance
+dev.off()
+```
+
+# Height of single to quintuple mutants
+
+## Load data
+
+### 2020--2021
+
+```{r}
+names <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/lac_mutant_names.csv") %>% 
+  rename("genotype" = short_name)
+
+stems_III <- read_csv(paste0(
+  datapath, "PhD/Phenotyping/2021-04_lac_mutants/2021-07_harvesting.csv"
+)) %>%
+  left_join(read_csv(paste0(datapath, "PhD/Phenotyping/2021-04_lac_mutants/plant_order.csv"))) %>%
+  select(-sil.length, -stem.weight) %>%
+  rename("rep" = replicate) %>% 
+  mutate(instance = "2021-07")
+
+# combine stem data
+pheno_2020 <- read_csv(paste0(
+  datapath, "PhD/Phenotyping/2020-01_LAC_phenotyping/2020-04-16_harvesting.csv"
+)) %>%
+  mutate(instance = "2020-04") %>% 
+  rename("stem.weight" = stem.w) %>%
+  bind_rows(read_csv(paste0(
+    datapath, "PhD/Phenotyping/2020-09_lac_mutants/2020-11-05_harvesting.csv"
+  )) %>%
+    mutate(instance = "2020-11") %>% 
+    bind_rows(stems_III) %>%
+    select(-plant)) %>%
+  mutate(genotype = recode(genotype,
+    "Col-0" = "WT"
+  )) %>%
+  left_join(names) %>% 
+  mutate(rep = as.character(rep),
+         genotype = case_when(str_detect(genotype, "Q") ~ long_name,
+                              TRUE ~ genotype)) %>%
+  filter(genotype != "lac5/10/17") %>% 
+  select(genotype, "replicate" = rep, instance, "height" = stretched.height) %>% 
+  drop_na()
+```
+
+### 2016--2017
+
+```{r}
+pheno_2017 <- read_csv("/run/media/leonard/data/grsync/data/PhD/Phenotyping/2017_lac_mutants/harvesting_lac_1.csv") %>%
+  mutate(
+    genotype = str_replace_all(genotype, fixed("x"), fixed("/")),
+    instance = case_when(
+      replicate %in% c("A", "B", "C") ~ "2017_1",
+      replicate %in% c("D", "E", "F") ~ "2017_2",
+      TRUE ~ "2017_3"
+    )
+  ) %>%
+  select(genotype, replicate, instance, height) %>%
+  drop_na()
+```
+
+### Combine data
+
+```{r}
+pheno_full <- bind_rows(pheno_2017, pheno_2020) %>%
+  mutate(genotype = recode(genotype,
+                           "lac17/10/12" = "lac10/12/17",
+                           "lac4/17/10/12" = "lac4/10/12/17",
+                           "lac4/17/10" = "lac4/10/17",
+                           "lac4/17/12" = "lac4/12/17"),
+    type = ordered(as.character(str_count(genotype, "lac|/")), levels = c("0", "1", "2", "3", "4", "5"))
+  ) %>% 
+  filter(height > 20) %>%  # remove plants damaged during growth
+  group_by(instance) %>%
+  mutate(
+    genotype = case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    mean_WT = mean(height[genotype == "WT"]),
+    rel_height = height / mean_WT * 100
+  )
+```
+
+## Plot full mutant panel
+
+```{r}
+
+full_mutant_plot <- ggplot(
+  pheno_full,
+  aes(
+    x = reorder(genotype, rel_height, FUN = median),
+    y = rel_height
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = type),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    scale = "width"
+  ) +
+  annotate("richtext",
+    x = c(2.5, 10.5),
+    y = c(115, 60),
+    label = c("<i>Q</i>", "WT"),
+    size = ggtext_size,
+    family = "Helvetica",
+    label.size = NA,
+    label.r = unit(0, "lines"),
+    # fill = c(pal_ostwald_5[5], pal_dawn[1]),
+    fill = NA,
+    # colour = c("black", "white")
+  ) +
+  annotate("curve",
+    x = c(2.2, 11),
+    xend = c(1, 12),
+    y = c(115, 60),
+    yend = c(85, 80),
+    curvature = 0.3,
+    lineend = "butt",
+    size = 0.2,
+    arrow = arrow(length = unit(0.03, "npc"), type = "closed")
+  ) +
+  labs(y = "Stem height [% of WT]") +
+  scale_fill_manual(
+    values = c(pal_dawn[1], pal_ostwald_5),
+    guide = guide_legend(
+      title = "Number of mutations",
+      title.position = "top",
+      direction = "horizontal",
+      keywidth = unit(2, "mm"),
+      keyheight = unit(2, "mm"),
+      nrow = 1
+    )
+  ) +
+  # scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5
+    ),
+    axis.text.x = element_markdown(
+      angle = 45,
+      hjust = 1,
+      vjust = 1
+    ),
+    legend.position = c(0.86, 0.15),
+    legend.background = element_rect(fill = "grey95", colour = NA)
+  )
+
+pdf("all_mutants.pdf", width = cm_size(13), height = onecol * 0.5)
+full_mutant_plot
+dev.off()
+```
+
+# Cover
+
+### Load data
+
+```{r, message=FALSE}
+collapse_files <-
+  list.files(
+    path = c(paste0(datapath, "PhD/Wiesner/2021-05_Wiesner/Collapse/Measurements/"),
+             "/home/leonard/Dropbox/2021_lac_manuscript/Wiesner/Collapse/Measurements/"),
+    pattern = "*.csv",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+collapse_data <- vroom::vroom(collapse_files) %>%
+  separate(image, into = c("date", "genotype", "replicate", "stained", "size"), sep = "_", extra = "merge") %>%
+  mutate(date = str_replace(date, "^021", "2021")) %>%
+  mutate(
+    cell_type = ordered(cell_type,
+      levels = c(
+        "PX",
+        "MX",
+        "SX"
+      )
+    ),
+    genotype = ordered(case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    levels = c(WT, triple_it, quad_it, Q_it)
+    ),
+    instance = case_when(
+      replicate %in% c(1:5) ~ "1",
+      TRUE ~ "2"
+    )
+  ) %>%
+  distinct() %>% 
+  group_by(genotype, replicate, point) %>%
+  mutate(cell = case_when(
+    point == 0 ~ row_number(),
+    TRUE ~ NA_integer_
+  )) %>%
+  ungroup() %>%
+  fill(cell)
+
+```
+
+#### Calculate perimeters
+
+```{r}
+perimeters <- collapse_data %>%
+  group_by(genotype, replicate, cell_type, cell) %>% 
+  select(point, x, y)
+
+perimeters_sf <- perimeters %>%
+  unite("ID", genotype:cell, remove = FALSE, sep = "_") %>%
+  group_by(ID) %>%
+  mutate(
+    x = x - mean(x, na.rm = TRUE),
+    y = y - mean(y, na.rm = TRUE)
+  ) %>%
+  group_by(ID, point) %>%
+  summarise(xy = list(c(x, y))) %>%
+  group_by(ID) %>%
+  mutate(
+    max_point = max(point)
+  ) %>%
+  bind_rows(filter(., point == 0) %>%
+    group_by(ID) %>%
+    mutate(point = max_point + 1)) %>%
+  arrange(ID, point) %>%
+  summarise(xy = list(c(xy))) %>%
+  mutate(geometry = map(
+    xy,
+    ~ do.call(rbind, .) %>% # make each list a matrix
+      list() %>% # st_polygon() requires a list
+      st_polygon()
+  )) %>%
+  st_as_sf() %>% 
+  group_by(ID) %>%
+  mutate(
+    smooth_geometry = smoothr::smooth(geometry, method = "ksmooth", smoothness = 2),
+    area = st_area(smooth_geometry),
+    convex_hull = st_convex_hull(smooth_geometry),
+    convex_area = st_area(convex_hull),
+    convexity = area / convex_area,
+    circularity = 4 * pi * (area / (lwgeom::st_perimeter(smooth_geometry)^2))
+  ) %>%
+  separate(ID, into = c("genotype", "replicate", "cell_type", "cell"), sep = "_") %>%
+  mutate(
+    genotype = ordered(genotype, levels = c(levels = c(WT, triple_it, quad_it, Q_it))),
+    cell.type = ordered(cell_type, levels = c("PX", "MX"))
+  )
+```
+
+### Draw perimeters
+
+```{r}
+perimeters_sf_sample <- perimeters_sf %>% 
+  filter(cell_type == "MX" & genotype != "WT") %>% 
+  group_by(genotype, replicate) %>% 
+  # slice_sample(n = 10) %>% 
+  ungroup() %>% 
+  arrange(-circularity) %>% 
+  mutate(n = row_number())
+
+ tail(perimeters_sf_sample)
+ 
+perimeter_plot <- ggplot() +
+  geom_sf(
+    data = perimeters_sf_sample,
+    aes(
+      # colour = circularity,
+      geometry = smooth_geometry,),
+    # colour = "black",
+    fill = NA,
+    lwd = 0.3,
+    key_glyph = "point"
+  ) +
+  theme_void() +
+  theme(strip.text = element_blank(),
+        legend.position = "none") +
+  scale_x_continuous(expand = expansion(mult = 0)) +
+  scale_y_continuous(expand = expansion(mult = 0)) +
+  scale_colour_gradientn(colours = pal_ostwald_cont, limits = c(1, 0.4), oob = scales::squish, trans = "reverse", name = "Convexity") +
+  # guides(colour = guide_colourbar(barheight = unit(1, "mm"))) +
+  facet_wrap(~ n)
+
+pdf("cover_perimeters.pdf", width = onecol * 1.5, onecol * 1.5)
+perimeter_plot
+dev.off()
+```
