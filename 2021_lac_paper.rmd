@@ -6915,7 +6915,7 @@ dev.off()
 
 ```{r}
 stat_tab <- collapse_avg %>%
-  drop_na(Solidity) %>% 
+  drop_na(Perimeter) %>% 
   rowwise() %>%
   mutate(genotype = strip_html(genotype)) %>%
   group_by(genotype, cell_type) %>%
@@ -6924,7 +6924,7 @@ stat_tab <- collapse_avg %>%
     genotype = paste0(genotype, " (n = ", n, ")")
   ) %>%
   letter_groups(.,
-    Solidity,
+    Perimeter,
     genotype,
     "tukey",
     cell_type,
@@ -6933,19 +6933,19 @@ stat_tab <- collapse_avg %>%
 
   anova_tab <- stat_tab$anova %>% 
     add_column(
-      "variable" = "convexity",
+      "variable" = "perimeter",
       "cell_type" = stat_tab$cell_type
       ) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "06_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S08A_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
-      "variable" = "convexity",
+      "variable" = "perimeter",
       "cell_type" = stat_tab$cell_type
       ) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "06_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S08A_tukey.csv"))
 ```
 
 ### Draw perimeters

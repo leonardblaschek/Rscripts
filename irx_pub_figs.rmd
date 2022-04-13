@@ -2981,6 +2981,7 @@ pop_irx <- pop_irx %>%
   )
 
 #### calculate difference of the centre of each vessel to the cambium ####
+# implemented according to https://stackoverflow.com/questions/35194048/using-r-how-to-calculate-the-distance-from-one-point-to-a-line
 pop_irx$Distance <-
   apply(
     pop_irx[, c("X", "Y", "ref.x1", "ref.x2", "ref.y1", "ref.y2")],
