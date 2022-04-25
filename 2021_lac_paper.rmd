@@ -2,7 +2,7 @@
 title: "Laccase manuscript"
 author: "Leonard Blaschek"
 date: "01/02/2021"
-output: pdf_document
+output: HTML
 ---
 
 ```{r setup, include=FALSE}
@@ -161,7 +161,7 @@ onehalfcol <- 14 / 2.54
 onecol <- 9 / 2.54
 
 # path for statisticsa output
-stat_path <- "/home/leonard/Dropbox/2021_lac_manuscript/Submission/PlantCell/Supplemental/Statistics/"
+stat_path <- "/home/leonard/Dropbox/2021_lac_manuscript/Submission/PlantCell/supplementary/Statistics/"
 
 #### machine dependent paths ####
 datapath <- ifelse(dir.exists("/data/"), "/data/",
@@ -2359,7 +2359,8 @@ sample_rm <- tribble(
 activity_opt_files <-
   list.files(
     path = c(paste0(datapath, "PhD/Laccase_activity/2021-01_optimal_pH/ROIs/Measurements/"),
-             "/home/leonard/Dropbox/2021_lac_manuscript/Activity/pH_CC/ROIs/Measurements/"),
+             "/home/leonard/Dropbox/2021_lac_manuscript/Activity/pH_CC/ROIs/Measurements/",
+             "/home/leonard/Dropbox/2021_lac_manuscript/Activity/autoclaved/ROIs/Measurements/"),
     pattern = "*.csv$",
     recursive = FALSE,
     full.names = TRUE
@@ -2440,12 +2441,14 @@ avg_pH_slopes <- nested_pH_data %>%
 
 ### Plot PYGL
 
+#### Line plots
+
 ```{r}
 
 ctrl_slopes <- avg_pH_slopes %>%
   filter(treatment == "autoclaved" & substrate == "PYGL") %>%
   ungroup() %>%
-  select(-treatment, replicate) %>%
+  select(-treatment, -replicate) %>%
   group_by(genotype, cell_type, pH) %>%
   summarise(mean_estimate = mean(mean_estimate))
 
@@ -2459,144 +2462,19 @@ pygl_slopes <- nested_pH_data %>%
     )
   )
 
-# activity_grid <- ggplot(
-#   pH_data %>% filter(substrate == "PYGL"),
-#   aes(
-#     x = time,
-#     y = zeroed_absorbance,
-#     colour = interaction(treatment, genotype),
-#     linetype = treatment
-#   )
-# ) +
-#   geom_rect(
-#     data = lm_bounds %>% filter(substrate == "PYGL"),
-#     aes(
-#       xmin = lm_start,
-#       xmax = lm_stop,
-#       linetype = NULL,
-#       x = NULL,
-#       y = NULL,
-#       colour = NULL
-#     ),
-#     ymin = -Inf,
-#     ymax = Inf,
-#     fill = "grey95"
-#   ) +
-#   geom_smooth(
-#     size = 0.2,
-#     se = F
-#   ) +
-#   labs(x = "Time [min]") +
-#   scale_colour_manual(values = c(
-#     lighten(desaturate("#d25952", amount = 0.75), amount = 0.5),
-#     "#d25952",
-#     lighten(desaturate("#275d95", amount = 0.75), amount = 0.5),
-#     "#275d95"
-#   )) +
-#   scale_linetype(guide = "none") +
-#   theme_leo() +
-#   theme(legend.position = "bottom") +
-#   # coord_cartesian(xlim = c(60, 100)) +
-#   facet_grid(pH ~ cell_type)
-# 
-# letter_data <- nested_pH_data %>%
-#   filter(substrate == "PYGL") %>%
-#   unite("ID", treatment, genotype)
-# 
-# letters <- letter_groups(letter_data,
-#   estimate,
-#   ID,
-#   "tukey",
-#   cell_type,
-#   pH,
-#   print_position = "above",
-#   print_adjust = 1
-# ) %>%
-#   separate(ID, into = c("treatment", "genotype"))
-# 
-# slopes <- ggplot(
-#   pygl_slopes,
-#   aes(
-#     x = pH,
-#     y = estimate,
-#     colour = interaction(treatment, genotype)
-#   )
-# ) +
-#   geom_hline(
-#     yintercept = 0,
-#     size = 0.2
-#   ) +
-#   geom_quasirandom(
-#     dodge.width = 0.75,
-#     alpha = 0.5,
-#     shape = 16,
-#     size = 0.75
-#   ) +
-#   geom_violin(
-#     aes(group = interaction(treatment, pH, genotype)),
-#     draw_quantiles = 0.5,
-#     fill = "white",
-#     colour = "black",
-#     alpha = 0.85,
-#     width = 0.2,
-#     position = position_dodge(width = 0.75),
-#     size = 0.2,
-#     scale = "width"
-#   ) +
-#   geom_text(
-#     data = letters,
-#     aes(
-#       label = Letters,
-#       group = interaction(treatment, genotype)
-#     ),
-#     colour = "black",
-#     position = position_dodge2(width = 0.75),
-#     family = "Helvetica",
-#     size = ggtext_size
-#   ) +
-#   scale_colour_manual(values = c(
-#     lighten(desaturate("#d25952", amount = 0.75), amount = 0.5),
-#     "#d25952",
-#     lighten(desaturate("#275d95", amount = 0.75), amount = 0.5),
-#     "#275d95"
-#   )) +
-#   scale_x_discrete() +
-#   # scale_y_log10() +
-#   theme_leo() +
-#   theme(
-#     legend.position = "bottom",
-#     # panel.grid.major.y = element_line(size = 0.2)
-#   ) +
-#   facet_wrap(
-#     ~cell_type,
-#     ncol = 6,
-#     # scales = "free_y"
-#   )
-
 pygl_slopes_cont <- pygl_slopes %>%
   mutate(pH = as.numeric(pH)) %>%
   filter(treatment == "untreated") %>%
   group_by(genotype, replicate, pH, cell_type) %>%
   summarise(mean_estimate = mean(corrected_estimate))
 
-ph_cont <- ggplot(
+ph_cont_pygl <- ggplot(
   pygl_slopes_cont,
   aes(
     x = pH,
     y = mean_estimate * 1000
   )
 ) +
-  # geom_point(aes(colour = genotype),
-  #            size = 1,
-  #            alpha = 0.25,
-  #            shape = 16) +
-  # stat_smooth(geom = "line",
-  #             aes(colour = genotype,
-  #                 group = interaction(replicate, genotype)),
-  #             span = 1.25,
-  #             size = 0.2,
-  #             alpha = 0.25,
-  #             se = F) +
   geom_line(aes(
     colour = genotype,
     group = interaction(replicate, genotype)
@@ -2611,9 +2489,7 @@ ph_cont <- ggplot(
     se = F
   ) +
   labs(y = "PYGL oxidation rate") +
-  # scale_colour_manual(values = c("#d25952", "#275d95")) +
   scale_color_manual(values = pal_dawn[c(1,7)], aesthetics = c("colour", "fill")) +
-  # scale_y_continuous(breaks = c(0, 0.5, 1)) +
   theme_leo() +
   theme(
     legend.position = c(0.06, 0.9),
@@ -2628,14 +2504,192 @@ ph_cont <- ggplot(
   )
 
 pdf("PYGL_pH.pdf", width = twocol, height = onecol * 0.4)
-# activity_grid /
-  # slopes /
-  ph_cont
+ph_cont_pygl
 dev.off()
 ```
 
+#### Violins
+
+```{r}
+pH_violin_data <- nested_pH_data %>% 
+  filter(substrate == "PYGL" & cell_type %in% c("IF", "MX")) %>% 
+  unite("ID", genotype, treatment, sep = " ", remove = FALSE) %>% 
+  mutate(
+  ID = ordered(ID, levels = c("WT untreated", "WT autoclaved", "<i>Q</i> untreated", "<i>Q</i> autoclaved")),
+    estimate = case_when(estimate < 0 ~ 0,
+                              TRUE ~ estimate)
+    )
+
+pH_violin_avg <- pH_violin_data %>% 
+  group_by(genotype, treatment, ID, replicate, pH, cell_type) %>% 
+  summarise(estimate = median(estimate))
+
+letters_tech <- pH_violin_data %>% 
+  unite("ID_pH", ID, pH) %>%
+  letter_groups(
+    .,
+    estimate,
+    ID_pH,
+    "tukey",
+    cell_type,
+    print_position = "above"
+  ) %>% 
+  select(-Letters)
+
+letters <- pH_violin_avg %>%
+  unite("ID_pH", ID, pH) %>%
+  letter_groups(
+    .,
+    estimate,
+    ID_pH,
+    "tukey",
+    cell_type,
+    print_position = "above"
+  ) %>% 
+  select(-estimate) %>% 
+  left_join(letters_tech) %>% 
+  separate(ID_pH, into = c("ID", "pH"), sep = "_") %>% 
+  mutate(ID = ordered(ID, levels = c("WT untreated", "WT autoclaved", "<i>Q</i> untreated", "<i>Q</i> autoclaved")))
+
+legend_labels <- tribble(
+  ~cell_type, ~ID, ~pH,
+  "IF", "WT untreated", "4",
+  "IF", "WT autoclaved", "4",
+  "IF", "<i>Q</i> untreated", "4",
+  "IF", "<i>Q</i> autoclaved", "4"
+) %>% 
+  left_join(letters) %>% 
+  mutate(estimate = estimate + 0.0001, #0.0001 when letters are printed
+         position = estimate + 0.0002) %>% 
+  mutate(ID = ordered(ID, levels = c("WT untreated", "WT autoclaved", "<i>Q</i> untreated", "<i>Q</i> autoclaved")))
+
+pygl_violin <- ggplot(
+  pH_violin_data,
+  aes(
+    x = pH,
+    y = estimate
+  )
+) +
+  geom_quasirandom(
+    aes(colour = ID),
+    dodge.width = 0.6,
+    shape = 16,
+    alpha = 0.25,
+    size = 0.5,
+    width = 0.1
+  ) +
+  geom_violin(
+    aes(fill = ID),
+    position = position_dodge(width = 0.6),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  # geom_point(
+  #   data = pH_violin_avg,
+  #   aes(fill = ID),
+  #   shape = 21,
+  #   position = position_dodge(width = 0.6)
+  # ) +
+  geom_richtext(
+    data = legend_labels,
+    aes(
+      label = ID,
+      group = ID,
+      y = position
+    ),
+    label.size = NA,
+    fill = NA,
+    angle = 90,
+    hjust = 0,
+    position = position_dodge(width = 0.6),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  geom_linerange(
+    data = legend_labels,
+    aes(
+      x = pH,
+      ymin = estimate,
+      ymax = position,
+      group = ID
+    ),
+    position = position_dodge(width = 0.6),
+    size = 0.2
+  ) +
+  geom_text(
+    data = letters,
+    aes(
+      label = Letters,
+      group = ID
+    ),
+    position = position_dodge(width = 0.6),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "PYGL oxidation rate") +
+  scale_color_manual(values = c(pal_dawn[1], "#E3E6E8", pal_dawn[7], "#F3EAD8"), aesthetics = c("colour", "fill")) +
+  scale_y_continuous(limits = c(0, 0.002)) +
+  theme_leo() +
+  theme(
+    # axis.title.x = element_blank(),
+    # axis.text.x = element_markdown(angle = 45, hjust = 1, vjust = 1),
+    # legend.position = "top"
+  ) +
+  facet_wrap(~cell_type, ncol = 2)
+
+pdf("PYGL_pH_violins.pdf", width = twocol, height = onecol * 0.4)
+pygl_violin
+dev.off()
+```
+
+##### Statistics
+
+```{r}
+stat_tab <- pH_violin_avg %>%
+  drop_na(estimate) %>% 
+  mutate(pH = paste("pH", pH)) %>% 
+  unite("ID_pH", ID, pH, sep = " ") %>%
+  rowwise() %>%
+  mutate(ID_pH = strip_html(ID_pH)) %>%
+  group_by(ID_pH, cell_type) %>%
+  mutate(
+    "n" = n(),
+    ID_pH = paste0(ID_pH, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    estimate,
+    ID_pH,
+    "tukey",
+    cell_type,
+    table = TRUE
+  )
+
+  anova_tab <- stat_tab$anova %>% 
+    add_column(
+      "variable" = "PYGL oxidation rate",
+      "cell_type" = stat_tab$cell_type) %>% 
+    distinct()
+  write_csv(anova_tab, paste0(stat_path, "S03E_anova.csv"))
+
+  tukey_tab <- stat_tab$tukey %>%
+    add_column(
+      "variable" = "PYGL oxidation rate",
+      "cell_type" = stat_tab$cell_type) %>% 
+    distinct()
+  write_csv(tukey_tab, paste0(stat_path, "S03E_tukey.csv"))
+```
+
+
 
 ### Plot DAF
+
+#### Line plots
 
 ```{r}
 activity_grid <- ggplot(
@@ -2814,6 +2868,171 @@ ph_cont
 dev.off()
 ```
 
+#### Violins
+
+```{r}
+pH_violin_data <- nested_pH_data %>% 
+  filter(substrate == "DAF" & cell_type %in% c("IF", "MX")) %>% 
+  unite("ID", genotype, treatment, sep = " ", remove = FALSE) %>% 
+  mutate(
+  ID = ordered(ID, levels = c("WT untreated", "WT autoclaved", "<i>Q</i> untreated", "<i>Q</i> autoclaved")),
+    estimate = case_when(estimate < 0 ~ 0,
+                              TRUE ~ estimate)
+    )
+
+pH_violin_avg <- pH_violin_data %>% 
+  group_by(genotype, treatment, ID, replicate, pH, cell_type) %>% 
+  summarise(estimate = mean(estimate))
+
+letters_tech <- pH_violin_data %>% 
+  unite("ID_pH", ID, pH) %>%
+  letter_groups(
+    .,
+    estimate,
+    ID_pH,
+    "tukey",
+    cell_type,
+    print_position = "above"
+  ) %>% 
+  select(-Letters)
+
+letters <- pH_violin_avg %>%
+  unite("ID_pH", ID, pH) %>%
+  letter_groups(
+    .,
+    estimate,
+    ID_pH,
+    "tukey",
+    cell_type,
+    print_position = "above"
+  ) %>% 
+  select(-estimate) %>% 
+  left_join(letters_tech) %>% 
+  separate(ID_pH, into = c("ID", "pH"), sep = "_") %>% 
+  mutate(ID = ordered(ID, levels = c("WT untreated", "WT autoclaved", "<i>Q</i> untreated", "<i>Q</i> autoclaved")))
+
+legend_labels <- tribble(
+  ~cell_type, ~ID, ~pH,
+  "IF", "WT untreated", "4",
+  "IF", "WT autoclaved", "4",
+  "IF", "<i>Q</i> untreated", "4",
+  "IF", "<i>Q</i> autoclaved", "4"
+) %>% 
+  left_join(letters) %>% 
+  mutate(estimate = estimate + 0.0002, # 0.0002 when letters are printed
+         position = estimate + 0.0004) %>% 
+  mutate(ID = ordered(ID, levels = c("WT untreated", "WT autoclaved", "<i>Q</i> untreated", "<i>Q</i> autoclaved")))
+
+DAF_violin <- ggplot(
+  pH_violin_data,
+  aes(
+    x = pH,
+    y = estimate
+  )
+) +
+  geom_quasirandom(
+    aes(colour = ID),
+    dodge.width = 0.6,
+    shape = 16,
+    alpha = 0.25,
+    size = 0.5,
+    width = 0.1
+  ) +
+  geom_violin(
+    aes(fill = ID),
+    position = position_dodge(width = 0.6),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  geom_richtext(
+    data = legend_labels,
+    aes(label = ID,
+        group = ID,
+        y = position),
+    label.size = NA,
+    fill = NA,
+    angle = 90,
+    hjust = 0,
+    position = position_dodge(width = 0.6),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  geom_linerange(
+    data = legend_labels,
+    aes(x = pH,
+        ymin = estimate,
+        ymax = position,
+        group = ID),
+    position = position_dodge(width = 0.6),
+    size = 0.2
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters,
+        group = ID),
+    position = position_dodge(width = 0.6),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "DAF oxidation rate") +
+  scale_color_manual(values = c(pal_dawn[1], "#E3E6E8", pal_dawn[7], "#F3EAD8"), aesthetics = c("colour", "fill")) +
+  scale_y_continuous(limits = c(0, 0.0037)) +
+  theme_leo() +
+  theme(
+    # axis.title.x = element_blank(),
+    # axis.text.x = element_markdown(angle = 45, hjust = 1, vjust = 1),
+    # legend.position = "top"
+  ) +
+  facet_wrap(~cell_type, ncol = 2)
+
+pdf("DAF_pH_violins.pdf", width = twocol, height = onecol * 0.4)
+DAF_violin
+dev.off()
+```
+
+##### Statistics
+
+```{r}
+stat_tab <- pH_violin_avg %>%
+  drop_na(estimate) %>% 
+  mutate(pH = paste("pH", pH)) %>% 
+  unite("ID_pH", ID, pH, sep = " ") %>%
+  rowwise() %>%
+  mutate(ID_pH = strip_html(ID_pH)) %>%
+  group_by(ID_pH, cell_type) %>%
+  mutate(
+    "n" = n(),
+    ID_pH = paste0(ID_pH, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    estimate,
+    ID_pH,
+    "tukey",
+    cell_type,
+    table = TRUE
+  )
+
+  anova_tab <- stat_tab$anova %>% 
+    add_column(
+      "variable" = "DAF oxidation rate",
+      "cell_type" = stat_tab$cell_type) %>% 
+    distinct()
+  write_csv(anova_tab, paste0(stat_path, "S03C_anova.csv"))
+
+  tukey_tab <- stat_tab$tukey %>%
+    add_column(
+      "variable" = "DAF oxidation rate",
+      "cell_type" = stat_tab$cell_type) %>% 
+    distinct()
+  write_csv(tukey_tab, paste0(stat_path, "S03C_tukey.csv"))
+```
+
 ### Method supplemental
 
 #### Select single condition
@@ -2885,10 +3104,13 @@ raw_absorbance <- ggplot(
   scale_colour_manual(values = c("grey70", pal_dawn[1], "grey70", pal_dawn[7])) +
   labs(
     x = "Time [min]",
-    y = "Corrected & zeroed absorbance"
+    y = "Corrected & zeroed<br>DAF absorbance"
   ) +
   theme_leo() +
-  theme(strip.text = element_markdown()) +
+  theme(strip.text = element_markdown(),
+        axis.title.y = element_textbox_simple(
+          orientation = "left-rotated",
+          halign = 0.5)) +
   coord_cartesian(xlim = c(0, 500)) +
   facet_wrap(~ genotype)
 
@@ -2896,6 +3118,15 @@ pdf("daf_6_XF_timeline.pdf", width = twocol, height = onecol * 0.5)
 raw_absorbance
 dev.off()
 ```
+
+#### Arrange figure
+
+```{r}
+pdf("activity_supp.pdf", height = onecol * 1.6, width = twocol)
+raw_absorbance + DAF_violin + ph_cont_pygl + pygl_violin +
+  plot_layout(nrow = 4, heights = c(1, 1, 0.8, 1))
+```
+
 
 ## DAB pH 5
 
@@ -5221,7 +5452,13 @@ violin_data <- rmn_lac_sum %>%
     values_to = "value"
   ) %>%
   mutate(
-    variable = as.character(variable),
+    variable = ordered(
+      variable,
+      levels = c(
+        "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>",
+        "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
+        "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>"
+      )),
     cell_type = ordered(cell_type,
       levels = c(
         "IF",
@@ -5250,7 +5487,7 @@ ref_labels <- tribble(
   "cad4x5", "IF", "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>", "<i>cad4</i>x<i>5</i> IF (overaccumulates <b>G</b><sub>CHO</sub>)"
 )
 
-ref_data <- rmn_ref_sum %>% 
+ref_data <- rmn_ref_sum %>%
   select(
     genotype,
     cell_type,
@@ -5263,11 +5500,20 @@ ref_data <- rmn_ref_sum %>%
     cols = -c(genotype:replicate),
     names_to = "variable",
     values_to = "value"
-  ) %>% 
-  right_join(ref_labels) %>% 
-  ungroup() %>% 
-  mutate(cell_type = c("IF", "MX", "IF"),
-         cell_type = ordered(cell_type,
+  ) %>%
+  right_join(ref_labels) %>%
+  ungroup() %>%
+  mutate(
+    variable = ordered(
+      variable,
+      levels = c(
+        "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>",
+        "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
+        "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>"
+      )
+    ),
+    cell_type = c("IF", "MX", "IF"),
+    cell_type = ordered(cell_type,
       levels = c(
         "IF",
         "LP",
@@ -5275,7 +5521,8 @@ ref_data <- rmn_ref_sum %>%
         "PX",
         "MX"
       )
-    ))
+    )
+  )
 
 violin_data_avg <- violin_data %>%
   group_by(genotype, cell_type, replicate, variable, instance) %>%
@@ -5480,7 +5727,7 @@ ref_labels <- tribble(
   "cad4x5", "IF", "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>", "<i>cad4</i>x<i>5</i> IF (overaccumulates <b>G</b><sub>CHO</sub>)"
 )
 
-ref_data <- rmn_ref_sum %>% 
+ref_data <- rmn_ref_sum %>%
   select(
     genotype,
     cell_type,
@@ -5493,11 +5740,20 @@ ref_data <- rmn_ref_sum %>%
     cols = -c(genotype:replicate),
     names_to = "variable",
     values_to = "value"
-  ) %>% 
-  right_join(ref_labels) %>% 
-  ungroup() %>% 
-  mutate(cell_type = c("IF", "MX", "IF"),
-         cell_type = ordered(cell_type,
+  ) %>%
+  right_join(ref_labels) %>%
+  ungroup() %>%
+  mutate(
+    variable = ordered(
+      variable,
+      levels = c(
+        "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>",
+        "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
+        "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>"
+      )
+    ),
+    cell_type = c("IF", "MX", "IF"),
+    cell_type = ordered(cell_type,
       levels = c(
         "IF",
         "LP",
@@ -5505,7 +5761,8 @@ ref_data <- rmn_ref_sum %>%
         "PX",
         "MX"
       )
-    ))
+    )
+  )
 
 letters <- letter_groups(violin_data,
   value,
@@ -5653,7 +5910,18 @@ violin_data <- rmn_lac_sum %>%
     values_to = "value"
   ) %>%
   mutate(
-    variable = as.character(variable),
+    variable = ordered(
+      variable,
+      levels = c(
+        "Cellulose cryst.",
+        "<b>S</b>",
+        "<b>G</b>",
+        "<b>G</b><sub>CHO</sub>",
+        "<b>G</b><sub>CHOH</sub>",
+        "Benz-<br>aldehydes",
+        "<b>P</b>"
+      )
+    ),
     cell_type = ordered(cell_type,
       levels = c(
         "IF",
@@ -5687,7 +5955,7 @@ ref_labels <- tribble(
   "cad4x5", "IF", "<b>G</b><sub>CHO</sub>", "<i>cad4</i>x<i>5</i> IF (overaccumulates <b>G</b><sub>CHOH</sub>)"
 )
 
-ref_data <- rmn_ref_sum %>% 
+ref_data <- rmn_ref_sum %>%
   select(
     genotype,
     cell_type,
@@ -5701,11 +5969,24 @@ ref_data <- rmn_ref_sum %>%
     cols = -c(genotype:replicate),
     names_to = "variable",
     values_to = "value"
-  ) %>% 
-  right_join(ref_labels) %>% 
-  ungroup() %>% 
-  mutate(cell_type = "IF",
-         cell_type = ordered(cell_type,
+  ) %>%
+  right_join(ref_labels) %>%
+  ungroup() %>%
+  mutate(
+    variable = ordered(
+      variable,
+      levels = c(
+        "Cellulose cryst.",
+        "<b>S</b>",
+        "<b>G</b>",
+        "<b>G</b><sub>CHO</sub>",
+        "<b>G</b><sub>CHOH</sub>",
+        "Benz-<br>aldehydes",
+        "<b>P</b>"
+      )
+    ),
+    cell_type = "IF",
+    cell_type = ordered(cell_type,
       levels = c(
         "IF",
         "LP",
@@ -5713,7 +5994,8 @@ ref_data <- rmn_ref_sum %>%
         "PX",
         "MX"
       )
-    ))
+    )
+  )
 ```
 
 ##### Plot figure
@@ -6130,7 +6412,7 @@ stat_tab <- CC_data_avg %>%
 
 ### [unused] S2/S3 layers
 
-```{r}
+```{r, eval=FALSE}
 layers <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/CC_measurements/SCW/2022-03-02_SCW.csv") %>% 
   mutate(genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
@@ -6805,7 +7087,7 @@ stat_tab <- collapse_avg %>%
 ### Plot perimeter length
 
 ```{r}
-collapse_stats <- perimeters_sf %>%
+perim_length <- perimeters_sf %>%
   group_by(genotype, replicate, cell_type, cell) %>%
   summarise(
     # "Area" = unique(area) * 4^2, # analysed images were scaled down to 0.25, this corrects the scale
@@ -6816,15 +7098,15 @@ collapse_stats <- perimeters_sf %>%
 # %>% 
   # mutate(cell_type = paste0(cell_type, " perimeter [µm]"))
 
-collapse_avg <- collapse_stats %>% 
+perim_length_avg <- perim_length %>% 
   group_by(genotype, cell_type, replicate) %>% 
   summarise("Perimeter" = mean(Perimeter))
 
-collapse_n <- collapse_stats %>%
+perim_n <- perim_length %>%
   group_by(genotype) %>%
   summarise(replicates = paste0(unique(replicate), collapse = ","))
 
-letters_tech <- letter_groups(collapse_stats,
+letters_tech <- letter_groups(perim_length,
   Perimeter,
   genotype,
   "tukey",
@@ -6833,7 +7115,7 @@ letters_tech <- letter_groups(collapse_stats,
 ) %>% 
   select(-Letters)
 
-letters <- letter_groups(collapse_avg,
+letters <- letter_groups(perim_length_avg,
   Perimeter,
   genotype,
   "tukey",
@@ -6844,7 +7126,7 @@ letters <- letter_groups(collapse_avg,
   left_join(letters_tech)
 
 perimeter_plot <- ggplot(
-  collapse_stats,
+  perim_length,
   aes(
     x = genotype,
     y = Perimeter
@@ -6914,7 +7196,7 @@ dev.off()
 #### Statistics
 
 ```{r}
-stat_tab <- collapse_avg %>%
+stat_tab <- perim_length_avg %>%
   drop_na(Perimeter) %>% 
   rowwise() %>%
   mutate(genotype = strip_html(genotype)) %>%
@@ -7025,93 +7307,6 @@ perimeter_plot <- ggplot() +
 
 pdf("lac_perimeters_SX.pdf", width = onecol * 0.9, height = onecol * 0.25)
 perimeter_plot
-dev.off()
-```
-
-### Presentation figure
-
-```{r}
-collapse_pres_data <- collapse_stats %>%
-  filter(variable == "Solidity" & cell_type == "MX")
-
-letters <- letter_groups(collapse_pres_data,
-  value,
-  genotype,
-  "kruskal",
-  print_position = "below"
-) %>%
-  mutate(genotype = ordered(genotype, levels = c(
-    "WT",
-    "<i>Q-4</i>",
-    "<i>Q-5</i>",
-    "<i>Q-10</i>",
-    "<i>Q-12</i>",
-    "<i>Q-17</i>",
-    "<i>Q</i>"
-  )))
-
-rect_data <- collapse_pres_data %>%
-  group_by(genotype) %>%
-  summarise(genotype = unique(genotype))
-
-MX_collapse <- ggplot(
-  collapse_pres_data,
-  aes(
-    x = 0.5,
-    y = value
-  )
-) +
-  geom_rect(
-    data = rect_data,
-    aes(fill = genotype, y = 1),
-    xmin = -Inf,
-    xmax = Inf,
-    ymin = -Inf,
-    ymax = Inf,
-    alpha = 0.5
-  ) +
-  geom_quasirandom(
-    shape = 16,
-    size = 0.5,
-    alpha = 0.5
-  ) +
-  # geom_violin(
-  #   draw_quantiles = 0.5,
-  #   fill = "white",
-  #   colour = "black",
-  #   alpha = 0.85,
-  #   width = 0.2,
-  #   size = 0.2,
-  #   scale = "width") +
-  stat_summary(
-    fill = "white",
-    geom = "point",
-    fun = "median",
-    size = 1,
-    shape = 21,
-    stroke = 0.2
-  ) +
-  geom_text(
-    data = letters,
-    aes(label = Letters),
-    size = ggtext_size,
-    family = "Helvetica"
-  ) +
-  labs(y = "TE convexity") +
-  scale_fill_viridis_d() +
-  ylim(0.4, 1) +
-  theme_leo() +
-  theme(
-    axis.title.x = element_blank(),
-    axis.text.x = element_blank(),
-    axis.ticks.x = element_blank(),
-    strip.text = element_markdown(hjust = 0.5),
-    panel.spacing = unit(0.75, "mm")
-  ) +
-  facet_wrap(~genotype, nrow = 1)
-
-pdf("collapse_pres.pdf", width = onecol, height = onecol * 0.15)
-MX_collapse
 dev.off()
 ```
 
@@ -7249,6 +7444,41 @@ absolute_thick
 dev.off()
 ```
 
+##### Statistics
+
+```{r}
+stat_tab <- swelling_data_avg %>%
+  unite("ID", genotype, state) %>%
+  drop_na(thickness) %>% 
+  rowwise() %>%
+  mutate(ID = strip_html(ID)) %>%
+  group_by(ID) %>%
+  mutate(
+    "n" = n(),
+    ID = paste0(ID, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    thickness,
+    ID,
+    "tukey",
+    table = TRUE
+  )
+
+  anova_tab <- stat_tab$anova %>% 
+    add_column(
+      "cell_type" = "IF"
+      ) %>% 
+    distinct()
+  write_csv(anova_tab, paste0(stat_path, "07B_anova.csv"))
+
+  tukey_tab <- stat_tab$tukey %>%
+    add_column(
+      "cell_type" = "IF"
+      ) %>% 
+    distinct()
+  write_csv(tukey_tab, paste0(stat_path, "07B_tukey.csv"))
+```
+
 #### Supplementary figure
 
 ```{r}
@@ -7346,9 +7576,44 @@ absolute_thick
 dev.off()
 ```
 
-### Relative thickness
+##### Statistics
 
 ```{r}
+stat_tab <- swelling_data_avg %>%
+  unite("ID", genotype, state) %>%
+  drop_na(thickness) %>% 
+  rowwise() %>%
+  mutate(ID = strip_html(ID)) %>%
+  group_by(ID) %>%
+  mutate(
+    "n" = n(),
+    ID = paste0(ID, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    thickness,
+    ID,
+    "tukey",
+    table = TRUE
+  )
+
+  anova_tab <- stat_tab$anova %>% 
+    add_column(
+      "cell_type" = "MX"
+      ) %>% 
+    distinct()
+  write_csv(anova_tab, paste0(stat_path, "S08B_anova.csv"))
+
+  tukey_tab <- stat_tab$tukey %>%
+    add_column(
+      "cell_type" = "MX"
+      ) %>% 
+    distinct()
+  write_csv(tukey_tab, paste0(stat_path, "S08B_tukey.csv"))
+```
+
+### [unused] Relative thickness
+
+```{r, eval=FALSE}
 
 rel_swelling_data <- swelling_data %>% 
   group_by(genotype, replicate, cell_type, cell) %>% 
@@ -7397,9 +7662,9 @@ ggplot(rel_swelling_data,
   facet_wrap(cell_type ~ genotype)
 ```
 
-## Correlations with plant height
+## [unused] Correlations with plant height
 
-```{r}
+```{r, eval=FALSE}
 
 rel_swelling_data <- swelling_data %>% 
   group_by(genotype, replicate, cell_type, cell) %>% 
@@ -7681,7 +7946,11 @@ writexl::write_xlsx(list(
     select(genotype, replicate, cell_type, cell, convexity) %>%
     rowwise() %>%
     mutate(genotype = strip_html(genotype)),
-  "IF swelling" = swelling_data %>%
+  "TE perimeters" = perim_length %>%
+    select(genotype, replicate, cell_type, cell, Perimeter) %>%
+    rowwise() %>%
+    mutate(genotype = strip_html(genotype)),
+  "CW swelling" = swelling_data %>%
     select(genotype, replicate, instance, cell_type, cell, state, "thickness [µm]" = thickness) %>%
     rowwise() %>%
     mutate(genotype = strip_html(genotype))
@@ -7693,6 +7962,78 @@ use_zip64 = FALSE
 )
 ```
 
+## Statistics table
+
+```{r}
+stat_tables <- list.files(
+  path = "/home/leonard/Dropbox/2021_lac_manuscript/Submission/PlantCell/supplementary/Statistics/",
+  full.names = TRUE
+)
+
+read_stats <- function(flnm) {
+  read_csv(flnm) %>% 
+    mutate(filename = basename(flnm)) %>% 
+    separate(filename, into = c("Figure panel"), sep = "_", extra = "drop") %>% 
+    rename("P-value (adjusted if applicable)" = contains("value"))
+}
+
+stat_table <- map_dfr(stat_tables, read_stats) %>%
+  select(
+    "Figure panel",
+    "Statistical test" = "method",
+    "Degrees of freedom (adjusted if applicable)" = "df",
+    "Test statistic" = "statistic",
+    "Variable" = "variable",
+    "Compared groups with numbers of replicates" = "contrast",
+    # "Other grouping (if applicable)" = "group",
+    "P-value (adjusted if applicable)"
+  ) %>%
+  # mutate(Variable = str_replace(Variable, fixed("Benz_rel"), "Benzaldehydes"),
+  #        Variable = str_replace(Variable, fixed("GCHO_rel"), "G-CHO"),
+  #        Variable = str_replace(Variable, fixed("GOH_rel"), "G-CHOH"),
+  #        Variable = str_replace(Variable, fixed("Benz_rel"), "Benzaldehydes"),
+  #        Variable = str_replace(Variable, fixed("S.G"), "S/G"),
+  #        Variable = str_replace(Variable, fixed("n_v"), "Adjacency to TEs [%]"),
+  #        Variable = str_replace(Variable, fixed("max.stress"), "Strength"),
+  #        Variable = str_replace(Variable, fixed("modulus"), "Stiffness"),
+  #        Variable = str_replace(Variable, fixed("bold(S)~'/'~bold(G)"), "S/G"),
+  #        Variable = str_replace(Variable, fixed("bold(S)"), "S"),
+  #        Variable = str_replace(Variable, fixed("bold(G)[CHOH]"), "G-CHOH"),
+  #        Variable = str_replace(Variable, fixed("Terminal~bold(G)[CHO]"), "Terminal G-CHO"),
+  #        Variable = str_replace(Variable, fixed("Term.~bold(G)[CHO]"), "Terminal G-CHO"),
+  #        Variable = str_replace(Variable, fixed("Total~bold(G)[CHO]"), "Total G-CHO"),
+  #        Variable = str_replace(Variable, fixed("bold(G)"), "G"),
+  #        Variable = str_replace(Variable, fixed("bold(P)"), "P"),
+  #        Variable = str_replace(Variable, fixed("lig.cellu"), "Lignin/cellulose"),
+  #        Variable = str_replace(Variable, fixed("break_point"), "Flexibility"),
+  #        Variable = str_replace(Variable, fixed("GCHO_term.GCHOH"), "G-CHO/G-CHOH"),
+  #        Variable = str_replace(Variable, fixed("GCHO.GOH"), "G-CHO/G-CHOH"),
+  #        Variable = str_replace(Variable, fixed("G[CHO]~'/'~G-CHOH"), "G-CHO/G-CHOH")) %>%
+  arrange(
+    `Figure panel`,
+    Variable,
+    `Degrees of freedom (adjusted if applicable)`,
+    `P-value (adjusted if applicable)`
+  )
+
+write_csv(stat_table,
+  "Blaschek2022_supplemental_stats.csv",
+  na = ""
+)
+
+list_of_tables <- stat_table %>% 
+  group_split(`Figure panel`)
+
+list_of_tables %>% 
+  map(~pull(.,`Figure panel`)) %>% # Pull out Species variable
+  map(~as.character(.)) %>% # Convert factor to character
+  map(~unique(.)) -> names(list_of_tables) # Set this as names for list members
+
+list_of_tables %>%
+  writexl::write_xlsx(path = "Blaschek2022_supplemental_stats.xlsx")
 
 
-
+ggplot(stat_table,
+       aes(x = `P-value (adjusted if applicable)`)) +
+  geom_histogram(binwidth = 0.005)
+```
