@@ -218,7 +218,7 @@ pheno_2020 <- read_csv(paste0(
 #### 2016--2017
 
 ```{r}
-pheno_2017 <- read_csv("/run/media/leonard/data/grsync/data/PhD/Phenotyping/2017_lac_mutants/harvesting_lac_1.csv") %>%
+pheno_2017 <- read_csv(paste0(datapath, "PhD/Phenotyping/2017_lac_mutants/harvesting_lac_1.csv")) %>%
   mutate(
     genotype = str_replace_all(genotype, fixed("x"), fixed("/")),
     instance = case_when(
@@ -246,6 +246,7 @@ pheno_full <- bind_rows(pheno_2017, pheno_2020) %>%
   filter(height > 20) %>%  # remove plants damaged during growth
   group_by(instance) %>%
   mutate(
+    genotype = str_replace_all(genotype, "/", ";"),
     genotype = case_when(
       genotype == "WT" ~ genotype,
       TRUE ~ paste0("<i>", genotype, "</i>")
@@ -1932,7 +1933,6 @@ full_mutant_plot + roots + bolt_geno + silique_plot +
   ) &
   theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
-
 ```
 
 # Section activity
@@ -5484,7 +5484,7 @@ ref_labels <- tribble(
   ~genotype, ~cell_type, ~variable, ~label,
   "fah1", "PMX", "<sup>**S**</sup>&frasl;<sub>**G**</sub>", "<i>fah1</i> MX (traces of <b>S</b>)",
   "ccr1_3", "IF", "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>", "<i>ccr1-3</i> IF (traces of lignin)",
-  "cad4x5", "IF", "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>", "<i>cad4</i>x<i>5</i> IF (overaccumulates <b>G</b><sub>CHO</sub>)"
+  "cad4x5", "IF", "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>", "<i>cad4;5</i> IF (overaccumulates <b>G</b><sub>CHO</sub>)"
 )
 
 ref_data <- rmn_ref_sum %>%
@@ -5724,7 +5724,7 @@ ref_labels <- tribble(
   ~genotype, ~cell_type, ~variable, ~label,
   "fah1", "PMX", "<sup>**S**</sup>&frasl;<sub>**G**</sub>", "<i>fah1</i> MX (traces of <b>S</b>)",
   "ccr1_3", "IF", "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>", "<i>ccr1-3</i> IF (traces of lignin)",
-  "cad4x5", "IF", "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>", "<i>cad4</i>x<i>5</i> IF (overaccumulates <b>G</b><sub>CHO</sub>)"
+  "cad4x5", "IF", "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>", "<i>cad4;5</i> IF (overaccumulates <b>G</b><sub>CHO</sub>)"
 )
 
 ref_data <- rmn_ref_sum %>%
@@ -5951,8 +5951,8 @@ ref_labels <- tribble(
   ~genotype, ~cell_type, ~variable, ~label,
   "fah1", "PMX", "<b>S</b>", "<i>fah1</i> MX (traces of <b>S</b>)",
   "fah1", "PMX", "<b>G</b>", "<i>fah1</i> MX (traces of <b>S</b>)",
-  "cad4x5", "IF", "<b>G</b><sub>CHOH</sub>", "<i>cad4</i>x<i>5</i> IF (depleted of <b>G</b><sub>CHOH</sub>)",
-  "cad4x5", "IF", "<b>G</b><sub>CHO</sub>", "<i>cad4</i>x<i>5</i> IF (overaccumulates <b>G</b><sub>CHOH</sub>)"
+  "cad4x5", "IF", "<b>G</b><sub>CHOH</sub>", "<i>cad4;5</i> IF (depleted of <b>G</b><sub>CHOH</sub>)",
+  "cad4x5", "IF", "<b>G</b><sub>CHO</sub>", "<i>cad4;5</i> IF (overaccumulates <b>G</b><sub>CHOH</sub>)"
 )
 
 ref_data <- rmn_ref_sum %>%
