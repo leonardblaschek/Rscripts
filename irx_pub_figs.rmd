@@ -4573,7 +4573,7 @@ wt_V_spec <- ggplot(rmn_WT_V,
   geom_vline(xintercept = c(1303, 785, 1297, 450), colour = "red") + # benzald.
   geom_vline(xintercept = 1276, colour = "blue") + # G
   geom_line(size = 0.2) +
-  scale_x_reverse() +
+  scale_x_reverse(expand = expansion(mult = 0)) +
   scale_colour_manual(values = pal_ostwald_disc[c(3, 1)]) +
   scale_y_continuous(limits = c(-0.0005, 0.008)) +
   labs(y = "Scaled intensity",
@@ -4582,7 +4582,7 @@ wt_V_spec <- ggplot(rmn_WT_V,
   theme(axis.title.x = element_textbox_simple(halign = 0.5),
         legend.position = c(0.9, 0.9))
 
-pdf("V_spec.pdf", width = twocol, height = onecol * 0.3) 
+pdf("V_spec.pdf", width = onecol * 1.3, height = onecol * 0.7) 
 wt_V_spec
 dev.off()
 ```
