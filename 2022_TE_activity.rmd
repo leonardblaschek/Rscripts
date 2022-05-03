@@ -1962,6 +1962,7 @@ slope_grid <- ggplot(
   theme_leo() +
   theme(
     strip.text = element_blank(),
+    legend.position = "top",
     axis.title.y = element_textbox_simple(
       orientation = "left-rotated",
       halign = 0.5,

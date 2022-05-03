@@ -5495,6 +5495,15 @@ rmn_irx_lig <- ggplot(
   )
 ) +
   geom_density_ridges(colour = "black",
+                      scale = 1,
+                      size = 0.2,
+                      alpha = 0.8,
+                      quantile_lines = TRUE,
+                      quantiles = 2) +
+  geom_density_ridges(data = rmn_irx_long %>% filter(genotype == "Col-0"),
+                      colour = "red",
+                      fill = "grey95",
+                      scale = 0.3,
                       size = 0.2,
                       alpha = 0.8,
                       quantile_lines = TRUE,
@@ -5518,7 +5527,7 @@ rmn_irx_lig <- ggplot(
     switch = "x"
   )
 
-pdf("IRX_FigureS1b.pdf", width = twocol, height = onecol * 1.5)
+pdf("IRX_FigureS1b.pdf", width = twocol, height = twocol)
 adj_TE + rmn_irx_lig +
   plot_layout(nrow = 2, heights = c(1, 4)) &
   plot_annotation(tag_levels = 'A') & 
@@ -5758,6 +5767,15 @@ poplar_variation <- ggplot(
   )
 ) +
   geom_density_ridges(colour = "black",
+                      scale = 1,
+                      size = 0.2,
+                      alpha = 0.8,
+                      quantile_lines = TRUE,
+                      quantiles = 2) +
+  geom_density_ridges(data = rmn_irx_long %>% filter(genotype == "WT"),
+                      colour = "red",
+                      fill = "grey95",
+                      scale = 0.3,
                       size = 0.2,
                       alpha = 0.8,
                       quantile_lines = TRUE,
@@ -6082,9 +6100,9 @@ dist_lig1 <- ggplot(
              labeller = label_parsed,
              nrow = 1)
 
-pdf("individual_intercept.pdf", width = twocol, height = onecol * 1.8)
+pdf("individual_intercept.pdf", width = twocol, height = twocol)
 dist_lig1 + adj_TE_pop + poplar_variation +
-  plot_layout(nrow = 3, heights = c(0.5, 0.3, 1)) &
+  plot_layout(nrow = 3, heights = c(0.35, 0.2, 1)) &
   plot_annotation(tag_levels = 'A') & 
   theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
