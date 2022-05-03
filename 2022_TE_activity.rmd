@@ -2367,7 +2367,6 @@ pdf("TE_activity_fig.pdf", width = twocol, height = onecol * 1.15)
 slope_grid + max_oxidation +
   plot_layout(nrow = 2, heights = c(0.8, 0.2))
 dev.off()
-
 ```
 
 
