@@ -1,0 +1,176 @@
+---
+title: "Map of Europe"
+author: "Leonard Blaschek"
+date: '2022-05-07'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(kableExtra)
+library(ggthemes)
+library(showtext)
+library(scales)
+library(lubridate)
+library(tidyverse)
+library(ggrepel)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+#### import IBMPlexSans ####
+font_add(
+  "IBMPlexSans",
+  regular = "/OFL_fonts/IBMPlexSans-Light.otf",
+  italic = "/OFL_fonts/IBMPlexSans-LightItalic.otf",
+  bold = "/OFL_fonts/IBMPlexSans-SemiBold.otf",
+  bolditalic = "/OFL_fonts/IBMPlexSans-SemiBoldItalic.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 11,
+                      base_family = "IBMPlexSans") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      # axis.ticks = element_line(
+      #   size = 0.25,
+      #   lineend = "square",
+      #   color = "black"
+      # ),
+      axis.ticks = element_blank(),
+      axis.text.x = element_text(
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      # panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "bottom",
+      legend.text = element_text(size = rel(0.8)),
+      legend.key.height = unit(4, "mm"),
+      complete = TRUE
+    )
+}
+
+ggtext_size <- 8 / (14 / 5)
+```
+
+## Load data
+
+```{r}
+world <- ne_countries(scale = "medium", returnclass = "sf", continent =  "europe")
+
+POIs <- tribble(
+  ~lat, ~lon, ~name, ~relevance,
+  54.083333, 13.383333, "Greifswald", "black",
+  59.329444, 18.068611, "Stockholm", "black",
+  59.858056, 17.644722, "Uppsala", "black",
+  52.52, 13.405, "Berlin", "grey50",
+  52.770490, 11.877250, "Rohrbeck", "grey50" 
+)
+```
+
+## Plot map
+
+```{r}
+map <- ggplot(data = world) +
+  geom_sf(
+    colour = "white",
+    fill = "darkseagreen",
+    size = 0.4
+  ) +
+  coord_sf(xlim = c(-11, 31), ylim = c(44, 71), expand = FALSE) +
+  geom_point(
+    data = POIs,
+    aes(
+      x = lon,
+      y = lat,
+      colour = relevance
+    )
+  ) +
+  annotate("curve", # Rohrbeck -> Berlin
+          colour = "#e8c245",
+          lineend = "butt",
+          curvature = 0.4,
+          x = 11.877250,
+          y = 52.770490,
+          xend = 13,
+          yend = 52.52,
+          arrow = arrow(
+            type = "closed",
+            length = unit(1, "mm")
+          )) +
+  annotate("curve", # Berlin -> Greifswald
+          colour = "#e8c245",
+          lineend = "butt",
+          curvature = 0.3,
+          x = 13.405,
+          y = 52.52,
+          xend = 13.5,
+          yend = 53.8,
+          arrow = arrow(
+            type = "closed",
+            length = unit(1, "mm")
+          )) +
+  annotate("curve", # Greifswald -> Uppsala
+          colour = "#e8c245",
+          lineend = "butt",
+          curvature = -0.2,
+          x = 13.383333,
+          y = 54.083333,
+          xend = 17.3,
+          yend = 59.6, 
+          arrow = arrow(
+            type = "closed",
+            length = unit(1, "mm")
+          )) +
+  annotate("curve", # Uppsala -> Stockholm
+          colour = "#e8c245",
+          lineend = "butt",
+          curvature = -0.2,
+          x = 17.644722,
+          y = 59.858056, 
+          xend = 18.068611,
+          yend = 59.4, 
+          arrow = arrow(
+            type = "closed",
+            length = unit(1, "mm")
+          )) +
+  geom_label_repel(
+    data = POIs,
+    aes(
+      x = lon,
+      y = lat,
+      label = name,
+      colour = relevance
+    ),
+    family = "IBMPlexSans",
+    size = ggtext_size,
+    label.size = NA,
+    label.r = (unit(0, "mm")),
+    fill = rgb(1, 1, 1, 0.5)) +
+  scale_colour_manual(values = c("black", "grey50")) +
+  theme_leo() +
+  theme(panel.background = element_rect(fill = "lightblue", colour = NA),
+        legend.position = "none")
+
+pdf("europe.pdf", height = 5)
+map
+dev.off()
+```
+
+
