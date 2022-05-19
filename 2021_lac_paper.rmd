@@ -7916,7 +7916,7 @@ writexl::write_xlsx(list(
     mutate(hue = case_when(hue > 360 ~ hue - 360, TRUE ~ hue)) %>%
     rowwise() %>%
     mutate(genotype = strip_html(genotype)),
-  # "Raman spectra" = rmn_lac_scaled %>% select(-c(ID, peak_pos, peak_pos_ref, AUC)) %>% rename("cell" = TE, "baseline corrected intensity (BCI)" = corrected.intensity, "BCI scaled to AUC" = scaled, "BCI scaled to total lignin" = scaled_lig, "BCI scaled to total cellulose" = scaled_cellu),
+  "Raman spectra" = rmn_lac_scaled %>% select(-c(ID, peak_pos, peak_pos_ref, AUC)) %>% rename("cell" = TE, "baseline corrected intensity (BCI)" = corrected.intensity, "BCI scaled to AUC" = scaled, "BCI scaled to total lignin" = scaled_lig, "BCI scaled to total cellulose" = scaled_cellu),
   "Raman bands" = rmn_lac_sum %>%
     select(genotype,
       replicate,

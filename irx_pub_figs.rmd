@@ -7540,128 +7540,128 @@ use_zip64 = FALSE
 # Export Raman spectra
 
 ```{r}
-# # Arabidopsis Raman ####
-# spectra_export.switch <- left_join(read_tsv(paste0(datapath, "PhD/IRX/PMX_which_SMX.tsv"),
-#   col_types = "cccc"
-# ), rmn_data_corrected) %>%
-#   mutate(
-#     technical = str_c(technical, "switched", sep = "_"),
-#     cell.type = "SMX"
-#   )
-# 
-# spectra_export <- rmn_data_corrected %>%
-#   anti_join(read_tsv(paste0(datapath, "PhD/IRX/PMX_which_SMX.tsv"),
-#     col_types = "cccc"
-#   )) %>%
-#   bind_rows(spectra_export.switch)
-# 
-# At_spectra_filled <- spectra_export %>%
-#   mutate(wavenumber = round(wavenumber, digits = 0)) %>%
-#   complete(wavenumber = seq(300, 1800)) %>%
-#   arrange(genotype, cell.type, replicate, technical, wavenumber) %>%
-#   group_by(genotype, cell.type, replicate, technical) %>%
-#   mutate(raw_full = zoo::na.approx(corrected.intensity, na.rm = F),
-#          scaled_full = zoo::na.approx(scaled, na.rm = F),
-#          scaled_lig_full = zoo::na.approx(scaled_lig, na.rm = F))
-# 
-# # collect raw (unscaled) spectra
-# At_export_raw <- At_spectra_filled %>%
-#   select(genotype, cell.type, replicate, technical, wavenumber, raw_full) %>%
-#   filter(wavenumber %in% c(300:1800)) %>% 
-#   pivot_wider(
-#     id_cols = c(genotype, cell.type, replicate, technical),
-#     names_from = wavenumber,
-#     values_from = raw_full
-#   ) %>%
-#   select(genotype, cell.type, replicate, technical, order(as.numeric(colnames(.))))
-# 
-# # collect spectra normalised to AUC
-# At_export_scaled <- At_spectra_filled %>%
-#   select(genotype, cell.type, replicate, technical, wavenumber, scaled_full) %>%
-#   filter(wavenumber %in% c(300:1800)) %>% 
-#   pivot_wider(
-#     id_cols = c(genotype, cell.type, replicate, technical),
-#     names_from = wavenumber,
-#     values_from = scaled_full
-#   ) %>%
-#   select(genotype, cell.type, replicate, technical, order(as.numeric(colnames(.))))
-# 
-# # collect spectra normalised to total lignin
-# At_export_scaled_lig <- At_spectra_filled %>%
-#   select(genotype, cell.type, replicate, technical, wavenumber, scaled_lig_full) %>%
-#   filter(wavenumber %in% c(300:1800)) %>% 
-#   pivot_wider(
-#     id_cols = c(genotype, cell.type, replicate, technical),
-#     names_from = wavenumber,
-#     values_from = scaled_lig_full
-#   ) %>%
-#   select(genotype, cell.type, replicate, technical, order(as.numeric(colnames(.))))
-# 
-# writexl::write_xlsx(list(
-#   "Raw spectra" = At_export_raw,
-#   "AUC scaled spectra" = At_export_scaled,
-#   "Lignin scaled spectra" = At_export_scaled_lig
-# ),
-# path = "At_Raman_spectra.xlsx",
-# col_names = TRUE,
-# format_headers = TRUE,
-# use_zip64 = FALSE
-# )
-# 
-# # Poplar Raman ####
-# Pt_spectra_filled <- rmn_pop_scaled %>%
-#   left_join(celltypes) %>% 
-#   mutate(wavenumber = round(wavenumber, digits = 0)) %>%
-#   group_by(genotype, cell_type, replicate, technical, TE, repeat_of) %>% 
-#   complete(wavenumber = seq(300, 1800)) %>%
-#   arrange(genotype, cell_type, replicate, technical, TE, wavenumber) %>%
-#   mutate(raw_full = zoo::na.approx(corrected.intensity, na.rm = F),
-#          scaled_full = zoo::na.approx(scaled, na.rm = F),
-#          scaled_lig_full = zoo::na.approx(scaled_lig, na.rm = F))
-# 
-# # collect raw (unscaled) spectra
-# Pt_export_raw <- Pt_spectra_filled %>%
-#   select(genotype, cell_type, replicate, technical, TE, repeat_of, wavenumber, raw_full) %>%
-#   filter(wavenumber %in% c(300:1800)) %>% 
-#   pivot_wider(
-#     id_cols = c(genotype, cell_type, replicate, technical, TE, repeat_of),
-#     names_from = wavenumber,
-#     values_from = raw_full
-#   ) %>%
-#   select(genotype, cell_type, replicate, technical, TE, repeat_of, order(as.numeric(colnames(.))))
-# 
-# # collect spectra normalised to AUC
-# Pt_export_scaled <- Pt_spectra_filled %>%
-#   select(genotype, cell_type, replicate, technical, TE, repeat_of, wavenumber, scaled_full) %>%
-#   filter(wavenumber %in% c(300:1800)) %>% 
-#   pivot_wider(
-#     id_cols = c(genotype, cell_type, replicate, technical, TE, repeat_of),
-#     names_from = wavenumber,
-#     values_from = scaled_full
-#   ) %>%
-#   select(genotype, cell_type, replicate, technical, TE, repeat_of, order(as.numeric(colnames(.))))
-# 
-# # collect spectra normalised to total lignin
-# Pt_export_scaled_lig <- Pt_spectra_filled %>%
-#   select(genotype, cell_type, replicate, technical, TE, repeat_of, wavenumber, scaled_lig_full) %>%
-#   filter(wavenumber %in% c(300:1800)) %>% 
-#   pivot_wider(
-#     id_cols = c(genotype, cell_type, replicate, technical, TE, repeat_of),
-#     names_from = wavenumber,
-#     values_from = scaled_lig_full
-#   ) %>%
-#   select(genotype, cell_type, replicate, technical, TE, repeat_of, order(as.numeric(colnames(.))))
-# 
-# writexl::write_xlsx(list(
-#   "Raw spectra" = Pt_export_raw,
-#   "AUC scaled spectra" = Pt_export_scaled,
-#   "Lignin scaled spectra" = Pt_export_scaled_lig
-# ),
-# path = "Pt_Raman_spectra.xlsx",
-# col_names = TRUE,
-# format_headers = TRUE,
-# use_zip64 = FALSE
-# )
+# Arabidopsis Raman ####
+spectra_export.switch <- left_join(read_tsv(paste0(datapath, "PhD/IRX/PMX_which_SMX.tsv"),
+  col_types = "cccc"
+), rmn_data_corrected) %>%
+  mutate(
+    technical = str_c(technical, "switched", sep = "_"),
+    cell.type = "SMX"
+  )
+
+spectra_export <- rmn_data_corrected %>%
+  anti_join(read_tsv(paste0(datapath, "PhD/IRX/PMX_which_SMX.tsv"),
+    col_types = "cccc"
+  )) %>%
+  bind_rows(spectra_export.switch)
+
+At_spectra_filled <- spectra_export %>%
+  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
+  complete(wavenumber = seq(300, 1800)) %>%
+  arrange(genotype, cell.type, replicate, technical, wavenumber) %>%
+  group_by(genotype, cell.type, replicate, technical) %>%
+  mutate(raw_full = zoo::na.approx(corrected.intensity, na.rm = F),
+         scaled_full = zoo::na.approx(scaled, na.rm = F),
+         scaled_lig_full = zoo::na.approx(scaled_lig, na.rm = F))
+
+# collect raw (unscaled) spectra
+At_export_raw <- At_spectra_filled %>%
+  select(genotype, cell.type, replicate, technical, wavenumber, raw_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>%
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical),
+    names_from = wavenumber,
+    values_from = raw_full
+  ) %>%
+  select(genotype, cell.type, replicate, technical, order(as.numeric(colnames(.))))
+
+# collect spectra normalised to AUC
+At_export_scaled <- At_spectra_filled %>%
+  select(genotype, cell.type, replicate, technical, wavenumber, scaled_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>%
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical),
+    names_from = wavenumber,
+    values_from = scaled_full
+  ) %>%
+  select(genotype, cell.type, replicate, technical, order(as.numeric(colnames(.))))
+
+# collect spectra normalised to total lignin
+At_export_scaled_lig <- At_spectra_filled %>%
+  select(genotype, cell.type, replicate, technical, wavenumber, scaled_lig_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>%
+  pivot_wider(
+    id_cols = c(genotype, cell.type, replicate, technical),
+    names_from = wavenumber,
+    values_from = scaled_lig_full
+  ) %>%
+  select(genotype, cell.type, replicate, technical, order(as.numeric(colnames(.))))
+
+writexl::write_xlsx(list(
+  "Raw spectra" = At_export_raw,
+  "AUC scaled spectra" = At_export_scaled,
+  "Lignin scaled spectra" = At_export_scaled_lig
+),
+path = "At_Raman_spectra.xlsx",
+col_names = TRUE,
+format_headers = TRUE,
+use_zip64 = FALSE
+)
+
+# Poplar Raman ####
+Pt_spectra_filled <- rmn_pop_scaled %>%
+  left_join(celltypes) %>%
+  mutate(wavenumber = round(wavenumber, digits = 0)) %>%
+  group_by(genotype, cell_type, replicate, technical, TE, repeat_of) %>%
+  complete(wavenumber = seq(300, 1800)) %>%
+  arrange(genotype, cell_type, replicate, technical, TE, wavenumber) %>%
+  mutate(raw_full = zoo::na.approx(corrected.intensity, na.rm = F),
+         scaled_full = zoo::na.approx(scaled, na.rm = F),
+         scaled_lig_full = zoo::na.approx(scaled_lig, na.rm = F))
+
+# collect raw (unscaled) spectra
+Pt_export_raw <- Pt_spectra_filled %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, wavenumber, raw_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>%
+  pivot_wider(
+    id_cols = c(genotype, cell_type, replicate, technical, TE, repeat_of),
+    names_from = wavenumber,
+    values_from = raw_full
+  ) %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, order(as.numeric(colnames(.))))
+
+# collect spectra normalised to AUC
+Pt_export_scaled <- Pt_spectra_filled %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, wavenumber, scaled_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>%
+  pivot_wider(
+    id_cols = c(genotype, cell_type, replicate, technical, TE, repeat_of),
+    names_from = wavenumber,
+    values_from = scaled_full
+  ) %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, order(as.numeric(colnames(.))))
+
+# collect spectra normalised to total lignin
+Pt_export_scaled_lig <- Pt_spectra_filled %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, wavenumber, scaled_lig_full) %>%
+  filter(wavenumber %in% c(300:1800)) %>%
+  pivot_wider(
+    id_cols = c(genotype, cell_type, replicate, technical, TE, repeat_of),
+    names_from = wavenumber,
+    values_from = scaled_lig_full
+  ) %>%
+  select(genotype, cell_type, replicate, technical, TE, repeat_of, order(as.numeric(colnames(.))))
+
+writexl::write_xlsx(list(
+  "Raw spectra" = Pt_export_raw,
+  "AUC scaled spectra" = Pt_export_scaled,
+  "Lignin scaled spectra" = Pt_export_scaled_lig
+),
+path = "Pt_Raman_spectra.xlsx",
+col_names = TRUE,
+format_headers = TRUE,
+use_zip64 = FALSE
+)
 ```
 
 
