@@ -1685,3 +1685,100 @@ pdf("hyp_collapse.pdf", width = onecol * 0.5, height = onecol * 0.5)
 hyp_dist
 dev.off()
 ```
+
+# IF swelling
+
+### Load data
+
+```{r}
+swelling_files <- list.files(
+  path = paste0(datapath, "PhD/Safranin-Astra/Measurements/"),
+  recursive = FALSE,
+  full.names = TRUE
+)
+
+swelling_data <- map_dfr(swelling_files, read_csv) %>%
+  select(-Angle) %>%
+  rename("thickness" = Length) %>% 
+  separate(image, into = c("date", "genotype", "replicate"), sep = "_") %>%
+  mutate(
+    state = ordered(state, levels = c("fresh", "dry", "rehydrated")),
+    genotype = ordered(case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    levels = c(WT, triple_it, quad_it, Q_it)
+    ),
+    instance = case_when(
+      replicate %in% c(1:5) ~ "1",
+      TRUE ~ "2"
+    )
+  ) %>% 
+  group_by(date, genotype, replicate) %>% 
+  mutate(cell = rep(seq(1:10), each = 3, length.out = 60)) %>% 
+  filter(date != "2021-09-03") # those are too dark to differentiate CW from background
+```
+
+### Absolute thickness
+
+#### Main figure
+
+```{r}
+
+swelling_data_fresh <- swelling_data %>% 
+  filter(cell_type == "IF") %>% 
+  mutate(state = ordered(state, levels = levels(state)),
+         genotype = ordered(genotype, levels = rev(levels(genotype)))
+         )
+
+absolute_thick <- ggplot(swelling_data_fresh, aes(x = thickness)) +
+  geom_density_ridges(data = swelling_data_fresh %>% filter(genotype == "WT"),
+                      aes(y = 1, fill = genotype), 
+                      colour = "white",
+                      size = 0.2,
+                      quantile_lines = TRUE,
+                      quantiles = 2,
+                      scale = 0.5) +
+  geom_density_ridges(data = swelling_data_fresh %>% filter(genotype == "<i>Q</i>"),
+                      aes(y = 1, fill = genotype), 
+                      colour = "white",
+                      size = 0.2,
+                      quantile_lines = TRUE,
+                      quantiles = 2,
+                      scale = -0.5) +
+  geom_hline(yintercept = c(1),
+              colour = "white",
+             size = 0.2) +
+  # geom_point(data = swelling_data_avg %>% filter(genotype == "WT"),
+  #            aes(y = condition),
+  #            fill = "#ffcc3d",
+  #            colour = "white",
+  #            position = position_nudge(x = 0, y = 1),
+  #            shape = 21,
+  #            size = 2,
+  #            stroke = 0.2) +
+  # geom_point(data = swelling_data_fresh %>% filter(genotype == "<i>Q</i>"),
+  #            aes(y = condition),
+  #            fill = "#ffcc3d",
+  #            colour = "white",
+  #            position = position_nudge(x = 0, y = -1),
+  #            shape = 24,
+  #            size = 2,
+  #            stroke = 0.2) +
+  labs(x = "Cell wall thickness [µm]",
+       y = "") +
+  # scale_colour_manual(values = pal_ostwald_disc[c(3,1)], aesthetics = "fill") +
+  # scale_colour_manual(values = c("black", "black"), aesthetics = "fill") +
+  scale_colour_manual(values = pal_dawn[c(7,1)], aesthetics = "fill") +
+  # scale_y_discrete(labels = c("Water", "Drought")) +
+  # scale_x_continuous(limits = c(0.75, 1), breaks = c(0.8, 0.9, 1)) +
+  theme_leo() +
+  theme(strip.text = element_markdown(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank()) +
+  facet_wrap(~ state, ncol = 1) 
+
+pdf("fresh_IF.pdf", width = onecol * 0.35, height = onecol * 0.71)
+absolute_thick
+dev.off()
+```
