@@ -2494,10 +2494,15 @@ PA_data <- PA_spec %>%
   ) %>%
   filter(time < 390) %>%
   group_by(date, replicate, substrate, pH, wavelength, time) %>%
+  mutate("blank" = absorbance[sample == "neg. ctrl."]) %>%
   group_by(date, sample, substrate, pH, replicate, day) %>%
   mutate(
     density = mean(absorbance[wavelength == 600 & `Cycle #` %in% c(1, 2)]),
-    adjusted_absorbance = absorbance, # adjust for density
+    adjusted_absorbance = case_when(
+      sample == "neg. ctrl." ~ absorbance,
+      # TRUE ~ absorbance # do not adjust for density
+      TRUE ~ (absorbance - blank) / density # adjust for density
+    ),
     zeroed_absorbance = adjusted_absorbance - adjusted_absorbance[`Cycle #` == 3]
   ) %>%
   select(-`Cycle #`, -`Time (s)`)
@@ -2739,7 +2744,8 @@ read_vroom <- function(flnm) {
 STS_spec <- map_dfr(spec_files, read_vroom) %>%
   pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>%
   left_join(STS_plates, by = c("date", "started", "Well")) %>%
-  drop_na()
+  filter(is.na(treatment)) %>% 
+  drop_na(measurement)
 
 STS_data <- STS_spec %>%
   mutate(
@@ -2749,10 +2755,15 @@ STS_data <- STS_spec %>%
   ) %>%
   filter(time < 390) %>%
   group_by(date, replicate, substrate, pH, wavelength, time) %>%
+  mutate("blank" = absorbance[sample == "neg. ctrl."]) %>%
   group_by(date, sample, substrate, pH, replicate, day) %>%
   mutate(
     density = mean(absorbance[wavelength == 600 & `Cycle #` %in% c(1, 2)]),
-    adjusted_absorbance = absorbance, # adjust for density
+    adjusted_absorbance = case_when(
+      sample == "neg. ctrl." ~ absorbance,
+      # TRUE ~ absorbance # do not adjust for density
+      TRUE ~ (absorbance - blank) / density # adjust for density
+    ),
     zeroed_absorbance = adjusted_absorbance - adjusted_absorbance[`Cycle #` == 3]
   ) %>%
   select(-`Cycle #`, -`Time (s)`)
@@ -2913,16 +2924,311 @@ slope_grid <- ggplot(
   #            size = 0.2,
   #            linetype = 2) +
   geom_line(aes(group = interaction(replicate, sample)),
-    size = 0.2
+    size = 0.2,
+    alpha = 0.2
   ) +
   stat_smooth(
     geom = "line",
     size = 0.4,
-    se = FALSE
+    se = TRUE
   ) +
   # scale_colour_brewer(palette = "Set1") +
   scale_colour_manual(values = pal_ostwald_disc[c(3, 1)]) +
   labs(y = "Normalised substrate oxidation rate") +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_grid(pH ~ substrate)
+
+pdf("STS_activity_slopes.pdf", width = onecol, height = onecol)
+slope_grid
+dev.off()
+```
+
+### STS activation pilot
+
+#### Load plate layouts
+
+```{r}
+plate_files <-
+  list.files(
+    path = paste0(datapath, "PhD/Laccase_activity/2022-05_STS_activity/csv_files/plates/"),
+    pattern = "*.csv$",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_csv(flnm) %>%
+    mutate(
+      filename = basename(flnm)
+    ) %>%
+    separate(filename, into = c("date", "started"), sep = "_") %>%
+    mutate(
+      Well = paste0(row, column),
+      started = str_remove(started, fixed(".csv")),
+      date = ymd(date)
+    ) %>%
+    select(-row, -column)
+}
+
+STS_plates <- map_dfr(plate_files, read_plus)
+```
+
+#### Load absorbance data
+
+```{r}
+spec_files <-
+  list.files(
+    path = paste0(datapath, "PhD/Laccase_activity/2022-05_STS_activity/csv_files/absorbance/"),
+    pattern = "*.csv$",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_vroom <- function(flnm) {
+  vroom(flnm) %>%
+    mutate(
+      filename = basename(flnm)
+    ) %>%
+    separate(filename, into = c("author", "assay", "date", "time"), sep = "_") %>%
+    select(-author, -assay) %>%
+    mutate(
+      time = str_remove(time, fixed(".csv")),
+      date = ymd(date),
+      started = ymd_hms(paste(date, time, sep = "_")),
+      started = case_when(
+        hour(started) < 14 ~ "morning",
+        TRUE ~ "evening"
+      )
+    ) %>%
+    select(-time)
+}
+
+STS_spec <- map_dfr(spec_files, read_vroom) %>%
+  pivot_longer(c(`220`:`1000`), names_to = "wavelength", values_to = "measurement") %>%
+  left_join(STS_plates, by = c("date", "started", "Well")) %>%
+  mutate(treatment = case_when(sample == "neg. ctrl." ~ "control",
+                               TRUE ~ treatment)) %>% 
+  filter(!is.na(treatment)) %>% 
+  filter(sample != "supernatant") %>% 
+  drop_na(measurement)
+
+STS_data <- STS_spec %>%
+  mutate(
+    wavelength = as.numeric(wavelength),
+    absorbance = measurement / 0.52, # experimental path length in the plate
+    time = (`Cycle #` * 10) - 10 # 10 minutes between measurements
+  ) %>%
+  filter(time < 390) %>%
+  group_by(date, replicate, substrate, pH, wavelength, time) %>%
+  mutate("blank" = absorbance[sample == "neg. ctrl."]) %>%
+  group_by(date, sample, substrate, pH, replicate, day, treatment) %>%
+  mutate(
+    density = mean(absorbance[wavelength == 600 & `Cycle #` %in% c(1, 2)]),
+    adjusted_absorbance = case_when(
+      sample == "neg. ctrl." ~ absorbance,
+      # TRUE ~ absorbance # do not adjust for density
+      TRUE ~ absorbance / density # adjust for density
+    ),
+    zeroed_absorbance = adjusted_absorbance - adjusted_absorbance[`Cycle #` == 3]
+  ) %>%
+  select(-`Cycle #`, -`Time (s)`)
+```
+
+
+#### Plot absorbance over time
+
+```{r}
+lm_bounds <- tribble(
+  ~substrate, ~pH, ~lm_start, ~lm_stop,
+  "ABTS", 4, 40, 160,
+  "ABTS", 5, 40, 160,
+  "ABTS", 6, 100, 400,
+  "ABTS", 7, 100, 400,
+  "DAF", 4, 40, 160,
+  "DAF", 5, 40, 160,
+  "DAF", 6, 100, 300,
+  "DAF", 7, 100, 300,
+  "MBTH", 4, 100, 300,
+  "MBTH", 5, 100, 300,
+  "MBTH", 6, 100, 300,
+  "MBTH", 7, 20, 120,
+  "PYGL", 4, 100, 400,
+  "PYGL", 5, 100, 400,
+  "PYGL", 6, 100, 400,
+  "PYGL", 7, 100, 300,
+  "SGZ", 4, 200, 400,
+  "SGZ", 5, 200, 400,
+  "SGZ", 6, 200, 400,
+  "SGZ", 7, 200, 400,
+)
+
+abs_max <- tibble(
+  substrate = c("ABTS", "DAF", "MBTH", "PYGL", "SGZ"),
+  abs_max = c(420, 610, 505, 450, 530),
+  abs_min = c(480, 515, 700, 600, 600)
+  # abs_min = 1000
+)
+
+STS_kinetics <- STS_data %>%
+  left_join(abs_max) %>%
+  left_join(lm_bounds) %>%
+  group_by(
+    date, sample, substrate, pH, replicate, day, time, treatment, lm_start, lm_stop, density
+  ) %>%
+  mutate(corrected_absorbance = zeroed_absorbance - zeroed_absorbance[wavelength == abs_min]) %>%
+  summarise(
+    corrected_absorbance = corrected_absorbance[wavelength == abs_max],
+    adjusted_absorbance = adjusted_absorbance[wavelength == abs_max],
+    absorbance = absorbance[wavelength == abs_max]
+  )
+
+pdf("STS_activation_kinetics.pdf", height = twocol, width = twocol)
+ggplot(
+  STS_kinetics,
+  aes(
+    x = time,
+    y = corrected_absorbance,
+    colour = pH,
+    linetype = sample
+  )
+) +
+  # geom_line(aes(group = interaction(sample, pH))) +
+  stat_smooth(
+    geom = "line",
+    aes(group = interaction(replicate, sample, pH)),
+    alpha = 0.5,
+    size = 0.2,
+    se = F
+  ) +
+  geom_smooth(
+    data = filter(STS_kinetics, time %in% c(lm_start:lm_stop)),
+    aes(group = interaction(replicate, sample, pH)),
+    method = "lm",
+    size = 0.5,
+    se = F
+  ) +
+  # scale_x_continuous(limits = c(0, 400)) +
+  theme_leo() +
+  theme(legend.position = "bottom") +
+  facet_grid(treatment ~ sample
+  )
+dev.off()
+```
+
+#### Check boiled absorbance
+
+```{r}
+test <- STS_data %>% 
+  filter(treatment %in% c("control", "boiled") & 
+           date %in% c(as_date("2022-05-13")) & 
+           substrate == "ABTS")
+
+pdf("test.pdf")
+ggplot(test,
+       aes(x = wavelength,
+           y = absorbance,
+           colour = time)) +
+  geom_line(aes(group = time),
+            size = 0.2) +
+  facet_grid(sample ~ treatment)
+dev.off()
+```
+
+
+#### Plot linear phase slope
+
+```{r}
+# write_csv(kinetics, "kinetics.csv")
+
+STS_kinetics_nested <- STS_kinetics %>%
+  filter(sample != "neg. ctrl.") %>% 
+  filter(time >= lm_start & time <= lm_stop) %>%
+  select(-absorbance, -adjusted_absorbance) %>%
+  nest(data = c(time, corrected_absorbance)) %>%
+  mutate(
+    fit = map(data, ~ lm(corrected_absorbance ~ time, data = .x)),
+    tidied = map(fit, tidy),
+    model = map(fit, glance),
+    adj.r.squared = unlist(map(model, ~ .x[["adj.r.squared"]]))
+  ) %>%
+  select(-model) %>%
+  unnest(tidied) %>%
+  filter(term == "time") %>%
+  mutate(pH = as.factor(pH)) %>%
+  group_by(substrate, pH, replicate, sample) %>%
+  mutate(
+    scaled_estimate = estimate / max(estimate),
+    scaled_estimate = case_when(
+      scaled_estimate < 0 ~ 0,
+      TRUE ~ scaled_estimate
+    )
+  ) %>%
+  group_by(pH, replicate) %>%
+  mutate(
+    pH_scaled = estimate / max(estimate),
+    pH_scaled = case_when(
+      pH_scaled < 0 ~ 0,
+      TRUE ~ pH_scaled
+    )
+  ) %>%
+  group_by(substrate, replicate) %>%
+  mutate(
+    substrate_scaled = estimate / max(estimate),
+    substrate_scaled = case_when(
+      substrate_scaled < 0 ~ 0,
+      TRUE ~ substrate_scaled
+    )
+  ) %>% 
+  mutate(treatment_length = case_when(date == as_date("2022-05-13") ~ "1 h",
+                                      date == as_date("2022-05-17") ~ "24 h"))
+
+STS_kinetic_max <- STS_kinetics_nested %>%
+  group_by(pH, sample, substrate, day) %>%
+  summarise(scaled_estimate = mean(scaled_estimate)) %>%
+  group_by(pH, sample, substrate) %>%
+  mutate(
+    max_estimate = max(scaled_estimate)
+  ) %>%
+  filter(scaled_estimate == max_estimate)
+
+slope_grid <- ggplot(
+  STS_kinetics_nested,
+  aes(
+    x = treatment,
+    y = estimate,
+    colour = sample,
+    fill = treatment_length
+  )
+) +
+  geom_point(
+    shape = 21,
+    size = 2,
+    stroke = 1
+  ) +
+  # annotate("rect",
+  #   ymin = -Inf,
+  #   ymax = Inf,
+  #   xmin = 3,
+  #   xmax = 7,
+  #   fill = "grey90"
+  # ) +
+  # geom_vline(data = kinetic_max %>% filter(sample == "TE"),
+  #            aes(xintercept = day),
+  #            size = 0.2,
+  #            linetype = 2) +
+  # geom_line(aes(group = interaction(replicate, sample)),
+  #   size = 0.2
+  # ) +
+  # stat_smooth(
+  #   geom = "line",
+  #   size = 0.4,
+  #   se = FALSE
+  # ) +
+  # scale_colour_brewer(palette = "Set1") +
+  scale_colour_manual(values = pal_ostwald_disc) +
+  scale_fill_manual(values = c("grey50", "white")) +
+  labs(y = "Substrate oxidation rate") +
   theme_leo() +
   theme(legend.position = "bottom") +
   facet_grid(pH ~ substrate)
