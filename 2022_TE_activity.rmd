@@ -310,6 +310,8 @@ growth_data <- map(growth_files, read_plus) %>%
 growth_avg <- growth_data %>%
   group_by(treatment, dpi) %>%
   summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+writexl::write_xlsx(growth_data, "TE_differentiation.xlsx")
 ```
 
 #### Plot differentiation curves
@@ -1711,6 +1713,8 @@ kinetics_nested <- kinetics %>%
       TRUE ~ substrate_scaled
     )
   )
+
+writexl::write_xlsx(kinetics_nested, "TE_activity_slopes.xlsx")
 ```
 
 

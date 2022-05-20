@@ -398,7 +398,7 @@ envir_psem <- piecewiseSEM::psem(
 
 plot(envir_psem)
 env_coefs <- summary(envir_psem)$coefficients
-env_model <- summary(envir_psem)$IC
+env_model <- summary(envir_psem)$R2
 ```
 
 ## Export merged data
@@ -507,10 +507,10 @@ c4h_coefficients <-
   tidy(step_model_c4h) %>%
   mutate(genotype = "C4H-RNAi",
          line = "1B + 3B") %>%
-  add_row(tidy(step_model_1b) %>% mutate(genotype = "C4H-RNAi",
-                                         line = "1B")) %>%
-  add_row(tidy(step_model_3b) %>% mutate(genotype = "C4H-RNAi",
-                                         line = "3B")) %>%
+  # add_row(tidy(step_model_1b) %>% mutate(genotype = "C4H-RNAi",
+  #                                        line = "1B")) %>%
+  # add_row(tidy(step_model_3b) %>% mutate(genotype = "C4H-RNAi",
+  #                                        line = "3B")) %>%
   add_row(tidy(step_model_WT) %>% mutate(genotype = "WT",
                                          line = "T89"))
 
@@ -518,10 +518,10 @@ c4h_models <-
   glance(step_model_c4h) %>%
   mutate(genotype = "C4H-RNAi",
          line = "1B + 3B") %>%
-  add_row(glance(step_model_1b) %>% mutate(genotype = "C4H-RNAi",
-                                         line = "1B")) %>%
-  add_row(glance(step_model_3b) %>% mutate(genotype = "C4H-RNAi",
-                                         line = "3B")) %>%
+  # add_row(glance(step_model_1b) %>% mutate(genotype = "C4H-RNAi",
+  #                                        line = "1B")) %>%
+  # add_row(glance(step_model_3b) %>% mutate(genotype = "C4H-RNAi",
+  #                                        line = "3B")) %>%
   add_row(glance(step_model_WT) %>% mutate(genotype = "WT",
                                          line = "T89"))
 
@@ -551,7 +551,7 @@ writexl::write_xlsx(list(
   "environmental model" = env_model,
   "environmental coefficients" = env_coefs
 ),
-path = "Serk2020_tables.xlsx",
+path = "P_tables.xlsx",
 col_names = TRUE,
 format_headers = TRUE,
 use_zip64 = FALSE

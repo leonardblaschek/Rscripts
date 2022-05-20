@@ -1552,3 +1552,136 @@ pdf("cover_perimeters.pdf", width = onecol * 1.5, onecol * 1.5)
 perimeter_plot
 dev.off()
 ```
+
+# Hypocotyl collapse
+
+## Load data
+
+```{r}
+hyp_data <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/hypocotyl_collapse.csv") %>% 
+  separate(Sample, into = c("condition", "genotype", "bleh", "blah", "replicate"), sep = " ") %>% 
+  select(genotype, condition, replicate, Solidity) %>% 
+  mutate(genotype = recode(genotype,
+                           "cad45" = "<i>cad4</i>x<i>5</i>"),
+         genotype = ordered(genotype, levels = c("WT", "<i>cad4</i>x<i>5</i>"))) %>% 
+  filter(condition == "20%")
+
+hyp_avg <- hyp_data %>% 
+  group_by(genotype, condition, replicate) %>% 
+  summarise(Solidity = median(Solidity))
+```
+
+## Plot distributions
+
+```{r}
+# letters <- hyp_avg %>%
+#   unite("ID", genotype, condition) %>%
+#   letter_groups(.,
+#     Solidity,
+#     ID,
+#     "tukey",
+#     print_position = 0.85
+#   ) %>%
+#   separate(ID, into = c("genotype", "condition"), sep = "_")
+# 
+# stat_tab <- hyp_avg %>% 
+#   rowwise() %>% 
+#   mutate(genotype = strip_html(genotype)) %>% 
+#   unite("ID", genotype, condition) %>%
+#   group_by(ID) %>%
+#   mutate(
+#     "n" = n(),
+#     ID = paste0(ID, " (n = ", n, ")")
+#   ) %>%
+#   letter_groups(.,
+#     Solidity,
+#     ID,
+#     "tukey",
+#     table = TRUE
+#   )
+# 
+#   anova_tab <- stat_tab$anova %>% 
+#     mutate(variable = "Convexity") %>% 
+#     distinct()
+#   write_csv(anova_tab, paste0(stat_path, "S09C_anova.csv"))
+# 
+#   tukey_tab <- stat_tab$tukey %>%
+#     mutate(variable = "Convexity") %>% 
+#     distinct()
+#   write_csv(tukey_tab, paste0(stat_path, "S09C_tukey.csv"))
+
+hyp_dist <- ggplot(hyp_data, aes(x = Solidity)) +
+  geom_density_ridges(data = hyp_data %>% filter(genotype == "WT"),
+                      aes(y = condition, fill = genotype), 
+                      colour = "white",
+                      size = 0.2,
+                      quantile_lines = TRUE,
+                      quantiles = 2,
+                      scale = 0.5) +
+  geom_density_ridges(data = hyp_data %>% filter(genotype == "<i>cad4</i>x<i>5</i>"),
+                      aes(y = condition, fill = genotype), 
+                      colour = "white",
+                      size = 0.2,
+                      quantile_lines = TRUE,
+                      quantiles = 2,
+                      scale = -0.5) +
+  geom_hline(yintercept = c(1),
+              colour = "white",
+             size = 0.5) +
+  geom_point(data = hyp_avg %>% filter(genotype == "WT"),
+             aes(y = condition),
+             fill = "#ffcc3d",
+             colour = "white",
+             position = position_nudge(x = 0, y = 1),
+             shape = 21,
+             size = 2,
+             stroke = 0.2) +
+  geom_point(data = hyp_avg %>% filter(genotype == "<i>cad4</i>x<i>5</i>"),
+             aes(y = condition),
+             fill = "#ffcc3d",
+             colour = "white",
+             position = position_nudge(x = 0, y = -1),
+             shape = 24,
+             size = 2,
+             stroke = 0.2) +
+  # annotate("richtext",
+  #          label = c("WT", "<i>cad4</i>x<i>5</i>"),
+  #          x = 0.75,
+  #          y = c(3.1, 2.9),
+  #          colour = pal_ostwald_disc[c(1,3)],
+  #          hjust = 0,
+  #          vjust = 0.5,
+  #          label.size = NA,
+  #          fill = NA,
+  #          size = ggtext_size,
+  #          family = "Helvetica") +
+  # geom_text(data = letters %>% filter(genotype == "WT"),
+  #           aes(label = Letters,
+  #               y = condition),
+  #           size = ggtext_size,
+  #           family = "Helvetica",
+  #           vjust = -0.5) +
+  # geom_text(data = letters %>% filter(genotype == "<i>cad4</i>x<i>5</i>"),
+  #           aes(label = Letters,
+  #               y = condition),
+  #           size = ggtext_size,
+  #           family = "Helvetica",
+  #           vjust = 1.25) +
+  labs(x = "Convexity of hypocotyl TEs",
+       y = "PEG treatment") +
+  # scale_colour_manual(values = pal_ostwald_disc[c(3,1)], aesthetics = "fill") +
+  scale_colour_manual(values = c("black", "black"), aesthetics = "fill") +
+  # scale_y_discrete(labels = c("Water", "Drought")) +
+  scale_x_continuous(limits = c(0.75, 1), breaks = c(0.8, 0.9, 1)) +
+  theme_leo() +
+  theme(strip.text = element_markdown(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank()) 
+  # facet_wrap(~ genotype)
+
+hyp_dist
+
+pdf("hyp_collapse.pdf", width = onecol * 0.5, height = onecol * 0.5)
+hyp_dist
+dev.off()
+```
