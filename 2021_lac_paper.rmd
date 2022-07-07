@@ -1739,6 +1739,15 @@ stat_tab <- nested_stem_data %>%
   write_csv(tukey_tab, paste0(stat_path, "01F_tukey.csv"))
 ```
 
+#### TODO: Stem angle
+
+```{r}
+# The code for the root angle analysis got lost during a backup mishap.
+# The data is at /home/leonard/Dropbox/2021_lac_manuscript/lodging/stem_angles.csv
+# The code should generate violin plots comparing the delta of stem base angles from 90 degrees
+```
+
+
 
 ### Root growth
 
@@ -6011,8 +6020,8 @@ letters <- letter_groups(violin_data,
   print_adjust = 1.5
 ) %>%
   mutate(value = case_when(
-    cell_type == "MX" ~
-    value + 0.2 * value,
+    cell_type == "MX" & variable != "Cellulose cryst." ~
+    value - 0.2 * value,
     TRUE ~ value
   ))
 
@@ -7848,6 +7857,15 @@ expression_plot <- ggplot(
 pdf("Blaschek2022_figureS1.pdf", width = onecol * 0.6, height = onecol * 0.65)
 expression_plot
 dev.off()
+```
+
+## TODO: PCA
+
+```{r}
+# The code for the root angle analysis got lost during a backup mishap.
+# The code should generate one PCA comparing Raman data between different cell types and genotypes.
+# The figure should show one panel per cell type, with small transparent points indicating measurements and large labeled points indicating the average.
+# Subsequently the vectors of the variables are added in inkscape as a circle at the centre of the four figure panels.
 ```
 
 ## Export complete data
