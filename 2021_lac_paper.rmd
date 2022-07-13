@@ -1741,12 +1741,6 @@ stat_tab <- nested_stem_data %>%
 
 ### Stem angle
 
-```{r}
-# The code for the root angle analysis got lost during a backup mishap.
-# The data is at /home/leonard/Dropbox/2021_lac_manuscript/lodging/stem_angles.csv
-# The code should generate violin plots comparing the delta of stem base angles from 90 degrees
-```
-
 #### Load data
 
 ```{r}
@@ -8000,6 +7994,69 @@ dev.off()
 # The figure should show one panel per cell type, with small transparent points indicating measurements and large labeled points indicating the average.
 # Subsequently the vectors of the variables are added in inkscape as a circle at the centre of the four figure panels.
 ```
+
+### Format dataframe
+
+```{r}
+pca_data <- rmn_lac_sum %>%
+  filter(cell_type %in% c("IF", "XF", "PX", "MX")) %>%
+  select(
+    genotype,
+    cell_type,
+    replicate,
+    "cell" = TE,
+    "Lignin/cellulose" = lig.cellu,
+    "S/G" = S.G,
+    "GCHO/GCHOH" = GCHO.GOH,
+    "Benzaldehydes" = Benz_rel,
+    "P" = P_rel
+  ) %>%
+  unite("ID", genotype, cell_type, replicate, cell)
+```
+
+### Compute PCA
+
+```{r}
+pca_result <- prcomp(pca_data[, -1], center = TRUE, scale. = TRUE)
+  rownames(pca_result$x) <- pca_data$ID
+  
+  factoextra::fviz_pca_biplot(pca_result)
+```
+
+### Plot PCA
+
+```{r}
+gg_pca <- as_tibble(pca_result$x, rownames = NA) %>%
+    rownames_to_column(var = "ID") %>%
+    separate(ID, sep = "_", into = c("genotype", "cell_type", "replicate", "cell"))
+
+gg_pca_centroid <- gg_pca %>%
+    group_by(genotype) %>%
+    summarise(
+      PC1 = mean(PC1),
+      PC2 = mean(PC2)
+    )
+
+  ggplot(gg_pca, aes(x = PC1, y = -PC2, fill = genotype)) +
+    geom_hline(yintercept = 0, linetype = 1, size = 0.2) +
+    geom_vline(xintercept = 0, linetype = 1, size = 0.2) +
+    geom_point(
+      size = 1,
+      stroke = 0.2,
+      alpha = 0.75,
+      shape = 21
+    ) +
+    labs(
+      x = "PC 1 [63 %]",
+      y = "PC 2 [24 %]"
+    ) +
+    scale_fill_manual(values = pal_dawn) +
+    theme_leo() +
+    facet_wrap(~cell_type)
+```
+
+
+
 
 ## Export complete data
 
