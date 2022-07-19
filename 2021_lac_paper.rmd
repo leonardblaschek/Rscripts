@@ -811,7 +811,7 @@ dev.off()
 ```
 
 
-### [unused] Stem thickness
+### [unused] Stem thickness and count
 
 ```{r, eval=FALSE}
 thickness_data <- pheno_data %>% 
@@ -824,9 +824,19 @@ thickness_data <- pheno_data %>%
       TRUE ~ "3"
     ))
 
-ggplot(thickness_data, aes(x = instance, y = thickness)) +
+ggplot(thickness_data, aes(x = genotype, y = thickness)) +
   geom_point() +
-  geom_boxplot(alpha = 0.5)
+  geom_boxplot(alpha = 0.5) +
+  # facet_wrap(~instance) +
+  theme_leo() +
+  theme(axis.text.x = element_markdown())
+
+ggplot(thickness_data, aes(x = genotype, y = stems)) +
+  geom_point() +
+  geom_boxplot(alpha = 0.5) +
+  # facet_wrap(~instance) +
+  theme_leo() +
+  theme(axis.text.x = element_markdown())
 ```
 
 

@@ -1221,3 +1221,19 @@ pdf("mutant_expression.pdf", height = onecol, width = onehalfcol)
 ex_heatmap
 dev.off()
 ```
+
+### Export data
+
+```{r}
+# function to strip html for excel exports
+strip_html <- function(s) {
+    rvest::html_text(rvest::read_html(charToRaw(as.character(s))))
+}
+
+normalised_plain <- normalised %>% 
+  mutate(gene = strip_html(gene),
+         sample = strip_html(sample))
+writexl::write_xlsx(results, "Cp_values.xlsx")
+writexl::write_xlsx(normalised_plain, "normalised.xlsx")
+```
+
