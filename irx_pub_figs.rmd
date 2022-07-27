@@ -1152,8 +1152,8 @@ rmn_adj_letters <- letter_groups(rmn_adj %>% unite("ID", cell.type, variable, se
 
 stat_tab <- rmn_adj %>%
   mutate(variable = recode(variable,
-    "n_p" = "parenchyma",
-    "n_f" = "fibres",
+    "n_p" = "XP",
+    "n_f" = "XF",
     "n_v" = "TEs"
   )) %>%
   unite("ID", cell.type, variable, sep = "_") %>%
@@ -1233,7 +1233,7 @@ rmn_adj_box <- ggplot(
     colour = "black",
     size = 0.2
   ) +
-  scale_x_discrete(labels = c("Parenchyma", "Fibres", "TEs")) +
+  scale_x_discrete(labels = c("XP", "XF", "TEs")) +
   scale_fill_manual(values = pal_flame_disc) +
   labs(
     x = "Neighbouring cell type",
