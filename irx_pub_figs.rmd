@@ -186,7 +186,9 @@ datapath <- ifelse(dir.exists("/data/"), "/data/",
   )
 )
 
-stat_path <- "/home/leonard/Dropbox/2020_IRX manuscript/Submission/Plant Cell revised/Supplemental/statistics/"
+doc_path <- "/run/media/leonard/data/grsync/Documents/"
+
+stat_path <- "/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/supplementary/statistics/"
 
 ```
 
@@ -605,6 +607,7 @@ dev.off()
 
 #### load data and calculate proportions of intact/collapsed cells ####
 em_data <- read_csv(paste0(datapath, "PhD/IRX/EM/AD_collapse.csv")) %>%
+  add_row(read_csv("/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/data/CPD_collapse_2.csv")) %>% 
   pivot_longer(cols = c(PX, MX), names_to = "cell.type", values_to = "count") %>%
   mutate(
     state = ordered(state, levels = c("Fully", "Partially", "Intact")),
@@ -628,13 +631,13 @@ em_data_avg <- em_data %>%
     ymin = case_when(
       state == "Partially" ~ proportion[state == "Intact"] +
         proportion[state == "Partially"] - sd,
-      state == "Fully" ~ 0,
+      state == "Fully" ~ NaN,
       state == "Intact" ~ proportion - sd
     ),
     ymax = case_when(
       state == "Partially" ~ proportion[state == "Intact"] +
         proportion[state == "Partially"] + sd,
-      state == "Fully" ~ 0,
+      state == "Fully" ~ NaN,
       state == "Intact" ~ proportion + sd
     )
   )
@@ -658,7 +661,7 @@ em_collapse_plot <- function(cond) {
     size = 0.2
     ) +
     scale_fill_manual(values = rev(pal_ostwald_disc), name = "Collapse") +
-    scale_y_continuous(expand = expand_scale(mult = c(0, 0.05))) +
+    scale_y_continuous(expand = expand_scale(mult = c(0.01, 0.01))) +
     theme_leo() +
     labs(
       y = "Proportion",
@@ -915,7 +918,7 @@ rmn_sum <- rmn_data_corrected %>%
 
 #### import and tidy Wiesner test data ####
 wiesner.data <-
-  read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_revisited.csv",
+  read.csv(paste0(doc_path, "Uni/Phloroglucinol/measurements_revisited.csv"),
     skip = 2
   )
 
@@ -936,7 +939,7 @@ wiesner.data[251:300 + rep(seq(0, (nrow(wiesner.data) - 50), by = 300), each = 5
   "PH"
 
 # import SMX measurements
-wiesner.data.SMX <- read.csv("/home/leonard/Documents/Uni/Phloroglucinol/measurements_SMX.csv",
+wiesner.data.SMX <- read.csv(paste0(doc_path, "Uni/Phloroglucinol/measurements_SMX.csv"),
   skip = 2
 )
 wiesner.data.SMX$replicate <- as.factor(wiesner.data.SMX$replicate)
@@ -1069,7 +1072,7 @@ rmn_irx <- left_join(rmn_irx, raman_convex) %>%
 # write_csv(rmn_irx, "raman_irx_shape.csv"))
 
 #### import and tidy plant height data ####
-raman.heights <- read.csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
+raman.heights <- read.csv(paste0(doc_path, "Uni/Master/Summer project 16/phenotyping/phenotyping.csv")) %>%
   select(genotype, replicate, height) %>%
   mutate(genotype = recode(genotype, "col-0" = "Col-0")) %>%
   rename("Plant.height" = "height") %>%
@@ -2580,8 +2583,8 @@ model_data_pop <- rmn_pop_data %>%
   group_by(genotype, replicate, technical, cell_type, TE) %>%
   summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
 
-pop_n <-model_data_pop %>%
-  group_by(genotype, cell_type) %>%
+pop_n <- model_data_pop %>%
+  group_by(genotype, cell_type,replicate) %>%
   summarise(n = n())
 
  write_csv(pop_n, "poplar_n.csv")
@@ -5537,20 +5540,22 @@ dev.off()
 
 #### Poplar
 
-##### Neighbouring TEs
+##### Neighbouring TEs and perimeters
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 rmn_irx_long <- model_data_pop %>%
   mutate(n_v = n_v * 100) %>%
-  select(genotype, replicate, technical, cell_type, n_v) %>%
+  select(genotype, replicate, technical, cell_type, n_v, Perim.) %>%
   pivot_longer(cols = -c(genotype:cell_type), names_to = "variable", values_to = "value") %>%
   mutate(
     variable = factor(variable,
       levels = c(
-        "n_v"
+        "n_v",
+        "Perim."
       ),
       labels = c(
-        "Adj. TEs [%]"
+        "Adj. TEs [%]",
+        "Perimeter [µm]"
       )
     ),
     genotype = ordered(genotype,
@@ -5664,7 +5669,7 @@ adj_TE_pop <- ggplot(
     switch = "y"
   )
 
-pdf("IRX_adj_TE.pdf", width = twocol, height = onecol * 0.4)
+pdf("IRX_adj_TE.pdf", width = twocol, height = onecol * 0.6)
 adj_TE_pop
 dev.off()
 ```
@@ -5798,161 +5803,10 @@ poplar_variation <- ggplot(
     labeller = labeller(variable = label_parsed, cell_type = label_value),
     switch = "x"
   )
-
-pdf("IRX_FigureS1_pop.pdf", width = twocol, height = onecol * 1.5)
-adj_TE_pop + poplar_variation +
-  plot_layout(nrow = 2, heights = c(1, 4)) &
-  plot_annotation(tag_levels = 'A') & 
-  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
-dev.off()
-```
-
-### Post-mortem lignification
-
-#### TGA
-
-```{r}
-TGA <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/cell_TGA.csv") %>%
-  mutate(
-    condition = ordered(condition, levels = c("basal", "induced", "PA")),
-    dpi = as.numeric(dpi)
-  )
-
-TGA_united <- TGA %>%
-  unite("ID", condition, dpi, sep = "_")
-
-TGA_n <- TGA %>% 
-  group_by(condition, dpi) %>% 
-  summarise(n = n())
-
-letters <- letter_groups(TGA_united,
-  TGA,
-  ID,
-  "tukey",
-  print_position = "below",
-  print_adjust = 0.5
-) %>%
-  separate(ID, into = c("condition", "dpi"), sep = "_") %>%
-  mutate(
-    condition = ordered(condition, levels = c("basal", "induced", "PA")),
-    dpi = as.numeric(dpi)
-  )
-
-stat_tab <- TGA_united %>%
-  group_by(ID) %>%
-  mutate(
-    "n" = n(),
-    ID = paste0(ID, " (n = ", n, ")")
-  ) %>%
-  letter_groups(.,
-    TGA,
-    ID,
-    "tukey",
-    table = TRUE
-  )
-
-anova_tab <- stat_tab$anova %>%
-  mutate(variable = "TGA lignin") %>% 
-  distinct()
-write_csv(anova_tab, paste0(stat_path, "S02D_anova.csv"))
-
-tukey_tab <- stat_tab$tukey %>%
-  mutate(variable = "TGA lignin") %>% 
-  distinct()
-write_csv(tukey_tab, paste0(stat_path, "S02D_tukey.csv"))
-
-TGA_plot <- ggplot(
-  data = TGA,
-  aes(x = dpi, y = TGA)
-) +
-  # geom_line(aes(colour = condition),
-  #           size = 0.2,
-  #           linetype = 2,
-  #           stat = "summary",
-  #           position = position_dodge(width = 5)) +
-  geom_quasirandom(
-    aes(fill = condition),
-    dodge.width = 5,
-    shape = 21,
-    # width = 0.1,
-    # colour = NA,
-    alpha = 0.75,
-    size = 1,
-    stroke = 0.2
-  ) +
-  geom_violin(
-    aes(group = interaction(dpi, condition)),
-    draw_quantiles = 0.5,
-    fill = "white",
-    colour = "black",
-    alpha = 0.85,
-    width = 2,
-    position = position_dodge(width = 5),
-    size = 0.2,
-    scale = "width"
-  ) +
-  geom_text(
-    data = letters,
-    aes(
-      group = condition,
-      label = Letters
-    ),
-    size = ggtext_size,
-    family = "Helvetica",
-    position = position_dodge(width = 5)
-  ) +
-  geom_text(
-    data = TGA_n,
-    aes(
-      group = condition,
-      label = n,
-      y = 280
-    ),
-    size = ggtext_size,
-    family = "Helvetica",
-    position = position_dodge(width = 5)
-  ) +
-  annotate("text",
-           label = expression(paste(italic(n), " = ")),
-           x = 7,
-           y = 280,
-           family = "Helvetica",
-           size = ggtext_size) +
-  # scale_fill_grey(start = 0.9, end = 0.1) +
-  scale_fill_manual(values = c("grey50", pal_ostwald_disc[c(1, 3)]), aesthetics = c("colour", "fill")) +
-  scale_y_continuous(expand = expansion(mult = c(0.05, 0.1))) +
-  scale_x_continuous(breaks = c(10, 20, 30), expand = expansion(mult = c(0.05, 0.05))) +
-  theme_leo() +
-  theme(
-    text = element_text(family = "Helvetica"),
-    legend.position = "none"
-  ) +
-  labs(y = "TGA lignin",
-       x = "Days past induction") +
-  annotate("text",
-    x = c(7.5, 10, 12.5),
-    y = c(60, 120, 90),
-    label = c("Parench.", "TEs", "PA TEs"),
-    family = "Helvetica",
-    size = ggtext_size
-  ) +
-  annotate("segment",
-    x = c(8.4, 10, 11.6),
-    xend = c(8.4, 10, 11.6),
-    y = c(40, 100, 70),
-    yend = c(20, 50, 30),
-    colour = "black",
-    size = 0.2
-  )
-
-pdf("cell_TGA.pdf", height = onecol * 0.3, width = onecol)
-TGA_plot
-dev.off()
-
 ```
 
 
-#### Scatter plots
+##### Scatter plots
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
@@ -6100,11 +5954,153 @@ dist_lig1 <- ggplot(
              labeller = label_parsed,
              nrow = 1)
 
-pdf("individual_intercept.pdf", width = twocol, height = twocol)
+pdf("poplar_supp.pdf", width = twocol, height = twocol)
 dist_lig1 + adj_TE_pop + poplar_variation +
-  plot_layout(nrow = 3, heights = c(0.35, 0.2, 1)) &
+  plot_layout(nrow = 3, heights = c(0.3, 0.3, 0.7)) &
   plot_annotation(tag_levels = 'A') & 
   theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
+dev.off()
+
+```
+
+### TGA
+
+```{r}
+TGA <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/cell_TGA.csv") %>%
+  mutate(
+    condition = ordered(condition, levels = c("basal", "induced", "PA")),
+    dpi = as.numeric(dpi)
+  )
+
+TGA_united <- TGA %>%
+  unite("ID", condition, dpi, sep = "_")
+
+TGA_n <- TGA %>% 
+  group_by(condition, dpi) %>% 
+  summarise(n = n())
+
+letters <- letter_groups(TGA_united,
+  TGA,
+  ID,
+  "tukey",
+  print_position = "below",
+  print_adjust = 0.5
+) %>%
+  separate(ID, into = c("condition", "dpi"), sep = "_") %>%
+  mutate(
+    condition = ordered(condition, levels = c("basal", "induced", "PA")),
+    dpi = as.numeric(dpi)
+  )
+
+stat_tab <- TGA_united %>%
+  group_by(ID) %>%
+  mutate(
+    "n" = n(),
+    ID = paste0(ID, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    TGA,
+    ID,
+    "tukey",
+    table = TRUE
+  )
+
+anova_tab <- stat_tab$anova %>%
+  mutate(variable = "TGA lignin") %>% 
+  distinct()
+write_csv(anova_tab, paste0(stat_path, "S02D_anova.csv"))
+
+tukey_tab <- stat_tab$tukey %>%
+  mutate(variable = "TGA lignin") %>% 
+  distinct()
+write_csv(tukey_tab, paste0(stat_path, "S02D_tukey.csv"))
+
+TGA_plot <- ggplot(
+  data = TGA,
+  aes(x = dpi, y = TGA)
+) +
+  # geom_line(aes(colour = condition),
+  #           size = 0.2,
+  #           linetype = 2,
+  #           stat = "summary",
+  #           position = position_dodge(width = 5)) +
+  geom_quasirandom(
+    aes(fill = condition),
+    dodge.width = 5,
+    shape = 21,
+    # width = 0.1,
+    # colour = NA,
+    alpha = 0.75,
+    size = 1,
+    stroke = 0.2
+  ) +
+  geom_violin(
+    aes(group = interaction(dpi, condition)),
+    draw_quantiles = 0.5,
+    fill = "white",
+    colour = "black",
+    alpha = 0.85,
+    width = 2,
+    position = position_dodge(width = 5),
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(
+      group = condition,
+      label = Letters
+    ),
+    size = ggtext_size,
+    family = "Helvetica",
+    position = position_dodge(width = 5)
+  ) +
+  geom_text(
+    data = TGA_n,
+    aes(
+      group = condition,
+      label = n,
+      y = 280
+    ),
+    size = ggtext_size,
+    family = "Helvetica",
+    position = position_dodge(width = 5)
+  ) +
+  annotate("text",
+           label = expression(paste(italic(n), " = ")),
+           x = 7,
+           y = 280,
+           family = "Helvetica",
+           size = ggtext_size) +
+  # scale_fill_grey(start = 0.9, end = 0.1) +
+  scale_fill_manual(values = c("grey50", pal_ostwald_disc[c(1, 3)]), aesthetics = c("colour", "fill")) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.1))) +
+  scale_x_continuous(breaks = c(10, 20, 30), expand = expansion(mult = c(0.05, 0.05))) +
+  theme_leo() +
+  theme(
+    text = element_text(family = "Helvetica"),
+    legend.position = "none"
+  ) +
+  labs(y = "TGA lignin",
+       x = "Days past induction") +
+  annotate("text",
+    x = c(7.5, 10, 12.5),
+    y = c(60, 120, 90),
+    label = c("Parench.", "TEs", "PA TEs"),
+    family = "Helvetica",
+    size = ggtext_size
+  ) +
+  annotate("segment",
+    x = c(8.4, 10, 11.6),
+    xend = c(8.4, 10, 11.6),
+    y = c(40, 100, 70),
+    yend = c(20, 50, 30),
+    colour = "black",
+    size = 0.2
+  )
+
+pdf("cell_TGA.pdf", height = onecol * 0.3, width = onecol)
+TGA_plot
 dev.off()
 
 ```
@@ -7213,21 +7209,27 @@ dev.off()
 ### Load data
 
 ```{r}
-gcho <- read_table("/home/leonard/Dropbox/2020_IRX manuscript/Submission/Plant Cell revised/Edits/lignin_MD/7mer-4O5-GCHO.dat",
+gcho <- read_table("/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/data/MD/7mer-4O5-GCHO.dat",
                    comment = "#",
                    col_names = c("angle", "a-b", "b-O", "a-6")) %>% 
   mutate(oligomer = "<b>G</b><sub>CHO</sub>")
 
-gchoh <- read_table("/home/leonard/Dropbox/2020_IRX manuscript/Submission/Plant Cell revised/Edits/lignin_MD/7mer-4O5-GCHOH.dat",
+gchoh <- read_table("/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/data/MD/7mer-4O5-GCHOH.dat",
                    comment = "#",
                    col_names = c("angle", "a-b", "b-O", "a-6")) %>% 
   mutate(oligomer = "<b>G</b><sub>CHOH</sub>")
-gchoha <- read_table("/home/leonard/Dropbox/2020_IRX manuscript/Submission/Plant Cell revised/Edits/lignin_MD/7mer-4O5-GCHOH-aOH.dat",
+
+gchoha <- read_table("/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/data/MD/7mer-4O5-GCHOH-aOH.dat",
                    comment = "#",
                    col_names = c("angle", "a-b", "b-O", "a-6")) %>% 
   mutate(oligomer = "<b>G</b><sub>CHOH</sub> with <sup>&alpha;</sup>C-OH")
 
-torsions <- bind_rows(gcho, gchoh, gchoha) %>% 
+schoha <- read_table("/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/data/MD/7mer-4O5-SCHOH-aOH.dat",
+                   comment = "#",
+                   col_names = c("angle", "a-b", "b-O", "a-6")) %>% 
+  mutate(oligomer = "<b>S</b><sub>CHOH</sub> with <sup>&alpha;</sup>C-OH")
+
+torsions <- bind_rows(gcho, gchoh, gchoha, schoha) %>% 
   pivot_longer(c("a-b", "b-O", "a-6"), names_to = "bond", values_to = "density") %>% 
   mutate(bond = ordered(recode(bond,
          "a-b" = "<sup>&alpha;</sup>C &mdash; <sup>&beta;</sup>C",
@@ -7254,8 +7256,8 @@ torsion_plot <- ggplot(
   geom_line(aes(linetype = oligomer),
     size = 0.5
   ) +
-  scale_colour_manual(values = pal_ostwald_disc[c(3, 1, 1)]) +
-  scale_linetype_manual(values = c(1, 1, 2)) +
+  scale_colour_manual(values = pal_ostwald_disc[c(3, 1, 1, 2)]) +
+  scale_linetype_manual(values = c(1, 1, 2, 2)) +
   scale_x_continuous(breaks = c(-180, -90, 0, 90, 180)) +
   labs(
     x = "Torsion angle [°]",
