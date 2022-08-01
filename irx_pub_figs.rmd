@@ -698,7 +698,7 @@ dev.off()
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
-#### import and tidy Raman data (computationally heavy, so done once and written to file) ####
+#### import and tidy Raman data (done once and written to file to save re-run time) ####
 # rmn_files <-
 #   list.files(
 #     path = paste0(datapath, "PhD/IRX/RAMAN/nuoendagula/"),
@@ -1170,12 +1170,12 @@ stat_tab <- rmn_adj %>%
   )
 
 kruskal_tab <- stat_tab$kruskal %>% 
-  add_column("variable" = "Adjacency to TEs [%]") %>% 
+  add_column("variable" = "Cell types adjacent to TEs [%]") %>% 
   distinct()
 write_csv(kruskal_tab, paste0(stat_path, "03B_kruskal.csv"))
 
 dunn_tab <- stat_tab$dunn %>% 
-  add_column("variable" = "Adjacency to TEs [%]") %>% 
+  add_column("variable" = "Cell types adjacent to TEs [%]") %>% 
   distinct()
 write_csv(dunn_tab, paste0(stat_path, "03B_dunn.csv"))
 
@@ -1870,8 +1870,9 @@ dev.off()
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 step_data <- rmn_irx %>%
-  filter(cell.type == "SMX") %>%
+  filter(cell.type == "SX") %>%
   select(convexity,
+         cellulose,
          # total_lignin,
          # P_rel,
          # G_rel,
@@ -1951,7 +1952,7 @@ summary(psem_px)
 plot(psem_px)
 ```
 
-### SEM for PMX
+### SEM for MX
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
 
@@ -1959,7 +1960,7 @@ psem_pmx <- psem(
   lm(Circ. ~
   n_v +
     convexity,
-  data = filter(drop_na(rmn_irx), cell.type == "PMX")
+  data = filter(drop_na(rmn_irx), cell.type == "MX")
   ),
   lm(convexity ~
   n_v +
@@ -1978,14 +1979,14 @@ psem_pmx <- psem(
     GCHO_rel +
     # total_lignin:mean.OD1 +
     total_lignin,
-  data = filter(drop_na(rmn_irx), cell.type == "PMX")
+  data = filter(drop_na(rmn_irx), cell.type == "MX")
   ),
-  data = filter(drop_na(rmn_irx), cell.type == "PMX")
+  data = filter(drop_na(rmn_irx), cell.type == "MX")
 )
 ind_claims <- ind_claims %>%
   bind_rows(summary(psem_pmx)[["dTable"]][, c(1, 4, 5)] %>%
     mutate(
-      model = "PMX",
+      model = "MX",
       species = "Arabidopsis",
       fishC = summary(psem_pmx)[["Cstat"]][["Fisher.C"]],
       fishP = summary(psem_pmx)[["Cstat"]][["P.Value"]]
@@ -1994,7 +1995,7 @@ ind_claims <- ind_claims %>%
 coefs <- coefs %>%
   bind_rows(summary(psem_pmx)[["coefficients"]][, c(1:8)] %>%
     mutate(
-      model = "PMX",
+      model = "MX",
       species = "Arabidopsis"
     ))
 plot(psem_pmx)
@@ -2009,7 +2010,7 @@ psem_smx <- psem(
   lm(Circ. ~
   # n_v +
   convexity,
-  data = filter(drop_na(rmn_irx), cell.type == "SMX")
+  data = filter(drop_na(rmn_irx), cell.type == "SX")
   ),
   lm(convexity ~
   # n_v +
@@ -2030,14 +2031,14 @@ psem_smx <- psem(
     # X1174 +
     # total_lignin:mean.OD1 +
     # total_lignin,
-  data = filter(drop_na(rmn_irx), cell.type == "SMX")
+  data = filter(drop_na(rmn_irx), cell.type == "SX")
   ),
-  data = filter(drop_na(rmn_irx), cell.type == "SMX")
+  data = filter(drop_na(rmn_irx), cell.type == "SX")
 )
 ind_claims <- ind_claims %>%
   bind_rows(summary(psem_smx)[["dTable"]][, c(1, 4, 5)] %>%
     mutate(
-      model = "SMX",
+      model = "SX",
       species = "Arabidopsis",
       fishC = summary(psem_smx)[["Cstat"]][["Fisher.C"]],
       fishP = summary(psem_smx)[["Cstat"]][["P.Value"]]
@@ -2046,7 +2047,7 @@ ind_claims <- ind_claims %>%
 coefs <- coefs %>%
   bind_rows(summary(psem_smx)[["coefficients"]][, c(1:8)] %>%
     mutate(
-      model = "SMX",
+      model = "SX",
       species = "Arabidopsis",
     ))
 plot(psem_smx)
@@ -2933,6 +2934,7 @@ wrap_elements(full = celltypes_WT) + rmn_nv +
 dev.off()
 
 ```
+
 ### Collapse 
 
 #### Visual vessel overview
@@ -3129,7 +3131,7 @@ model_pv_pop <- model_data_pop %>%
   drop_na()
 
 model_esv_pop <- model_data_pop %>%
-  filter(cell_type == "Early SV") %>%
+  filter(cell_type == "Old SV") %>%
   ungroup() %>%
   select(
     Solidity,
@@ -3154,7 +3156,7 @@ model_esv_pop <- model_data_pop %>%
   drop_na()
 
 model_rsv_pop <- model_data_pop %>%
-  filter(cell_type == "Recent SV") %>%
+  filter(cell_type == "Young SV") %>%
   ungroup() %>%
   select(
     Solidity,
@@ -3255,7 +3257,7 @@ summary(psem_pop)
 ```{r}
 
 psem_data_early <-  model_data_pop %>%
-  filter(cell_type == "Early SV") %>%
+  filter(cell_type == "Old SV") %>%
   ungroup() %>%
   select(
     Solidity,
@@ -3289,7 +3291,7 @@ psem_pop <- psem(
 ind_claims <- ind_claims %>%
   bind_rows(summary(psem_pop)[["dTable"]][, c(1, 4, 5)] %>%
     mutate(
-      model = "Early SV",
+      model = "Old SV",
       species = "Poplar",
       fishC = summary(psem_pop)[["Cstat"]][["Fisher.C"]],
       fishP = summary(psem_pop)[["Cstat"]][["P.Value"]]
@@ -3298,7 +3300,7 @@ ind_claims <- ind_claims %>%
 coefs <- coefs %>%
   bind_rows(summary(psem_pop)[["coefficients"]][, c(1:8)] %>%
     mutate(
-      model = "Old",
+      model = "Old SV",
       species = "Poplar"
     ))
 
@@ -3312,7 +3314,7 @@ summary(psem_pop)
 ```{r}
 
 psem_data_recent <-  model_data_pop %>%
-  filter(cell_type == "Recent SV") %>%
+  filter(cell_type == "Young SV") %>%
   ungroup() %>%
   select(
     Solidity,
@@ -3347,7 +3349,7 @@ psem_pop <- psem(
 ind_claims <- ind_claims %>%
   bind_rows(summary(psem_pop)[["dTable"]][, c(1, 4, 5)] %>%
     mutate(
-      model = "Recent SV",
+      model = "Young SV",
       species = "Poplar",
       fishC = summary(psem_pop)[["Cstat"]][["Fisher.C"]],
       fishP = summary(psem_pop)[["Cstat"]][["P.Value"]]
@@ -3356,7 +3358,7 @@ ind_claims <- ind_claims %>%
 coefs <- coefs %>%
   bind_rows(summary(psem_pop)[["coefficients"]][, c(1:8)] %>%
     mutate(
-      model = "Young",
+      model = "Young SV",
       species = "Poplar"
     ))
 
@@ -3510,7 +3512,7 @@ flex_violin <- function(x, dat = medium_data) {
   )
   
   x_figure = case_when(
-    x == "strength" ~ "S07",
+    x == "strength" ~ "S08",
     TRUE ~ "06"
   )
   
@@ -3922,7 +3924,7 @@ flex_violin <- function(x, dat = stiffness_complete) {
   )
   
   x_figure = case_when(
-    x == "max.stress" ~ "S07",
+    x == "max.stress" ~ "S08",
     TRUE ~ "06"
   )
   
@@ -4215,7 +4217,7 @@ patch +
 dev.off()
 ```
 
-## Drought experiment
+## [TODO] Drought experiment
 
 ### Rosette area
 
@@ -5310,13 +5312,13 @@ stat_tab <- rmn_irx_long %>%
     add_column("variable" = stat_tab$variable,
                "group" = stat_tab$cell.type) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S04A_anova", ".csv"))
+  write_csv(anova_tab, paste0(stat_path, "S04B_anova", ".csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column("variable" = stat_tab$variable,
                "group" = stat_tab$cell.type) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S04A_tukey", ".csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S04B_tukey", ".csv"))
 
 adj_TE <- ggplot(
   rmn_irx_long,
@@ -5482,12 +5484,12 @@ stat_tab <- rmn_irx_long %>%
   anova_tab <- stat_tab$kruskal %>% 
     add_column("variable" = stat_tab$variable) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S04B_kruskal", ".csv"))
+  write_csv(anova_tab, paste0(stat_path, "S04C_kruskal", ".csv"))
 
   tukey_tab <- stat_tab$dunn %>%
     add_column("variable" = stat_tab$variable) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S04B_dunn", ".csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S04C_dunn", ".csv"))
 
 rmn_irx_lig <- ggplot(
   rmn_irx_long,
@@ -6299,7 +6301,7 @@ curves_media <- ggplot(
 # dev.off()
 ```
 
-#### Hydration influence
+#### Hydration diameters
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 medium_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/WT_medium.csv")) %>%
@@ -6345,11 +6347,11 @@ stat_tab <- medium_data %>%
 
   anova_tab <- stat_tab$anova %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S09C_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S08C_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S09C_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S08C_tukey.csv"))
 
 medium_diameter_box <- ggplot(
   data = medium_data %>% filter(variable == "Stiffness"),
@@ -6416,7 +6418,7 @@ medium_diameter_box <- ggplot(
 medium_diameter_box
 ```
 
-#### Composition influence
+#### Composition diameters
 
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 s_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/stiffness_s.csv")) %>%
@@ -6470,11 +6472,11 @@ stat_tab <- s_data %>%
 
   anova_tab <- stat_tab$anova %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S09G_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S08F_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S09G_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S08F_tukey.csv"))
 
 
 mutant_diameter_box <- ggplot(
@@ -6619,12 +6621,12 @@ stat_tab <- biochem_data %>%
   anova_tab <- stat_tab$anova %>% 
     add_column("variable" = stat_tab$variable) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S07G_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S08G_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column("variable" = stat_tab$variable) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S07G_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S08G_tukey.csv"))
 
 biochem_plot <- ggplot(
   biochem_data,
@@ -6718,7 +6720,7 @@ patch +
 dev.off()
 ```
 
-### Drought experiment
+### [TODO] Drought experiment
 
 #### Conditions
 
@@ -6996,12 +6998,12 @@ stat_tab <- casp_cells %>%
   anova_tab <- stat_tab$anova %>% 
     mutate(variable = "cells to intact endodermis") %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S08B_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S09B_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     mutate(variable = "cells to intact endodermis") %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S08B_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S09B_tukey.csv"))
 
 casp_plot <- ggplot(
     data = casp_cells,
@@ -7378,8 +7380,10 @@ ggplot(stat_table,
 ```{r}
 # EDS ####
 eds_data
+
 # EM ####
 em_data
+
 # AFM ####
 afm_data <- read_csv(paste0(datapath, "PhD/IRX/AFM/afm_PX.csv")) %>%
   tidyr::fill(everything()) %>%
@@ -7400,6 +7404,7 @@ afm_data <- read_csv(paste0(datapath, "PhD/IRX/AFM/afm_PX.csv")) %>%
          "ratio_deformation" = 12,
          "ratio_adhesion" = 13,
          -c(14:16))
+
 # Arabidopsis collapse model data ####
 At_model_data <- rmn_irx %>% 
   select(
@@ -7415,6 +7420,7 @@ At_model_data <- rmn_irx %>%
     "G-CHO_term/G-CHO_tot" = GCHO_term.GCHO_tot,
     "G-CHO/G-CHOH" = GCHO.GOH
   )
+
 # Poplar collapse model data ####
 Pt_model_data <- model_data_pop %>% 
   select(
@@ -7437,6 +7443,7 @@ Pt_model_data <- model_data_pop %>%
     "G-CHO_term/G-CHO_tot" = GCHO_term.GCHO_tot,
     "G-CHO/G-CHOH" = GCHO.GOH
   )
+
 # Three-point bending turgor ####
 bending_turgor <- medium_data %>% 
   pivot_wider(names_from = variable, values_from = value) %>% 
@@ -7449,6 +7456,7 @@ bending_turgor <- medium_data %>%
   pivot_wider(names_from = variable, values_from = value) %>% 
   select(-who_knows) %>% 
   rename("flexibility" = "break_point")
+
 # Three-point bending mutants ####
 bending_mutants <- stiffness_complete %>% 
   pivot_wider(names_from = variable, values_from = value) %>% 
@@ -7457,16 +7465,19 @@ breaking_mutants <- bending_pre %>%
   ungroup() %>% 
   pivot_wider(names_from = variable, values_from = value) %>% 
   select(genotype, break_point, strength)
+
 # Mutant biochemistry ####
 biochem_data_clean <- biochem_data %>% 
   rowwise() %>% 
   mutate(variable = str_remove_all(strip_html(variable), fixed("*")))
+
 # Cells to intact casparian strip
 casp_cell_size <- read_csv(paste0(datapath, "PhD/IRX/Casparian_strip/cells_from_elongation.csv")) %>%
   drop_na(cell) %>% 
   mutate(size = size / 2.4089) %>% # pixel dimension
   separate(file, into = c("genotype", "replicate")) %>% 
   mutate(genotype = ordered(genotype, levels = c("WT", "fah1", "cad4x5")))
+
 # Drought rosette area ####
 rosettes <- read_csv(paste0(datapath, "PhD/IRX/Drought/drought_area.csv")) %>%
   mutate(
@@ -7482,6 +7493,7 @@ rosettes <- read_csv(paste0(datapath, "PhD/IRX/Drought/drought_area.csv")) %>%
     ),
     levels = c("Water", "10% PEG", "20% PEG")
     ))
+
 # Drought evapotranspiration ####
 transpiration <- read_csv(
   paste0(datapath, "PhD/IRX/Drought/evapotranspiration.csv")
@@ -7499,6 +7511,7 @@ transpiration <- read_csv(
     transp_rate = transp_rate * 1000
   ) %>% 
   select(-plant)
+
 # Drought recovery ####
 recovery_data <- read_csv(paste0(datapath, "PhD/IRX/Drought/recovery.csv")) %>%
   mutate(
@@ -7509,6 +7522,7 @@ recovery_data <- read_csv(paste0(datapath, "PhD/IRX/Drought/recovery.csv")) %>%
   mutate(sum = sum(count)) %>%
   group_by(genotype, medium, state) %>%
   mutate(proportion = (count / sum) * 100)
+
 # Hypocotyl collapse
 hyp_data <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/hypocotyl_collapse.csv") %>% 
   separate(Sample, into = c("condition", "genotype", "bleh", "blah", "replicate"), sep = " ") %>% 
