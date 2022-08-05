@@ -6434,7 +6434,6 @@ dev.off()
 ### CC violins
 
 ```{r}
-
 letters_tech <- letter_groups(CC_data %>% filter(layer == "CC"),
                          scaled_CML,
                          genotype,
@@ -6850,12 +6849,193 @@ CC_profiles / CC_plot +
 dev.off()
 ```
 
-## Supplementary figure
+## Supplementary figures
+
+### Full profiles
 
 ```{r}
 pdf("CC_figure_supp.pdf", width = twocol * 0.6, height = onecol * 1.5)
 layer_plot + CC_profiles_full +
   plot_layout(widths = c(1,2))
+dev.off()
+```
+
+### Validation of magnification
+
+#### Load data
+
+```{r}
+mag_files <-
+  list.files(
+    path = c(paste0(datapath, "PhD/UV-autofluorescence/William/Qmutants/")),
+    pattern = "*.csv",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+
+read_profiles <- function(x) {
+  read_csv(x, show_col_types = FALSE) %>%
+    mutate(filename = basename(x),
+           genotype = case_when(str_detect(filename, "q_") ~ "<i>Q</i>",
+                                TRUE ~ WT),
+           genotype = ordered(genotype, levels = c("WT", "<i>Q</i>")),
+           magnification = case_when(str_detect(filename, "10x") ~ "10x",
+                                     str_detect(filename, "20x") ~ "20x",
+                                     TRUE ~ "40x")) %>% 
+    select(-filename) %>% 
+    pivot_longer(-c("genotype", "magnification"), names_to = "ROI", values_to = "value") %>%
+    mutate(ROI = str_remove(ROI, "Roi_"))
+}
+
+mag_data <- map_dfr(mag_files, read_profiles) %>% 
+  group_by(genotype, magnification, ROI) %>% 
+  mutate(
+    pixel = row_number(),
+    CC = median(pixel),
+    position = pixel - CC,
+    scaled = (value - min(value)) / (max(value) - min(value)),
+    layer = case_when(position < -29 & position > -41 ~ "CML",
+                      position > 14 & position < 26 ~ "SCW",
+                      position > -6 & position < 6 ~ "CC"),
+    layer = ordered(layer, levels = c("CML", "CC", "SCW")),
+    mean_CML = mean(value[layer == "CML"], na.rm = TRUE),
+    scaled_CML = value / mean_CML
+  )
+
+mag_diff <- mag_data %>% 
+  filter(layer == "CC") %>% 
+  group_by(genotype, magnification) %>% 
+  summarise(mean_scaled_CML = mean(scaled_CML))
+
+mag_diff$position <- c(2.5, 2.7, 2.5, 2.5, 2, 2)
+```
+
+#### Plot profiles
+
+```{r}
+CC_profiles <- ggplot(mag_data,
+       aes(x = position,
+           y = scaled_CML,
+           colour = genotype)) +
+  annotate("rect",
+           ymin = -Inf,
+           ymax = Inf,
+           xmin = c(-40, -4, 15),
+           xmax = c(-30, 4, 25),
+           fill = "grey95") +
+  geom_line(aes(group = interaction(genotype, ROI)),
+                size = 0.2,
+                alpha = 0.5) +
+  geom_smooth(method = "loess",
+              span = 0.2,
+              se = FALSE) +
+  labs(y = "Autofluorescence normalised to CML",
+       x = "Cell wall layer") +
+  scale_x_continuous(breaks = c(-35, 0, 20),
+                     labels = c("CML", "CC", "SCW"),
+                     limits = c(-44, 44)) +
+  scale_colour_manual(values = pal_dawn[c(1, 7)]) +
+  theme_leo() +
+  theme(legend.position = c(0.85, 0.95),
+        legend.text = element_markdown(),
+        legend.title = element_blank(),
+        axis.title.y = element_textbox_simple(valign = 0.5,
+                                              halign = 0.5,
+                                              orientation = "left-rotated")
+        # axis.title.x = element_blank(),
+        # axis.text.x = element_blank(),
+        # axis.ticks.x = element_blank()
+  ) +
+  facet_wrap(~magnification, ncol = 1)
+# plotly::ggplotly(CC_profiles)
+pdf("mag_plot.pdf", width = onecol, height = onecol)
+CC_profiles
+dev.off()
+```
+
+#### Magnification violins
+
+```{r}
+mag_plot <- ggplot(
+  mag_data %>% filter(layer == "CC"),
+  aes(
+    x = genotype,
+    y = scaled_CML
+  )
+) +
+  geom_hline(yintercept = 1,
+             size = 0.2,
+             linetype = 2) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.25,
+    size = 0.5,
+    width = 0.5
+  ) +
+  annotate("text",
+           label = " CML",
+           x = 0,
+           y = 0.95,
+           hjust = 0,
+           vjust = 1,
+           family = "Helvetica",
+           size = ggtext_size
+           ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  # geom_point(data = CC_data_avg %>% filter(layer == "CC"),
+  #            shape = 21,
+  #            fill = "white",
+  #            stroke = 0.2,
+  #            size = 2,
+  #            alpha = 1) +
+  geom_text(
+    data = mag_diff,
+    aes(label = paste0(round(mean_scaled_CML * 100, digits = 0), "%"),
+        y = position),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "CC autofluorescence normalised to CML") +
+  scale_fill_manual(values = pal_dawn[c(1, 7)]) +
+  # scale_y_continuous(breaks = c(0.5, 0.75, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(valign = 0.5,
+                                              halign = 0.5,
+                                              orientation = "left-rotated"),
+    # axis.title.y = element_textbox_simple(
+    #   orientation = "left-rotated",
+    #   halign = 0.5,
+    #   width = unit(25, "mm")
+    # ),
+    axis.text.x = element_markdown(),
+    # strip.placement = "outside"
+  ) +
+  facet_wrap(~magnification, ncol = 1)
+
+pdf("mag_violins.pdf", width = onecol, height = onecol * 0.5)
+mag_plot
+dev.off()
+```
+
+#### Assemble figure
+
+```{r}
+pdf("mag_validation.pdf", width = onecol, height = onecol)
+CC_profiles + mag_plot +
+  plot_layout(widths = c(2,1))
 dev.off()
 ```
 

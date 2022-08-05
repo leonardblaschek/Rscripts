@@ -619,6 +619,10 @@ em_data <- read_csv(paste0(datapath, "PhD/IRX/EM/AD_collapse.csv")) %>%
   group_by(experiment, treatment, days, cell.type, state) %>%
   mutate(proportion = (count / sum) * 100)
 
+n_em <- em_data %>% 
+  group_by(experiment, treatment, days, cell.type) %>% 
+  summarise(n = sum(count))
+
 #### calculate error bars for stacked bar plots ####
 em_data_avg <- em_data %>%
   group_by(treatment, days, cell.type, state) %>%
@@ -4217,68 +4221,66 @@ patch +
 dev.off()
 ```
 
-## [TODO] Drought experiment
+## Drought experiment
 
 ### Rosette area
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-rosettes <- read_csv(paste0(datapath, "PhD/IRX/Drought/drought_area.csv")) %>%
+rosettes <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/data/drought/drought_leaf_area.csv") %>%
   mutate(
-    image = str_remove(image, fixed(".JPG")),
-    mean_hue = (mean_hue / 255) * 360
-  ) %>%
-  separate(image, c("genotype", "medium", "replicate"), sep = "-") %>%
-  mutate(
-    medium = ordered(recode(medium,
-      "0%" = "Water",
-      "10%" = "10% PEG",
-      "20%" = "20% PEG"
-    ),
-    levels = c("Water", "10% PEG", "20% PEG")
-    ),
-    genotype = ordered(recode(genotype, "cad4x5" = "<i>cad4</i>x<i>5</i>"),
-                       levels = c("WT", "<i>cad4</i>x<i>5</i>"))
+    medium = ordered(medium, levels = c("Water", "10% PEG", "20% PEG")),
+    genotype = ordered(genotype,
+                       levels = c("WT", "<i>fah1</i>", "<i>cad4</i>x<i>5</i>", "<i>cad4</i>x<i>5</i>x<br><i>fah1</i>")),
+    during_rel = (during / before * 100) - 100,
+    after_rel = (after / before * 100) - 100
   )
+  # filter(medium != "Water")
+  # select(genotype, replicate, medium, during_rel, after_rel) %>% 
+  # pivot_longer(c(during_rel, after_rel), names_to = "timepoint", values_to = "rel_area")
 
 letters <- letter_groups(rosettes,
-  area,
-  medium,
-  "tukey",
+  after_rel,
   genotype,
+  "tukey",
+  medium,
   print_position = "below"
 )
 
-stat_tab <- rosettes %>% 
-  rowwise() %>% 
-  mutate(genotype = strip_html(genotype)) %>% 
-  group_by(genotype, medium) %>% 
+stat_tab <- rosettes %>%
+  rowwise() %>%
+  mutate(genotype = strip_html(genotype)) %>%
+  group_by(genotype, medium) %>%
   mutate(
     "n" = n(),
-    medium = paste0(medium, " (n = ", n, ")")
+    genotype = paste0(genotype, " (n = ", n, ")")
   ) %>%
   letter_groups(.,
-    area,
-    medium,
-    "tukey",
+    after_rel,
     genotype,
+    "tukey",
+    medium,
     table = TRUE
   )
 
-  anova_tab <- stat_tab$anova %>% 
-    add_column("variable" = stat_tab$genotype) %>% 
+  anova_tab <- stat_tab$anova %>%
+    add_column(
+      "variable" = "relative change in rosette area",
+      "group" = stat_tab$medium) %>%
     distinct()
   write_csv(anova_tab, paste0(stat_path, "07B_anova", ".csv"))
 
   tukey_tab <- stat_tab$tukey %>%
-    add_column("variable" = stat_tab$genotype) %>% 
+    add_column(
+      "variable" = "relative change in rosette area",
+      "group" = stat_tab$medium) %>%
     distinct()
   write_csv(tukey_tab, paste0(stat_path, "07B_tukey", ".csv"))
 
 area_medium <- ggplot(
   rosettes,
   aes(
-    x = medium,
-    y = area
+    x = genotype,
+    y = after_rel
   )
 ) +
   geom_quasirandom(
@@ -4291,7 +4293,7 @@ area_medium <- ggplot(
     stroke = 0.2
   ) +
   geom_violin(aes(
-    group = medium,
+    group = genotype,
   ),
   draw_quantiles = 0.5,
   fill = "white",
@@ -4304,40 +4306,36 @@ area_medium <- ggplot(
   ) +
   geom_text(
     data = letters,
-    aes(
-      label = Letters,
-      y = area,
-    ),
+    aes(label = Letters),
     size = ggtext_size,
-    family = "Helvetica",
-    lineheight = 0.75,
+    family = "Helvetica"
   ) +
-  scale_fill_manual(values = pal_ostwald_disc[c(1, 3)]) +
-  scale_colour_manual(values = pal_ostwald_disc[c(1, 3)]) +
-  scale_x_discrete(labels = function(x) str_wrap(x, width = 6)) +
-  expand_limits(y = 0) +
-  labs(y = "Rosette area [cm<sup>2</sup>]") +
+  scale_fill_manual(values = pal_ostwald_disc[c(1, 3, 3, 3)]) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1, 3, 3 ,3)]) +
+  # scale_x_discrete(labels = function(x) str_wrap(x, width = 6)) +
+  # expand_limits(y = 0) +
+  labs(y = "Relative change in rosette area [%]") +
   theme_leo() +
   theme(
     axis.title.x = element_blank(),
-    axis.title.y = ggtext::element_textbox_simple(
+    axis.title.y = element_textbox_simple(
       orientation = "left-rotated",
       halign = 0.5
     ),
-    axis.text.x = element_text(vjust = 1),
-    strip.text = ggtext::element_markdown()
+    axis.text.x = element_markdown(vjust = 1),
+    strip.text = element_markdown()
   ) +
-  facet_wrap(~genotype)
+  facet_wrap(~ medium, ncol = 1)
 
 pdf("area_facet.pdf", width = onecol, height = onecol)
 area_medium
 dev.off()
 
-fold_change <- rosettes %>%
-  group_by(genotype, medium) %>%
-  summarise(area = median(area)) %>%
-  group_by(genotype) %>%
-  mutate(area = area / area[medium == "Water"])
+# fold_change <- rosettes %>%
+#   group_by(genotype, medium) %>%
+#   summarise(area = median(area)) %>%
+#   group_by(genotype) %>%
+#   mutate(area = area / area[medium == "Water"])
   
 ```
 
@@ -4350,66 +4348,82 @@ transpiration <- read_csv(
   pivot_longer(-c(medium, time), names_to = "plant", values_to = "transp_rate") %>%
   mutate(
     genotype = unlist(str_extract_all(plant, "[:alpha:]+")),
-    genotype = ordered(recode(genotype, "CAD" = "<i>cad4</i>x<i>5</i>"),
-      levels = c("WT", "<i>cad4</i>x<i>5</i>")
-    ),
+    genotype = recode(genotype, "CAD" = "<i>cad4</i>x<i>5</i>"),
     replicate = unlist(str_extract_all(plant, "[:digit:]+")),
+    transp_rate = transp_rate * 1000,
+    instance = "1"
+  ) %>%
+  select(-plant) %>%
+  bind_rows(read_csv(
+    "/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/data/drought/drought_evapotrans.csv",
+    col_types = "ccccnn")) %>%
+  filter(time < 10) %>%
+  unite("replicate", instance, replicate) %>%
+  mutate(
     medium = ordered(medium,
       levels = c("Water", "10% PEG", "20% PEG")
     ),
-    transp_rate = transp_rate * 1000
-  ) %>%
-  select(-plant) %>%
-  left_join(rosettes)
+    genotype = ordered(genotype,
+      levels = c("WT", "<i>fah1</i>", "<i>cad4</i>x<i>5</i>", "<i>cad4</i>x<i>5</i>x<br><i>fah1</i>")
+    )
+  ) %>% 
+  left_join(rosettes %>% mutate(replicate = paste0("2_", replicate))) %>% 
+  mutate(rel_transp = transp_rate / before)
 
 transpiration_avg <- transpiration %>%
   group_by(genotype, replicate, medium) %>%
-  summarise(mean_transp = mean(transp_rate, na.rm = TRUE))
+  summarise(mean_transp = mean(transp_rate, na.rm = TRUE),
+            mean_rel_transp = mean(rel_transp, na.rm = TRUE)) %>% 
+  drop_na(mean_rel_transp)
 
 letters <- letter_groups(transpiration_avg,
-  mean_transp,
-  medium,
-  "tukey",
+  mean_rel_transp,
   genotype,
+  "tukey",
+  medium,
   print_position = "below",
   print_adjust = 3
-) %>%
-  mutate(mean_transp = case_when(
-    genotype == "WT" ~ mean_transp + 1,
-    TRUE ~ mean_transp
-  ))
+)
+  # mutate(mean_transp = case_when(
+  #   genotype == "WT" ~ mean_transp + 1,
+  #   TRUE ~ mean_transp
+  # ))
 
-stat_tab <- transpiration_avg %>% 
-  rowwise() %>% 
-  mutate(genotype = strip_html(genotype)) %>% 
-  group_by(genotype, medium) %>% 
+stat_tab <- transpiration_avg %>%
+  rowwise() %>%
+  mutate(genotype = strip_html(genotype)) %>%
+  group_by(genotype, medium) %>%
   mutate(
     "n" = n(),
-    medium = paste0(medium, " (n = ", n, ")")
+    genotype = paste0(genotype, " (n = ", n, ")")
   ) %>%
   letter_groups(.,
     mean_transp,
-    medium,
-    "tukey",
     genotype,
+    "tukey",
+    medium,
     table = TRUE
   )
 
-  anova_tab <- stat_tab$anova %>% 
-    add_column("variable" = stat_tab$genotype) %>% 
+  anova_tab <- stat_tab$anova %>%
+    add_column(
+      "variable" = "evapotranspiration rate per cm² projected leaf area",
+      "group" = stat_tab$medium) %>%
     distinct()
   write_csv(anova_tab, paste0(stat_path, "07C_anova", ".csv"))
 
   tukey_tab <- stat_tab$tukey %>%
-    add_column("variable" = stat_tab$genotype) %>% 
+    add_column(
+      "variable" = "evapotranspiration rate per cm² projected leaf area",
+      "group" = stat_tab$medium) %>%
     distinct()
   write_csv(tukey_tab, paste0(stat_path, "07C_tukey", ".csv"))
 
 transpiration_medium <- ggplot(
   transpiration,
   aes(
-    x = medium,
-    y = transp_rate
+    x = genotype,
+    y = rel_transp
   )
 ) +
   geom_quasirandom(
@@ -4425,7 +4439,7 @@ transpiration_medium <- ggplot(
   geom_quasirandom(
     data = transpiration_avg,
     aes(
-      y = mean_transp,
+      y = mean_rel_transp,
       fill = genotype
     ),
     dodge.width = 0.6,
@@ -4437,7 +4451,7 @@ transpiration_medium <- ggplot(
     stroke = 0.2
   ) +
   geom_violin(aes(
-    group = medium,
+    group = genotype,
     # fill = cell.type
   ),
   draw_quantiles = 0.5,
@@ -4453,30 +4467,31 @@ transpiration_medium <- ggplot(
     data = letters,
     aes(
       label = Letters,
-      y = mean_transp,
+      y = mean_rel_transp,
     ),
     size = ggtext_size,
     family = "Helvetica",
     lineheight = 0.75
   ) +
-  scale_fill_manual(values = pal_ostwald_disc[c(1, 3)]) +
-  scale_colour_manual(values = pal_ostwald_disc[c(1, 3)]) +
-  scale_x_discrete(labels = function(x) str_wrap(x, width = 6)) +
+  scale_fill_manual(values = pal_ostwald_disc[c(1, 3, 3, 3)]) +
+  scale_colour_manual(values = pal_ostwald_disc[c(1, 3, 3, 3)]) +
+  # scale_x_discrete(labels = function(x) str_wrap(x, width = 6)) +
   expand_limits(y = 0) +
-  labs(y = "Evapotranspiration [mg min<sup>-1</sup>]") +
+  labs(y = "Evapotranspiration [mg / min cm<sup>2</sup>]") +
   theme_leo() +
   theme(
     axis.title.x = element_blank(),
-    axis.title.y = ggtext::element_textbox_simple(
+    axis.title.y = element_textbox_simple(
       orientation = "left-rotated",
       halign = 0.5
     ),
-    axis.text.x = element_text(vjust = 1),
-    strip.text = ggtext::element_markdown()
+    axis.text.x = element_markdown(vjust = 1),
+    strip.text = element_markdown()
   ) +
-  facet_wrap(~genotype)
+  facet_wrap(~medium, ncol = 1)
 
-pdf("transpiration_facet.pdf", width = onecol, height = onecol * 0.25)
+
+pdf("transpiration_facet.pdf", width = onecol, height = onecol * 0.5)
 transpiration_medium
 dev.off()
 
@@ -4491,20 +4506,102 @@ fold_change <- transpiration_avg %>%
 ### Drought recovery
 
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-recovery_data <- read_csv(paste0(datapath, "PhD/IRX/Drought/recovery.csv")) %>%
+recovery_data <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/data/drought/drought_recovery.csv") %>%
   mutate(
     state = ordered(state, levels = rev(c("Recovered", "Partly recovered", "Dead"))),
     medium = ordered(medium, levels = c("Water", "10% PEG", "20% PEG")),
-    genotype = ordered(recode(genotype, "cad4x5" = "<i>cad4</i>x<i>5</i>"),
-                       levels = c("WT", "<i>cad4</i>x<i>5</i>"))
+    genotype = ordered(recode(genotype,
+      "cad4x5" = "<i>cad4</i>x<i>5</i>",
+      "fah1" = "<i>fah1</i>",
+      "cad4x5xfah1" = "<i>cad4</i>x<i>5</i>x<br><i>fah1</i>"
+    ),
+    levels = c("WT", "<i>fah1</i>", "<i>cad4</i>x<i>5</i>", "<i>cad4</i>x<i>5</i>x<br><i>fah1</i>")
+    )
   ) %>%
-  group_by(genotype, medium) %>%
+  filter(medium != "Water") %>%
+  group_by(genotype, medium, replicate) %>%
   mutate(sum = sum(count)) %>%
-  group_by(genotype, medium, state) %>%
+  group_by(genotype, medium, replicate, state) %>%
   mutate(proportion = (count / sum) * 100)
 
-recovery_collapse <- ggplot(recovery_data, aes(
-  x = medium,
+recovery_n <- recovery_data %>% 
+  group_by(genotype, medium) %>% 
+  summarise(n = sum(count))
+
+recovery_avg <- recovery_data %>% 
+  group_by(genotype, medium, state) %>%
+  summarise(
+    sd = sd(proportion),
+    proportion = mean(proportion)
+  ) %>% 
+  group_by(genotype, medium) %>%
+  mutate(
+    ymin = case_when(
+      state == "Partly recovered" ~ proportion[state == "Recovered"] +
+        proportion[state == "Partly recovered"] - sd,
+      state == "Dead" ~ NaN,
+      state == "Recovered" ~ proportion - sd
+    ),
+    ymax = case_when(
+      state == "Partly recovered" ~ proportion[state == "Recovered"] +
+        proportion[state == "Partly recovered"] + sd,
+      state == "Dead" ~ NaN,
+      state == "Recovered" ~ proportion + sd
+    )
+  )
+
+letters <- recovery_data %>%
+  select(-c(count, sum)) %>%
+  pivot_wider(names_from = state, values_from = proportion) %>%
+  summarise(proportion = Recovered + `Partly recovered`,
+            state = "Recovered") %>%
+  letter_groups(.,
+                proportion,
+                genotype,
+                "tukey",
+                medium,
+                state,
+                print_position = -7)
+
+stat_tab <- recovery_data %>%
+  select(-c(count, sum)) %>%
+  pivot_wider(names_from = state, values_from = proportion) %>%
+  summarise(proportion = Recovered + `Partly recovered`,
+            state = "Recovered") %>% 
+  rowwise() %>%
+  mutate(genotype = strip_html(genotype)) %>%
+  group_by(genotype, medium) %>%
+  mutate(
+    "n" = n(),
+    genotype = paste0(genotype, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    proportion,
+    genotype,
+    "tukey",
+    medium,
+    table = TRUE
+  )
+
+  anova_tab <- stat_tab$anova %>%
+    add_column(
+      "variable" = "proportion of plants that recovered at least partly",
+      "group" = stat_tab$medium
+      ) %>%
+    distinct()
+  write_csv(anova_tab, paste0(stat_path, "07D_anova", ".csv"))
+
+  tukey_tab <- stat_tab$tukey %>%
+    add_column(
+      "variable" = "proportion of plants that recovered at least partly",
+      "group" = stat_tab$medium
+      ) %>%
+    distinct()
+  write_csv(tukey_tab, paste0(stat_path, "07D_tukey", ".csv"))
+
+
+recovery_collapse <- ggplot(recovery_avg, aes(
+  x = genotype,
   y = proportion,
   fill = state
 )) +
@@ -4512,44 +4609,200 @@ recovery_collapse <- ggplot(recovery_data, aes(
     alpha = 0.85,
     width = 0.6
   ) +
+  geom_errorbar(aes(
+      ymin = ymin,
+      ymax = ymax
+    ),
+    width = 0.1,
+    size = 0.2
+    ) +
+  annotate("rect",
+           xmin = -Inf,
+           xmax = Inf,
+           ymin = c(-1),
+           ymax = c(-15),
+           fill = "grey95") +
+  geom_text(data = letters,
+            aes(label = Letters),
+            family = "Helvetica",
+            size = ggtext_size) + 
   scale_fill_manual(values = rev(pal_ostwald_disc)) +
-  scale_x_discrete(labels = function(x) str_wrap(x, width = 6)) +
+  # scale_x_discrete(labels = function(x) str_wrap(x, width = 6)) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.01))) +
   theme_leo() +
   labs(
     y = "Recovery after treatment [%]"
   ) +
-  facet_wrap(~genotype, nrow = 1) +
   theme(
     legend.position = "bottom",
     legend.title = element_blank(),
     axis.title.x = element_blank(),
-    axis.title.y = ggtext::element_textbox_simple(
+    axis.title.y = element_textbox_simple(
       orientation = "left-rotated",
       halign = 0.5,
       width = grid::unit(1.1, "npc")
     ),
-    axis.text.x = element_text(vjust = 1),
-    strip.text = ggtext::element_markdown(),
+    axis.text.x = element_markdown(vjust = 1),
+    strip.text = element_markdown(),
     legend.key.height = unit(2, "mm"),
     legend.key.width = unit(2, "mm"),
     legend.spacing = unit(c(0, 0, 0, 0), "mm"),
     plot.margin = unit(c(0.5, 6, 0.5, 6), "pt")
   ) +
-  coord_cartesian(ylim = c(0, 100))
+  coord_cartesian(ylim = c(-10, 100)) +
+  facet_wrap(~medium, ncol = 1)
 
-pdf("recovery.pdf", width = onecol, height = onecol * 0.5)
+pdf("recovery.pdf", width = onecol * 0.5, height = onecol * 0.5)
 recovery_collapse
 dev.off()
 ```
 
+### Hypocotyl collapse
+
+#### Load data
+
+```{r}
+hyp_data <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/hypocotyl_collapse.csv") %>% 
+  separate(Sample, into = c("condition", "genotype", "bleh", "blah", "replicate"), sep = " ") %>% 
+  select(genotype, condition, replicate, Solidity) %>% 
+  mutate(genotype = recode(genotype,
+                           "cad45" = "<i>cad4</i>x<i>5</i>"),
+         genotype = ordered(genotype, levels = c("WT", "<i>cad4</i>x<i>5</i>")),
+         condition = ordered(recode(condition, "0%" = "Water", "10%" = "10% PEG", "20%" = "20% PEG"),
+         levels = rev(c("Water", "10% PEG", "20% PEG")))
+  )
+
+hyp_avg <- hyp_data %>% 
+  group_by(genotype, condition, replicate) %>% 
+  summarise(Solidity = median(Solidity))
+```
+
+#### Plot distributions
+
+```{r}
+letters <- hyp_avg %>%
+  unite("ID", genotype, condition) %>%
+  letter_groups(.,
+    Solidity,
+    ID,
+    "tukey",
+    print_position = 0.8
+  ) %>%
+  separate(ID, into = c("genotype", "condition"), sep = "_")
+
+stat_tab <- hyp_avg %>% 
+  rowwise() %>% 
+  mutate(genotype = strip_html(genotype)) %>% 
+  unite("ID", genotype, condition) %>%
+  group_by(ID) %>%
+  mutate(
+    "n" = n(),
+    ID = paste0(ID, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    Solidity,
+    ID,
+    "tukey",
+    table = TRUE
+  )
+
+  anova_tab <- stat_tab$anova %>% 
+    mutate(variable = "Convexity") %>% 
+    distinct()
+  write_csv(anova_tab, paste0(stat_path, "07E_anova.csv"))
+
+  tukey_tab <- stat_tab$tukey %>%
+    mutate(variable = "Convexity") %>% 
+    distinct()
+  write_csv(tukey_tab, paste0(stat_path, "07E_tukey.csv"))
+
+hyp_dist <- ggplot(hyp_data, aes(x = Solidity)) +
+  geom_density_ridges(data = hyp_data %>% filter(genotype == "WT"),
+                      aes(y = condition, fill = genotype), 
+                      colour = "white",
+                      size = 0.2,
+                      quantile_lines = TRUE,
+                      quantiles = 2,
+                      scale = 0.5) +
+  geom_density_ridges(data = hyp_data %>% filter(genotype == "<i>cad4</i>x<i>5</i>"),
+                      aes(y = condition, fill = genotype), 
+                      colour = "white",
+                      size = 0.2,
+                      quantile_lines = TRUE,
+                      quantiles = 2,
+                      scale = -0.5) +
+  geom_hline(yintercept = c(1, 2, 3),
+              colour = "white",
+             size = 0.2) +
+  geom_point(data = hyp_avg %>% filter(genotype == "WT"),
+             aes(y = condition, fill = genotype),
+             colour = "white",
+             position = position_nudge(x = 0, y = 0.1),
+             shape = 21,
+             size = 1,
+             stroke = 0.2) +
+  geom_point(data = hyp_avg %>% filter(genotype == "<i>cad4</i>x<i>5</i>"),
+             aes(y = condition, fill = genotype),
+             colour = "white",
+             position = position_nudge(x = 0, y = -0.1),
+             shape = 21,
+             size = 1,
+             stroke = 0.2) +
+  annotate("richtext",
+           label = c("WT", "<i>cad4</i>x<i>5</i>"),
+           x = 0.86,
+           y = c(3.1, 2.9),
+           colour = pal_ostwald_disc[c(1,3)],
+           hjust = 0,
+           vjust = 0.5,
+           label.size = NA,
+           fill = NA,
+           size = ggtext_size,
+           family = "Helvetica") +
+  geom_text(data = letters %>% filter(genotype == "WT"),
+            aes(label = Letters,
+                y = condition),
+            size = ggtext_size,
+            family = "Helvetica",
+            vjust = -0.5) +
+  geom_text(data = letters %>% filter(genotype == "<i>cad4</i>x<i>5</i>"),
+            aes(label = Letters,
+                y = condition),
+            size = ggtext_size,
+            family = "Helvetica",
+            vjust = 1.25) +
+  labs(x = "Convexity of hypocotyl TEs",
+       y = "PEG treatment") +
+  scale_colour_manual(values = pal_ostwald_disc[c(3,1)], aesthetics = "fill") +
+  scale_x_continuous(limits = c(0.75, 1), breaks = c(0.8, 0.9, 1)) +
+  theme_leo() +
+  theme(strip.text = element_markdown(),
+        axis.title.y = element_blank()) 
+  # facet_wrap(~ genotype)
+
+hyp_dist
+
+pdf("hyp_collapse.pdf", width = onecol * 0.5, height = onecol * 0.5)
+hyp_dist
+dev.off()
+```
+
+
 ### Assemble figure
 ```{r, fig.showtext = TRUE, out.width = '100%', message = FALSE, eval = TRUE, echo = FALSE}
-patch <- area_medium + transpiration_medium + recovery_collapse
+patch <- area_medium + transpiration_medium + recovery_collapse + hyp_dist
 
-pdf("IRX_Figure6.pdf", width = onecol * 0.5, height = onecol * 1)
-patch + plot_layout(ncol = 1) &
+layout = "
+AAABBB
+CCCDDD
+"
+
+pdf("drought_panel.pdf", width = onecol * 1.1, height = onecol * 1.1)
+patch + 
+  plot_layout(design = layout) &
   plot_annotation(
-    theme = theme(plot.margin = margin(0, -2, 0, -2))
+    tag_levels = list(c("B", "C", "D", "E")),
+    theme = theme(plot.margin = margin(-3.5, -2, -2, -6.5))
   ) &
   theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
@@ -4741,7 +4994,7 @@ find_interactions <- function(x) {
   best_model
 }
 
-best_model <- find_interactions("PMX")
+best_model <- find_interactions("MX")
 
 pmx_interactions <- tidy(best_model) %>%
     filter(str_detect(term, fixed(":")) & 
@@ -4815,7 +5068,7 @@ find_interactions <- function(x) {
   best_model
 }
 
-best_model <- find_interactions("SMX")
+best_model <- find_interactions("SX")
 
 smx_interactions <- tidy(best_model) %>%
     filter(str_detect(term, fixed(":")) & 
@@ -4940,7 +5193,7 @@ dev.off()
 #### Early secondary vessels ####
 find_interactions <- function() {
   psem_data_early <-  model_data_pop %>%
-  filter(cell_type == "Early SV") %>%
+  filter(cell_type == "Old SV") %>%
   ungroup() %>%
   select(
     Solidity,
@@ -5046,7 +5299,7 @@ ESV4 <- gcho_p
 #### Recent secondary vessels ####
 find_interactions <- function() {
   psem_data_recent <-  model_data_pop %>%
-  filter(cell_type == "Recent SV") %>%
+  filter(cell_type == "Young SV") %>%
   ungroup() %>%
   select(
     Solidity,
@@ -6558,7 +6811,7 @@ biochem_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/bending_biochem.csv")
   group_by(genotype) %>% 
   mutate(replicate = row_number()) %>% 
   full_join(read_csv(paste0(datapath, "PhD/IRX/Bending/coniferaldehyde_position.csv"))) %>% 
-  full_join(read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>% mutate(genotype = recode(genotype, "col-0" = "WT"))) %>% 
+  full_join(read_csv("/run/media/leonard/data/grsync/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>% mutate(genotype = recode(genotype, "col-0" = "WT"))) %>% 
   filter(genotype %in% c("WT", "fah1", "cad4xcad5")) %>% 
   mutate(total = internal + terminal,
          term.gcho = terminal / total,
@@ -6581,7 +6834,7 @@ biochem_data <- read_csv(paste0(datapath, "PhD/IRX/Bending/bending_biochem.csv")
     "<sup>Terminal **G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>total **G**<sub>CHO</sub></sub>"
   )))
 
-heights <- read_csv("/home/leonard/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
+heights <- read_csv("/run/media/leonard/data/grsync/Documents/Uni/Master/Summer project 16/phenotyping/phenotyping.csv") %>%
   select(genotype, height) %>%
   mutate(genotype = recode(genotype, "cad4xcad5" = "cad4x5")) %>% 
   filter(genotype %in% c("col-0", "fah1", "cad4x5")) %>%
@@ -6664,7 +6917,7 @@ biochem_plot <- ggplot(
   scale_x_discrete(labels = c(
     "WT",
     expression(italic("fah1")),
-    expression(paste(italic("cad4"), "x", italic("cad5")))
+    expression(paste(italic("cad4"), "x", italic("5")))
   )) +
   # labs(y = "Terminal <b>G</b><sub>CHO</sub> [%]") +
   theme_leo() +
@@ -6720,7 +6973,7 @@ patch +
 dev.off()
 ```
 
-### [TODO] Drought experiment
+### Drought experiment
 
 #### Conditions
 
@@ -6872,8 +7125,8 @@ temp <- ggplot(conditions %>% filter(name == "temperature"),
   # facet_wrap(~genotype, ncol = 2)
 
 
-pdf("transpiration_supplement.pdf", width = onecol * 1.05, height = onecol * 0.8)
-hum / ill / temp / transp + plot_layout(heights = c(0.5, 0.5, 0.5 , 1))
+pdf("transpiration_supplement.pdf", width = twocol, height = onecol * 0.8)
+hum / ill / temp + plot_layout(heights = c(0.5, 0.5, 0.5 , 1))
 dev.off()
 
 ```
@@ -7078,133 +7331,6 @@ casp_plot
 dev.off()
 ```
 
-#### Hypocotyl collapse
-
-##### Load data
-
-```{r}
-hyp_data <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/hypocotyl_collapse.csv") %>% 
-  separate(Sample, into = c("condition", "genotype", "bleh", "blah", "replicate"), sep = " ") %>% 
-  select(genotype, condition, replicate, Solidity) %>% 
-  mutate(genotype = recode(genotype,
-                           "cad45" = "<i>cad4</i>x<i>5</i>"),
-         genotype = ordered(genotype, levels = c("WT", "<i>cad4</i>x<i>5</i>")))
-
-hyp_avg <- hyp_data %>% 
-  group_by(genotype, condition, replicate) %>% 
-  summarise(Solidity = median(Solidity))
-```
-
-##### Plot distributions
-
-```{r}
-letters <- hyp_avg %>%
-  unite("ID", genotype, condition) %>%
-  letter_groups(.,
-    Solidity,
-    ID,
-    "tukey",
-    print_position = 0.85
-  ) %>%
-  separate(ID, into = c("genotype", "condition"), sep = "_")
-
-stat_tab <- hyp_avg %>% 
-  rowwise() %>% 
-  mutate(genotype = strip_html(genotype)) %>% 
-  unite("ID", genotype, condition) %>%
-  group_by(ID) %>%
-  mutate(
-    "n" = n(),
-    ID = paste0(ID, " (n = ", n, ")")
-  ) %>%
-  letter_groups(.,
-    Solidity,
-    ID,
-    "tukey",
-    table = TRUE
-  )
-
-  anova_tab <- stat_tab$anova %>% 
-    mutate(variable = "Convexity") %>% 
-    distinct()
-  write_csv(anova_tab, paste0(stat_path, "S09C_anova.csv"))
-
-  tukey_tab <- stat_tab$tukey %>%
-    mutate(variable = "Convexity") %>% 
-    distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S09C_tukey.csv"))
-
-hyp_dist <- ggplot(hyp_data, aes(x = Solidity)) +
-  geom_density_ridges(data = hyp_data %>% filter(genotype == "WT"),
-                      aes(y = condition, fill = genotype), 
-                      colour = "white",
-                      size = 0.2,
-                      quantile_lines = TRUE,
-                      quantiles = 2,
-                      scale = 0.5) +
-  geom_density_ridges(data = hyp_data %>% filter(genotype == "<i>cad4</i>x<i>5</i>"),
-                      aes(y = condition, fill = genotype), 
-                      colour = "white",
-                      size = 0.2,
-                      quantile_lines = TRUE,
-                      quantiles = 2,
-                      scale = -0.5) +
-  geom_hline(yintercept = c(1, 2, 3),
-              colour = "white",
-             size = 0.2) +
-  geom_point(data = hyp_avg %>% filter(genotype == "WT"),
-             aes(y = condition, fill = genotype),
-             colour = "white",
-             position = position_nudge(x = 0, y = 0.1),
-             shape = 21,
-             size = 1,
-             stroke = 0.2) +
-  geom_point(data = hyp_avg %>% filter(genotype == "<i>cad4</i>x<i>5</i>"),
-             aes(y = condition, fill = genotype),
-             colour = "white",
-             position = position_nudge(x = 0, y = -0.1),
-             shape = 21,
-             size = 1,
-             stroke = 0.2) +
-  annotate("richtext",
-           label = c("WT", "<i>cad4</i>x<i>5</i>"),
-           x = 0.75,
-           y = c(3.1, 2.9),
-           colour = pal_ostwald_disc[c(1,3)],
-           hjust = 0,
-           vjust = 0.5,
-           label.size = NA,
-           fill = NA,
-           size = ggtext_size,
-           family = "Helvetica") +
-  geom_text(data = letters %>% filter(genotype == "WT"),
-            aes(label = Letters,
-                y = condition),
-            size = ggtext_size,
-            family = "Helvetica",
-            vjust = -0.5) +
-  geom_text(data = letters %>% filter(genotype == "<i>cad4</i>x<i>5</i>"),
-            aes(label = Letters,
-                y = condition),
-            size = ggtext_size,
-            family = "Helvetica",
-            vjust = 1.25) +
-  labs(x = "Convexity of hypocotyl TEs",
-       y = "PEG treatment") +
-  scale_colour_manual(values = pal_ostwald_disc[c(3,1)], aesthetics = "fill") +
-  scale_x_continuous(limits = c(0.75, 1), breaks = c(0.8, 0.9, 1)) +
-  theme_leo() +
-  theme(strip.text = element_markdown()) 
-  # facet_wrap(~ genotype)
-
-hyp_dist
-
-pdf("hyp_collapse.pdf", width = onecol * 0.5, height = onecol * 0.5)
-hyp_dist
-dev.off()
-```
-
-
 
 ## MD distributions
 
@@ -7285,7 +7411,7 @@ dev.off()
 # Mutant table
 
 ```{r}
-mut_csv <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/Submission/Plant Cell revised/Supplemental/mut_table.csv")
+mut_csv <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/Submission/Plant Cell revised - revise/Supplemental/mut_table.csv")
 
 mut_tab <- kable(mut_csv,
   "latex",
@@ -7302,7 +7428,7 @@ readr::write_file(mut_tab, "mut_tab.txt")
 
 ```{r}
 stat_tables <- list.files(
-  path = "/home/leonard/Dropbox/2020_IRX manuscript/Submission/Plant Cell revised/Supplemental/statistics/",
+  path = "/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/supplementary/statistics/",
   full.names = TRUE
 )
 
@@ -7353,7 +7479,7 @@ stat_table <- map_dfr(stat_tables, read_stats) %>%
   )
 
 write_csv(stat_table,
-  "Menard2021_supplemental_stats.csv",
+  "Menard2022_supplemental_stats.csv",
   na = ""
 )
 
@@ -7479,20 +7605,17 @@ casp_cell_size <- read_csv(paste0(datapath, "PhD/IRX/Casparian_strip/cells_from_
   mutate(genotype = ordered(genotype, levels = c("WT", "fah1", "cad4x5")))
 
 # Drought rosette area ####
-rosettes <- read_csv(paste0(datapath, "PhD/IRX/Drought/drought_area.csv")) %>%
+rosettes_export <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/data/drought/drought_leaf_area.csv") %>%
   mutate(
-    image = str_remove(image, fixed(".JPG")),
-    mean_hue = (mean_hue / 255) * 360
-  ) %>%
-  separate(image, c("genotype", "medium", "replicate"), sep = "-") %>%
-  mutate(
-    medium = ordered(recode(medium,
-      "0%" = "Water",
-      "10%" = "10% PEG",
-      "20%" = "20% PEG"
-    ),
-    levels = c("Water", "10% PEG", "20% PEG")
-    ))
+    medium = ordered(medium, levels = c("Water", "10% PEG", "20% PEG")),
+    genotype = ordered(genotype,
+                       levels = c("WT", "<i>fah1</i>", "<i>cad4</i>x<i>5</i>", "<i>cad4</i>x<i>5</i>x<br><i>fah1</i>")),
+    during_rel = (during / before * 100) - 100,
+    after_rel = (after / before * 100) - 100
+  ) %>% 
+  select(genotype, replicate, medium, "Relative rosette area after recovery [%]" = after_rel) %>% 
+  rowwise() %>%
+  mutate(genotype = strip_html(genotype))
 
 # Drought evapotranspiration ####
 transpiration <- read_csv(
@@ -7501,27 +7624,52 @@ transpiration <- read_csv(
   pivot_longer(-c(medium, time), names_to = "plant", values_to = "transp_rate") %>%
   mutate(
     genotype = unlist(str_extract_all(plant, "[:alpha:]+")),
-    genotype = ordered(recode(genotype, "CAD" = "cad4xcad5"),
-      levels = c("WT", "cad4xcad5")
-    ),
+    genotype = recode(genotype, "CAD" = "<i>cad4</i>x<i>5</i>"),
     replicate = unlist(str_extract_all(plant, "[:digit:]+")),
+    transp_rate = transp_rate * 1000,
+    instance = "1"
+  ) %>%
+  select(-plant) %>%
+  bind_rows(read_csv(
+    "/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/data/drought/drought_evapotrans.csv",
+    col_types = "ccccnn")) %>%
+  filter(time < 10) %>%
+  unite("replicate", instance, replicate) %>%
+  mutate(
     medium = ordered(medium,
       levels = c("Water", "10% PEG", "20% PEG")
     ),
-    transp_rate = transp_rate * 1000
+    genotype = ordered(genotype,
+      levels = c("WT", "<i>fah1</i>", "<i>cad4</i>x<i>5</i>", "<i>cad4</i>x<i>5</i>x<br><i>fah1</i>")
+    )
   ) %>% 
-  select(-plant)
+  left_join(rosettes %>% mutate(replicate = paste0("2_", replicate))) %>% 
+  mutate("transpiration per cm² projected leaf area" = transp_rate / before) %>% 
+  select(medium, time, genotype, `transpiration per cm² projected leaf area`) %>% 
+  drop_na() %>% 
+  rowwise() %>%
+  mutate(genotype = strip_html(genotype))
 
 # Drought recovery ####
-recovery_data <- read_csv(paste0(datapath, "PhD/IRX/Drought/recovery.csv")) %>%
+recovery_data <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/data/drought/drought_recovery.csv") %>%
   mutate(
     state = ordered(state, levels = rev(c("Recovered", "Partly recovered", "Dead"))),
-    medium = ordered(medium, levels = c("Water", "10% PEG", "20% PEG"))
+    medium = ordered(medium, levels = c("Water", "10% PEG", "20% PEG")),
+    genotype = ordered(recode(genotype,
+      "cad4x5" = "<i>cad4</i>x<i>5</i>",
+      "fah1" = "<i>fah1</i>",
+      "cad4x5xfah1" = "<i>cad4</i>x<i>5</i>x<br><i>fah1</i>"
+    ),
+    levels = c("WT", "<i>fah1</i>", "<i>cad4</i>x<i>5</i>", "<i>cad4</i>x<i>5</i>x<br><i>fah1</i>")
+    )
   ) %>%
-  group_by(genotype, medium) %>%
+  filter(medium != "Water") %>% 
+  group_by(genotype, medium, replicate) %>%
   mutate(sum = sum(count)) %>%
-  group_by(genotype, medium, state) %>%
-  mutate(proportion = (count / sum) * 100)
+  group_by(genotype, medium, replicate, state) %>%
+  mutate(proportion = (count / sum) * 100) %>% 
+  rowwise() %>%
+  mutate(genotype = strip_html(genotype))
 
 # Hypocotyl collapse
 hyp_data <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/hypocotyl_collapse.csv") %>% 
@@ -7540,7 +7688,7 @@ writexl::write_xlsx(list(
   "Mutant flexibility" = breaking_mutants,
   "Mutant biochemistry" = biochem_data_clean,
   "Casparian strip" = casp_cell_size,
-  "Drought rosette area" = rosettes,
+  "Drought rosette area" = rosettes_export,
   "Drought evapotranspiration" = transpiration,
   "Drought recovery" = recovery_data,
   "Hypocotyl collapse" = hyp_data
