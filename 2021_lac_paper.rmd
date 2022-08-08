@@ -822,21 +822,64 @@ thickness_data <- pheno_data %>%
       rep < 6 ~ "1",
       rep < 11 ~ "2",
       TRUE ~ "3"
-    ))
+    ),
+    `thickness/height` = thickness / stretched.height) %>% 
+  pivot_longer(c(thickness, stems, `thickness/height`), names_to = "variable", values_to = "value")
 
-ggplot(thickness_data, aes(x = genotype, y = thickness)) +
-  geom_point() +
-  geom_boxplot(alpha = 0.5) +
-  # facet_wrap(~instance) +
-  theme_leo() +
-  theme(axis.text.x = element_markdown())
+letters <- letter_groups(thickness_data,
+  value,
+  genotype,
+  "tukey",
+  variable,
+  print_position = "below",
+  print_adjust = 1
+) %>%
+  mutate(genotype = ordered(genotype, levels = c(WT, triple_it, quad_it, Q_it)))
 
-ggplot(thickness_data, aes(x = genotype, y = stems)) +
-  geom_point() +
-  geom_boxplot(alpha = 0.5) +
-  # facet_wrap(~instance) +
+thickness <- ggplot(
+  thickness_data,
+  aes(
+    x = genotype,
+    y = value,
+    fill = genotype
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  # labs(y = "Stem height [cm]") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
-  theme(axis.text.x = element_markdown())
+  theme(
+    axis.title = element_blank(),
+    axis.text.x = element_markdown()
+  ) +
+  facet_wrap(~variable, scales = "free_y")
+
+pdf("thickness.pdf", height = onecol * 0.5, width = onecol * 1.5)
+thickness
+dev.off()
 ```
 
 
@@ -1754,14 +1797,45 @@ stat_tab <- nested_stem_data %>%
 #### Load data
 
 ```{r}
-ID <- ID_II %>%
+ID <- read_csv(paste0(
+  datapath,
+  "PhD/Phenotyping/2020-09_lac_mutants/plant_order.csv"
+)) %>%
   mutate(instance = "2020-09") %>%
-  bind_rows(ID_III %>% mutate(instance = "2021-04"))
+  add_row(read_csv(paste0(
+    datapath,
+    "PhD/Phenotyping/2021-04_lac_mutants/plant_order.csv"
+  )) %>% mutate(instance = "2021-04")) %>%
+  select(genotype, replicate, plant, instance) %>%
+  mutate(plant = as.character(plant))
+
+scales <- read_csv(paste0(
+  datapath,
+  "PhD/Phenotyping/2020-09_lac_mutants/size_marker.csv"
+),
+col_names = c("filename", "space")
+) %>%
+  mutate(instance = "2020-09") %>%
+  add_row(read_csv(paste0(
+    datapath,
+    "PhD/Phenotyping/2021-04_lac_mutants/size_marker.csv"
+  ),
+  col_names = c("filename", "space")
+  ) %>% mutate(instance = "2021-04")) %>%
+  mutate(image = str_remove(filename, fixed(".jpg"))) %>%
+  separate(image, into = c("dpg", "plant")) %>%
+  select(plant, instance, dpg, space) %>% 
+  mutate(dpg = as.numeric(dpg)) %>%
+  distinct()
 
 angles <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/lodging/stem_angles.csv") %>%
   mutate(plant = as.character(plant)) %>%
   left_join(ID) %>%
+  left_join(scales) %>% 
   mutate(
+    stem_length = stem_length / space * 1.5,
+    bounding_box_height = bounding_box_height / space * 1.5,
+    straightness = bounding_box_height / stem_length,
     base_d90 = abs(90 - base_angle),
     genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
@@ -1769,7 +1843,10 @@ angles <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/lodging/stem_angle
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     )
-  )
+  ) %>% 
+  group_by(genotype) %>% 
+  mutate(size_cat = case_when(stem_length > median(stem_length, na.rm = TRUE) ~ "Longer than genotype-median",
+                         TRUE ~ "Shorter than genotype-median"),)
 ```
 
 #### Plot base angle delta
@@ -1845,9 +1922,85 @@ base_delta <- ggplot(
       width = unit(25, "mm")
     ),
     axis.text.x = element_markdown()
-  ) 
+  )
 
 base_delta
+
+letters <- letter_groups(
+  angles,
+  base_d90,
+  genotype,
+  "kruskal",
+  size_cat,
+  print_position = "below"
+)
+
+base_delta_grouped <- ggplot(
+  angles,
+  aes(
+    x = genotype,
+    y = base_d90
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  # geom_violin(
+  #   aes(fill = genotype),
+  #   draw_quantiles = 0.5,
+  #   # fill = "white",
+  #   colour = "black",
+  #   alpha = 1,
+  #   width = 0.75,
+  #   size = 0.2,
+  #   adjust = 1
+  #   # scale = "width"
+  # ) +
+  # geom_quasirandom(
+  #   shape = 21,
+  #   alpha = 1,
+  #   size = 0.75,
+  #   width = 0.25,
+  #   stroke = 0.2,
+  #   fill = "white",
+  # ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Stem base angle [&#8710;90]") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(25, "mm")
+    ),
+    axis.text.x = element_markdown()
+  ) +
+  facet_wrap(~size_cat)
+
+base_delta_grouped
 ```
 
 ##### Statistics
@@ -1880,7 +2033,222 @@ stat_tab <- angles %>%
   write_csv(tukey_tab, paste0(stat_path, "01F_dunn.csv"))
 ```
 
+#### Plot straightness
 
+```{r}
+letters <- letter_groups(
+  angles,
+  straightness,
+  genotype,
+  "kruskal",
+  print_position = "below"
+)
+
+straightness_plot <- ggplot(
+  angles,
+  aes(
+    x = genotype,
+    y = straightness
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  # geom_violin(
+  #   aes(fill = genotype),
+  #   draw_quantiles = 0.5,
+  #   # fill = "white",
+  #   colour = "black",
+  #   alpha = 1,
+  #   width = 0.75,
+  #   size = 0.2,
+  #   adjust = 1
+  #   # scale = "width"
+  # ) +
+  # geom_quasirandom(
+  #   shape = 21,
+  #   alpha = 1,
+  #   size = 0.75,
+  #   width = 0.25,
+  #   stroke = 0.2,
+  #   fill = "white",
+  # ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Straightness") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(25, "mm")
+    ),
+    axis.text.x = element_markdown()
+  )
+
+straightness_plot
+
+letters <- letter_groups(
+  angles,
+  straightness,
+  genotype,
+  "kruskal",
+  size_cat,
+  print_position = "below"
+)
+
+straightness_grouped <- ggplot(
+  angles,
+  aes(
+    x = genotype,
+    y = straightness
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    adjust = 1,
+    scale = "width"
+  ) +
+  # geom_violin(
+  #   aes(fill = genotype),
+  #   draw_quantiles = 0.5,
+  #   # fill = "white",
+  #   colour = "black",
+  #   alpha = 1,
+  #   width = 0.75,
+  #   size = 0.2,
+  #   adjust = 1
+  #   # scale = "width"
+  # ) +
+  # geom_quasirandom(
+  #   shape = 21,
+  #   alpha = 1,
+  #   size = 0.75,
+  #   width = 0.25,
+  #   stroke = 0.2,
+  #   fill = "white",
+  # ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Straightness") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_textbox_simple(
+      orientation = "left-rotated",
+      halign = 0.5,
+      width = unit(25, "mm")
+    ),
+    axis.text.x = element_markdown()
+  ) +
+  facet_wrap(~size_cat)
+
+straightness_grouped
+```
+
+##### Statistics
+
+```{r}
+stat_tab <- angles %>%
+  drop_na(base_d90) %>% 
+  rowwise() %>%
+  mutate(genotype = strip_html(genotype)) %>%
+  group_by(genotype) %>%
+  mutate(
+    "n" = n(),
+    genotype = paste0(genotype, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    base_d90,
+    genotype,
+    "kruskal",
+    table = TRUE
+  )
+
+  anova_tab <- stat_tab$kruskal %>% 
+    add_column("variable" = "stem base angle [delta90]") %>% 
+    distinct()
+  write_csv(anova_tab, paste0(stat_path, "S01F_kruskal.csv"))
+
+  tukey_tab <- stat_tab$dunn %>%
+    add_column("variable" = "stem base angle [delta90]") %>% 
+    distinct()
+  write_csv(tukey_tab, paste0(stat_path, "01F_dunn.csv"))
+```
+
+#### Plot overview
+
+```{r}
+pdf("lodging.pdf", width = twocol, height = onecol)
+base_delta + base_delta_grouped + straightness_plot + straightness_grouped +
+  plot_layout(widths = c(1, 1.6)) &
+  plot_annotation(
+    tag_levels = "A"
+  ) &
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
+dev.off()
+```
+
+
+
+#### Correlations with height
+
+```{r}
+ggplot(angles,
+       aes(y = base_d90,
+           x = stem_length)) +
+  geom_point(aes(colour = genotype)) +
+  geom_smooth(method = "lm",
+              aes(colour = genotype))
+
+lodging_regression <- lm(base_d90 ~ stem_length + as.character(genotype),
+   data = angles)
+
+summary(lodging_regression)
+
+plot(lodging_regression)
+```
 
 
 
@@ -5133,9 +5501,51 @@ maule_plot
 dev.off()
 ```
 
+## Mäule hue and S/G ratio
 
+```{r}
+maule_avg <- maule_data %>% 
+  group_by(genotype, cell_type) %>% 
+  summarise(hue = mean(hue, na.rm = TRUE))
 
+rmn_maule <- rmn_lac_sum %>% 
+  group_by(genotype, cell_type) %>% 
+  summarise("S/G" = mean(S.G, na.rm = TRUE),
+            "S" = mean(S_rel, na.rm = TRUE)) %>% 
+  mutate(genotype = ordered(case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    levels = c(WT, triple_it, quad_it, Q_it)
+    )) %>% 
+  left_join(maule_avg) %>% 
+  pivot_longer(c(`S/G`, S), names_to = "Raman band", values_to = "value") %>% 
+  mutate(value_sq = value^2) %>% 
+  drop_na()
 
+rmn_maule_plot <- ggplot(rmn_maule,
+                         aes(x = log(value),
+                             y = log(hue))) +
+  geom_point(aes(colour = genotype)) +
+  geom_smooth(method = "lm") +
+  theme_leo() +
+  theme(axis.title.x = element_blank()) +
+  facet_wrap(~ `Raman band`,
+             ncol = 2,
+             scales = "free_x")
+
+rmn_maule_plot
+
+rmn_maule_lm <- rmn_maule %>% 
+  group_by(`Raman band`) %>% 
+  group_split() 
+
+S.G_lm <- lm(log(hue) ~ log(value), data = rmn_maule_lm[[2]])
+summary(S.G_lm)
+
+S_lm <- lm(log(hue) ~ log(value), data = rmn_maule_lm[[1]])
+summary(S_lm)
+```
 
 # Raman microspectroscopy
 
