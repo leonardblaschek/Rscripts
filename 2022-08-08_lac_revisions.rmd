@@ -7,17 +7,16 @@ output:
     latex_engine: lualatex
     fig_caption: yes
     number_sections: true
+geometry: margin=2cm
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-\small 
 \tableofcontents
-\normalsize
 
----
+\newpage
 
 # High resolution Wiesner images
 
@@ -27,7 +26,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 > *In new supplementary figure - images of the stem growth of the different plants without plastic support to show when after bolting the plants fall over as well as quantification of the leaning angle ranges*
 
-As discussed on Monday, in addition to the stem base angle (**A**) I've estimated a new metric I call *straightness*, which is the height of the bounding box of the main stem divided by the total length of the main stem. Consequently, straightness is $\approx$ 1 for completely straight plants, and goes toward 0 for plants that have fallen over, are curled, or both (**C**). Unfortunately, while that metric was able to pinpoint more unstable plants than the stem base angle, they all were of different genotypes. In the end, straightness is not actually significantly different in any mutant. I then related both the stem base angle and the straightness to stem length, by dividing each genotype along the median (**B**, **D**). However, as you see below, that didn't add anything either. The only consequence of doing so is that I lost the statistical power to detect the differences that are there overall.
+As discussed on Monday, in addition to the stem base angle (**A**) I've estimated a new metric I call *straightness*, which is the height of the bounding box of the main stem divided by the total length of the main stem. Consequently, straightness is $\approx$ 1 for completely straight plants, and goes toward 0 for plants that have fallen over, are curled, or both (**C**). Unfortunately, while that metric was able to pinpoint more unstable plants than the stem base angle, they all were of different genotypes. In the end, straightness is not actually significantly different in any mutant. I then related both the stem base angle and the straightness to stem length, by separating each genotype into two groups along the respective median stem length (**B**, **D**). However, as you see below, that didn't add anything either. The only consequence of doing so is that I lost the statistical power to detect the differences that are there overall.
 
 ```{r, echo=FALSE, fig.align='center'}
 knitr::include_graphics("lodging.pdf")
@@ -35,17 +34,21 @@ knitr::include_graphics("lodging.pdf")
 
 I also tried a mixed model, predicting the straightness or stem base angle from the plant height and the genotype. The resulting model is significant for the stem base angle (mirroring the significant differences between genotypes in **A** above), but the R\textsuperscript{2} is only 0.13, so I don't think we should include that.
 
-All in all, at this point, I don't see much else to do except including figure S2 as I've sent it to you earlier:
+This has convinced me that the issue here is not the metric but the biological variability of this "lodging" phenotype. At this point, I don't see a better alternative than figure S2 as I've sent it to you earlier:
 
 ```{r, echo=FALSE, fig.align='center'}
 knitr::include_graphics("/home/leonard/Dropbox/2021_lac_manuscript/Submission/PlantCell_revised/supplementary/Blaschek2022_figureS2.pdf")
 ```
 
-# Add activty of autoclaved sections
+# Add activity of autoclaved sections
 
 > *In activity figure - add the activity range of the autoclaved sections from WT and Q for the different cell types for DAF and DAB*
 
-I only have DAF/PYGL data for WT and Q; for DAB the only autoclaved data I have is – unfortunately – from a single WT section.
+Although I only have DAB data from a single autoclaved WT section, the variation is very low and the values all very close to 0 so I don't think that's a problem at all. See below the figures with the median activities from the autoclaved sections for each cell type added as dashed lines (all of which are essentially indistinguishable from 0 at this scale).
+
+```{r, echo=FALSE, fig.align='center'}
+knitr::include_graphics("Blaschek2022_figure2.pdf")
+```
 
 # Raman PCA
 
@@ -61,11 +64,23 @@ knitr::include_graphics("/home/leonard/Dropbox/2021_lac_manuscript/Submission/Pl
 
 > *Check if it is possible to perform regression analyses (even if negative or inconclusive) between collapse of specific morphotypes and lignin features as well as for cell wall water swelling and lignin features [aim is to provide support for cellular function using non-redundant laccase paralog participations]*
 
-# Graphical abstract
+I played around with this for the last hour. The regression models I get are lousy. We can explain 10% of PC collapse with **S**/**G** ratio and 24% of MX collapse with lignin/cellulose ratio. Because of the low number of data points we lack the statistical power to add multiple predictors (if I do, they are insignificant). The reason that these models are so much poorer than the ones in the collapse article is likely twofold: a) much fewer data points and -- I think most importantly -- b) unlinked data, where we only have averages per plant instead of specific data for individual TEs.
 
 # Mäule intensity
 
+Measured the absorbance of the Mäule stain. I'd say the noteworthy thing here is that the Mäule stain -- in contrast to the Wiesner test -- still detects a stain in the IF SCW that's quite a bit more intense than the unstained background (the dotted line represents the phloem median). This of course goes well with our claim that the little lignin remaining in the IF SCW is largely composed of **S**.
+
+```{r, echo=FALSE, fig.align='center'}
+knitr::include_graphics("maule_plot_OD.pdf")
+```
+
 # Correlate Mäule hue to S/G
+
+Played around with it a little, best result see below. *Best* here means good model that is also easy to interpret. If I take the log of the Mäule hue as well, the R\textsuperscript{2} is 0.01 higher. But then I couldn't add the visual scale to ease interpretation, so I stuck with \texttt{hue\textasciitilde ln(S/G)}.
+
+```{r, echo=FALSE, fig.align='center'}
+knitr::include_graphics("maule_SG.pdf")
+```
 
 # Stem thickness/height ratio
 
@@ -75,7 +90,6 @@ Here's the relevant data. Summarised very concisely, loss of *LAC*s affects only
 knitr::include_graphics("thickness.pdf")
 ```
 
-
 # Gene expression
 
 > *Please make a figure for the gene expression analysis using (i) the microarray data, (ii) the confirmatory RT-qPCR and (iii) the confirmation of lignin and its composition in induced TEs compared to uninduced cells – the aim of this analysis is to (i) show that LAC are not corregulated well with phenylpropanoid biosynthetic genes, (ii) phenylpropanoid biosynthetic genes are expressed in uninduced condition (except for F5H1), (iii) LACs are exclusively expressed in induced conditions (which lignifies but has no S) making them the “real” lignin genes, and (iv) LAC paralogs vary in temporal expression during TE differentiation (with LAC4, LAC11 and LAC17 tighly associated to SCW and PCD of TEs), whereas LAC12 has an extended expression (suggesting expression in both TEs and XP)*
@@ -84,10 +98,13 @@ knitr::include_graphics("thickness.pdf")
 
 > *I did not mention it, but of course it is also important to make nice supplemental figures for the biochemical analysis (pyrolysis but also thioacidolysis) to show (i) that specific xylem cell types have different lignin that whole xylem (comparing TE cell culture with WT stem), and (ii) that LAC mutation (Q-5) shows defects in lignin and composition relative to WT and our reference mutants – I would then like to extend this to show the relationship between Raman lignin aspects and biochemistry (again as we did in the ACS article).* 
 
-# Tissue composition
+# Graphical abstract
+
+# *Optional*: Tissue composition
 
 > *Additionally, measurements of the relative vascular tissues in setm section for each genotype to define (%tage of IF, %tage of VB and within %tage of MX, XF and PX?)*
 
 # Fixes
 
-- Change the letter of the statistical test in Fig S5 panel B for MX --- **done**
+- Change the letter of the statistical test in Fig S5B for MX --- **done**
+- Fix "\textit{cad4};\textit{5} (overaccumulates \textbf{G}\textsubscript{CHO\textcolor{red}{H}})" to "\textit{cad4};\textit{5} (overaccumulates \textbf{G}\textsubscript{CHO})" in figure S5B --- **done**
