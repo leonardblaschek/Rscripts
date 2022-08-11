@@ -812,7 +812,9 @@ dev.off()
 ```
 
 
-### [unused] Stem thickness and count
+### Stem thickness and count
+
+#### Format data
 
 ```{r, eval=FALSE}
 thickness_data <- pheno_data %>% 
@@ -824,14 +826,16 @@ thickness_data <- pheno_data %>%
       rep < 11 ~ "2",
       TRUE ~ "3"
     ),
-    `thickness/height` = thickness / stretched.height) %>% 
-  pivot_longer(c(thickness, stems, `thickness/height`), names_to = "variable", values_to = "value")
+    T.H = thickness / stretched.height)
+```
 
+#### Thickness
+
+```{r, eval=FALSE}
 letters <- letter_groups(thickness_data,
-  value,
+  thickness,
   genotype,
   "tukey",
-  variable,
   print_position = "below",
   print_adjust = 1
 ) %>%
@@ -841,7 +845,7 @@ thickness <- ggplot(
   thickness_data,
   aes(
     x = genotype,
-    y = value,
+    y = thickness,
     fill = genotype
   )
 ) +
@@ -867,19 +871,134 @@ thickness <- ggplot(
     size = ggtext_size,
     family = "Helvetica"
   ) +
-  # labs(y = "Stem height [cm]") +
+  labs(y = "Stem diameter [cm]") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
   # scale_x_discrete(limits = c(0, 1)) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
   theme(
-    axis.title = element_blank(),
+    axis.title.x = element_blank(),
     axis.text.x = element_markdown()
-  ) +
-  facet_wrap(~variable, scales = "free_y")
+  ) 
 
 pdf("thickness.pdf", height = onecol * 0.5, width = onecol * 1.5)
 thickness
+dev.off()
+```
+
+#### Thickness/height
+
+```{r, eval=FALSE}
+letters <- letter_groups(thickness_data,
+  T.H,
+  genotype,
+  "tukey",
+  print_position = "below",
+  print_adjust = 1
+) %>%
+  mutate(genotype = ordered(genotype, levels = c(WT, triple_it, quad_it, Q_it)))
+
+thickness.height <- ggplot(
+  thickness_data,
+  aes(
+    x = genotype,
+    y = T.H,
+    fill = genotype
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Stem <sup>diameter</sup>/<sub>height</sub>") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_markdown(),
+    axis.title.y = element_textbox_simple(orientation = "left-rotated", halign = 0.5)
+  ) 
+
+pdf("T_H.pdf", height = onecol * 0.5, width = onecol * 1.5)
+thickness.height
+dev.off()
+```
+
+#### Stem number
+
+```{r, eval=FALSE}
+letters <- letter_groups(thickness_data,
+  stems,
+  genotype,
+  "tukey",
+  print_position = "below",
+  print_adjust = 1
+) %>%
+  mutate(genotype = ordered(genotype, levels = c(WT, triple_it, quad_it, Q_it)))
+
+stem_no <- ggplot(
+  thickness_data,
+  aes(
+    x = genotype,
+    y = stems,
+    fill = genotype
+  )
+) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5
+  ) +
+  geom_violin(
+    aes(fill = genotype),
+    draw_quantiles = 0.5,
+    # fill = "white",
+    colour = "black",
+    alpha = 0.75,
+    width = 0.5,
+    size = 0.2,
+    scale = "width"
+  ) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  labs(y = "Stem count") +
+  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  # scale_x_discrete(limits = c(0, 1)) +
+  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
+  theme_leo() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_markdown(),
+    axis.title.y = element_textbox_simple(orientation = "left-rotated", halign = 0.5)
+  ) 
+
+pdf("stem_count.pdf", height = onecol * 0.5, width = onecol * 1.5)
+stem_no
 dev.off()
 ```
 
@@ -1910,7 +2029,7 @@ base_delta <- ggplot(
     size = ggtext_size,
     family = "Helvetica"
   ) +
-  labs(y = "Stem base angle [&#8710;90]") +
+  labs(y = "Stem base angle [&#8710;90°]") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
   # scale_x_discrete(limits = c(0, 1)) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
@@ -1926,82 +2045,6 @@ base_delta <- ggplot(
   )
 
 base_delta
-
-letters <- letter_groups(
-  angles,
-  base_d90,
-  genotype,
-  "kruskal",
-  size_cat,
-  print_position = "below"
-)
-
-base_delta_grouped <- ggplot(
-  angles,
-  aes(
-    x = genotype,
-    y = base_d90
-  )
-) +
-  geom_quasirandom(
-    shape = 16,
-    alpha = 0.5,
-    size = 0.5,
-    width = 0.5
-  ) +
-  geom_violin(
-    aes(fill = genotype),
-    draw_quantiles = 0.5,
-    # fill = "white",
-    colour = "black",
-    alpha = 0.75,
-    width = 0.5,
-    size = 0.2,
-    adjust = 1,
-    scale = "width"
-  ) +
-  # geom_violin(
-  #   aes(fill = genotype),
-  #   draw_quantiles = 0.5,
-  #   # fill = "white",
-  #   colour = "black",
-  #   alpha = 1,
-  #   width = 0.75,
-  #   size = 0.2,
-  #   adjust = 1
-  #   # scale = "width"
-  # ) +
-  # geom_quasirandom(
-  #   shape = 21,
-  #   alpha = 1,
-  #   size = 0.75,
-  #   width = 0.25,
-  #   stroke = 0.2,
-  #   fill = "white",
-  # ) +
-  geom_text(
-    data = letters,
-    aes(label = Letters),
-    size = ggtext_size,
-    family = "Helvetica"
-  ) +
-  labs(y = "Stem base angle [&#8710;90]") +
-  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
-  # scale_x_discrete(limits = c(0, 1)) +
-  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
-  theme_leo() +
-  theme(
-    axis.title.x = element_blank(),
-    axis.title.y = element_textbox_simple(
-      orientation = "left-rotated",
-      halign = 0.5,
-      width = unit(25, "mm")
-    ),
-    axis.text.x = element_markdown()
-  ) +
-  facet_wrap(~size_cat)
-
-base_delta_grouped
 ```
 
 ##### Statistics
@@ -2034,7 +2077,7 @@ stat_tab <- angles %>%
   write_csv(tukey_tab, paste0(stat_path, "01F_dunn.csv"))
 ```
 
-#### Plot straightness
+#### [unused] Plot straightness
 
 ```{r}
 letters <- letter_groups(
@@ -2110,130 +2153,11 @@ straightness_plot <- ggplot(
   )
 
 straightness_plot
-
-letters <- letter_groups(
-  angles,
-  straightness,
-  genotype,
-  "kruskal",
-  size_cat,
-  print_position = "below"
-)
-
-straightness_grouped <- ggplot(
-  angles,
-  aes(
-    x = genotype,
-    y = straightness
-  )
-) +
-  geom_quasirandom(
-    shape = 16,
-    alpha = 0.5,
-    size = 0.5,
-    width = 0.5
-  ) +
-  geom_violin(
-    aes(fill = genotype),
-    draw_quantiles = 0.5,
-    # fill = "white",
-    colour = "black",
-    alpha = 0.75,
-    width = 0.5,
-    size = 0.2,
-    adjust = 1,
-    scale = "width"
-  ) +
-  # geom_violin(
-  #   aes(fill = genotype),
-  #   draw_quantiles = 0.5,
-  #   # fill = "white",
-  #   colour = "black",
-  #   alpha = 1,
-  #   width = 0.75,
-  #   size = 0.2,
-  #   adjust = 1
-  #   # scale = "width"
-  # ) +
-  # geom_quasirandom(
-  #   shape = 21,
-  #   alpha = 1,
-  #   size = 0.75,
-  #   width = 0.25,
-  #   stroke = 0.2,
-  #   fill = "white",
-  # ) +
-  geom_text(
-    data = letters,
-    aes(label = Letters),
-    size = ggtext_size,
-    family = "Helvetica"
-  ) +
-  labs(y = "Straightness") +
-  scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
-  # scale_x_discrete(limits = c(0, 1)) +
-  # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
-  theme_leo() +
-  theme(
-    axis.title.x = element_blank(),
-    axis.title.y = element_textbox_simple(
-      orientation = "left-rotated",
-      halign = 0.5,
-      width = unit(25, "mm")
-    ),
-    axis.text.x = element_markdown()
-  ) +
-  facet_wrap(~size_cat)
-
-straightness_grouped
-```
-
-##### Statistics
-
-```{r}
-stat_tab <- angles %>%
-  drop_na(base_d90) %>% 
-  rowwise() %>%
-  mutate(genotype = strip_html(genotype)) %>%
-  group_by(genotype) %>%
-  mutate(
-    "n" = n(),
-    genotype = paste0(genotype, " (n = ", n, ")")
-  ) %>%
-  letter_groups(.,
-    base_d90,
-    genotype,
-    "kruskal",
-    table = TRUE
-  )
-
-  anova_tab <- stat_tab$kruskal %>% 
-    add_column("variable" = "stem base angle [delta90]") %>% 
-    distinct()
-  write_csv(anova_tab, paste0(stat_path, "S01F_kruskal.csv"))
-
-  tukey_tab <- stat_tab$dunn %>%
-    add_column("variable" = "stem base angle [delta90]") %>% 
-    distinct()
-  write_csv(tukey_tab, paste0(stat_path, "01F_dunn.csv"))
-```
-
-#### Plot overview
-
-```{r}
-pdf("lodging.pdf", width = twocol, height = onecol)
-base_delta + base_delta_grouped + straightness_plot + straightness_grouped +
-  plot_layout(widths = c(1, 1.6)) &
-  plot_annotation(
-    tag_levels = "A"
-  ) &
-  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
-dev.off()
 ```
 
 
 
-#### Correlations with height
+#### [unused] Correlations with height
 
 ```{r}
 ggplot(angles,
@@ -2437,13 +2361,18 @@ dev.off()
 layout <- "
 AAAAAA
 BBCCDD
-####EE
+EEFFGG
+####HH
 "
-pdf("Blaschek2022_figureS2.pdf", height = onecol, width = twocol)
-full_mutant_plot + roots + bolt_geno + silique_plot + base_delta +
+
+pdf("Blaschek2022_figureS2.pdf", height = twocol, width = twocol)
+full_mutant_plot + 
+  thickness + thickness.height + stem_no +
+  roots + bolt_geno + silique_plot + 
+  base_delta + 
   plot_layout(design = layout) &
   plot_annotation(
-    tag_levels = "A"
+    tag_levels = list(c("A", "B", "C", "D", "E", "F", "G", "L", "M"))
   ) &
   theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
@@ -5674,16 +5603,23 @@ bar_data <- tibble(
 rmn_maule_plot <- ggplot(rmn_maule,
                          aes(x = log(value),
                              y = hue)) +
-  geom_point(aes(colour = genotype)) +
   geom_smooth(method = "lm",
               se = FALSE,
               colour = "black",
               size = 0.2,
               linetype = 2) +
+  geom_point(aes(colour = genotype)) +
+  # geom_label(aes(colour = genotype,
+  #               label = cell_type),
+  #           label.r = unit(1.2, "mm"),
+  #           label.padding = unit(0.5, "mm"),
+  #           family = "Helvetica",
+  #           fontface = "bold",
+  #           size = ggtext_size) +
   annotate("richtext",
            label = paste0("R<sup>2</sup> = ", round(rsq, digits = 2)),
-           y = 405,
-           x = 1.6,
+           y = 410,
+           x = 1.8,
            family = "Helvetica",
            size = ggtext_size,
            label.size = NA) +
@@ -5697,12 +5633,12 @@ rmn_maule_plot <- ggplot(rmn_maule,
     data = bar_data,
     aes(fill = colour,
         height = 10.2, 
-        width = 0.1,
+        width = 0.05,
         y = hue),
-    position = position_nudge(y = 0, x = 1.975)
+    position = position_nudge(y = 0, x = 1.92)
   ) +
   geom_text(data = bar_data %>% filter(colour == 9),
-            position = position_nudge(y = 5, x = 2.075),
+            position = position_nudge(y = 5, x = 1.96),
             label = "Visual hue scale",
             angle = -90,
             hjust = 0,
@@ -5712,7 +5648,7 @@ rmn_maule_plot <- ggplot(rmn_maule,
                      expand = expansion(add = 0),
                      breaks = c(340, 360, 380, 400),
                      labels = c("340", "360", "20", "40")) +
-  scale_color_manual(values = pal_dawn) +
+  scale_color_manual(values = pal_dawn, guide = guide_legend()) +
   scale_fill_manual(values = hue_palette, guide = "none") +
   labs(y = "Mäule hue",
        x = "Log<sub><i>e</i></sub> Raman <sup><b>S</b></sup>/<sub><b>G</b></sub>") +
@@ -5726,10 +5662,30 @@ rmn_maule_plot <- ggplot(rmn_maule,
         plot.margin = unit(c(1, 7, 1, 1), "mm")) +
   coord_cartesian(xlim = c(0, 1.8), clip = "off")
 
-pdf("maule_SG.pdf", height = onecol * 0.5, width = onecol * 0.8)
+pdf("maule_SG.pdf", height = onecol * 0.5, width = twocol)
 rmn_maule_plot
 dev.off()
 ```
+
+## Assemble figure
+
+```{r}
+layout <- "
+A
+B
+C
+"
+
+pdf("Blaschek2022_figureS4.pdf", height = onecol * 1.5, width = twocol)
+maule_hue_plot + maule_OD_plot + rmn_maule_plot +
+  plot_layout(design = layout) &
+  plot_annotation(
+    tag_levels = "A"
+  ) &
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
+dev.off()
+```
+
 
 # Raman microspectroscopy
 
@@ -6039,6 +5995,9 @@ rmn_ref_sum <- rmn_ref_scaled %>%
     "Benz_rel" = O4_van_rel + other_van_rel + O4_syr_rel + other_syr_rel,
     "AUC" = mean(AUC)
   )
+
+rmn_ref_n <- rmn_ref_sum %>% 
+  group_by(genotype, cell_type)
 ```
 
 ## Plot spectra
@@ -8723,118 +8682,6 @@ readr::write_file(geno_tab, "lac_tableS1.txt")
 ```
 
 
-## Expression
-
-### Load data
-
-```{r}
-expression <- read_csv("/home/leonard/Documents/Uni/Master/Master thesis/Laccases/Expression/R_file.csv") %>%
-  mutate(
-    time = case_when(
-      time == 0 ~ "Proliferation",
-      TRUE ~ "SCW formation"
-    ),
-    dataset = recode(dataset,
-                     "array" = "Microarray",
-                     "seq" = "RNA-Seq"),
-    laccase = ordered(laccase, levels = c(
-      "LAC1",
-      "LAC2",
-      "LAC3",
-      "LAC4",
-      "LAC5",
-      "LAC6",
-      "LAC7",
-      "LAC8",
-      "LAC9",
-      "LAC10",
-      "LAC11",
-      "LAC12",
-      "LAC13",
-      "LAC14",
-      "LAC15",
-      "LAC16",
-      "LAC17",
-      "XCP2",
-      "IRX3"
-    ))
-  )
-```
-
-### Plot Expression
-```{r}
-expression_highlight <- tibble(laccase = c("LAC4", "LAC5", "LAC10", "LAC11", "LAC12", "LAC17")) %>%
-  mutate(laccase = ordered(laccase, levels = c(
-    "LAC1",
-    "LAC2",
-    "LAC3",
-    "LAC4",
-    "LAC5",
-    "LAC6",
-    "LAC7",
-    "LAC8",
-    "LAC9",
-    "LAC10",
-    "LAC11",
-    "LAC12",
-    "LAC13",
-    "LAC14",
-    "LAC15",
-    "LAC16",
-    "LAC17",
-    "XCP2",
-    "IRX3"
-  )))
-
-expression_plot <- ggplot(
-  expression,
-  aes(x = laccase)
-) +
-  geom_tile(
-    data = expression_highlight,
-    aes(
-      y = 3,
-      width = 0.75,
-      height = Inf
-    ),
-    fill = "#ffcc3d"
-  ) +
-  annotate("tile",
-           x = c(18, 19),
-           y = 1,
-           height = Inf,
-           width = 0.75,
-           fill = "grey95") +
-  scale_fill_manual(values = c("black", "white")) +
-  scale_x_discrete(drop = F) +
-  geom_pointrange(aes(
-    y = absolute,
-    fill = time,
-    ymin = absolute - absolute.sd,
-    ymax = absolute + absolute.sd
-  ),
-  shape = 21,
-  stroke = 0.2
-  ) +
-  labs(y = "Relative expression") +
-  coord_flip(ylim = c(0, 8)) +
-  theme_leo() +
-  theme(
-    axis.title.y = element_blank(),
-    axis.text.x = element_blank(),
-    axis.text.y = element_text(hjust = 0, face = "italic"),
-    axis.ticks = element_blank(),
-    # panel.border = element_blank(),
-    legend.position = "bottom",
-    legend.title = element_blank()
-  ) +
-  facet_wrap(~dataset, nrow = 1)
-
-pdf("Blaschek2022_figureS1.pdf", width = onecol * 0.6, height = onecol * 0.65)
-expression_plot
-dev.off()
-```
-
 ## PCA
 
 ```{r}
@@ -8903,6 +8750,876 @@ gg_pca_centroid <- gg_pca %>%
     theme_leo() +
     facet_wrap(~cell_type)
 ```
+
+## Biochemistry
+
+### Pyrolysis--GC/MS
+
+#### Mutants
+
+##### Load mutant data
+
+```{r}
+pyro_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Biochemistry/pyrolysis.csv") %>%
+  filter(type == "hypocotyl") %>%
+  mutate(
+    lignin_raw = H + C + G + `5H` + S + P,
+    "Total lignin [% of pyrolysate]" = lignin_raw / SUM * 100,
+    "**G** [% of lignin]" = G / lignin_raw * 100,
+    "**S** [% of lignin]" = S / lignin_raw * 100,
+    "**H** [% of lignin]" = H / lignin_raw * 100,
+    "**5H** [% of lignin]" = `5H` / lignin_raw * 100,
+    "**G**<sub>CHO</sub> [% of lignin]" = GCHO / lignin_raw * 100,
+    "**G**<sub>CHOH</sub> [% of lignin]" = GCHO / lignin_raw * 100,
+    "**S**<sub>CHO</sub> [% of lignin]" = SCHO / lignin_raw * 100,
+    "**S**<sub>CHOH</sub> [% of lignin]" = SCHO / lignin_raw * 100,
+    # "<sup>**H**</sup>&frasl;<sub>**G**</sub>" = H / G,
+    # "<sup>**5H**</sup>&frasl;<sub>**G**</sub>" = `5H` / G,
+    "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S / G,
+    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO / GCHOH,
+    "<sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>" = SCHO / SCHOH,
+    sample = ordered(sample,
+      levels = c(
+        "WT",
+        "<i>ccr1-3</i>",
+        "<i>fah1</i>",
+        "<i>cad4</i>;<i>5</i>",
+        "<i>Q-5</i>"
+      )
+    )
+  )  %>%
+  # rename("**H**" = H,
+  #        "**C**" = C,
+  #        "**G**" = G,
+  #        "**5H**" = `5H`,
+  #        "**S**" = S,
+  #        "**P**" = P) %>%
+  # select(-c(SUM, lignin_raw, GCHO, SCHO, GCHOH, SCHOH)) %>%
+  select(-c(5:16)) %>%
+  pivot_longer(!c(type, sample, replicate, method), names_to = "variable", values_to = "value") %>%
+  mutate(variable = ordered(variable, levels = c(
+    "Total lignin [% of pyrolysate]",
+    "**G** [% of lignin]",
+    "**S** [% of lignin]",
+    "**H** [% of lignin]",
+    "**5H** [% of lignin]",
+    "**G**<sub>CHO</sub> [% of lignin]",
+    "**G**<sub>CHOH</sub> [% of lignin]",
+    "**S**<sub>CHO</sub> [% of lignin]",
+    "**S**<sub>CHOH</sub> [% of lignin]",
+    "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
+    # "<sup>**H**</sup>&frasl;<sub>**G**</sub>",
+    # "<sup>**5H**</sup>&frasl;<sub>**G**</sub>",
+    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>",
+    "<sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>"
+  )))
+
+pyro_avg <- pyro_data %>%
+  group_by(type, sample, method, variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE))
+```
+
+##### Plot mutant overview
+
+```{r}
+letters <- letter_groups(pyro_data,
+                         value,
+                         sample,
+                         "tukey",
+                         variable,
+                         print_position = "above")
+
+pyro_plot <- ggplot(pyro_data,
+                    aes(x = sample,
+                        y = value)) +
+  geom_col(data = pyro_avg,
+           aes(y = mean,
+               fill = sample)) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = c(pal_dawn[1], "grey80", "grey80", "grey80", pal_dawn[3])) +
+  theme_leo() +
+  theme(strip.text.y.left = element_textbox_simple(halign = 0.5, 
+                                               orientation = "left-rotated"),
+        strip.placement = "outside",
+        axis.text.x = element_markdown(),
+        axis.title = element_blank()) +
+  facet_wrap(~ variable,
+             scales = "free_y",
+             strip.position = "left")
+
+pdf("biochem_supp.pdf", width = twocol, height = onecol)
+pyro_plot
+dev.off()
+```
+#### Cell culture
+
+##### Load TE data
+
+```{r}
+pyro_TE_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Biochemistry/pyrolysis.csv") %>%
+  filter(sample %in% c("WT", "TEs", "Parenchyma")) %>%
+  mutate(sample = recode(sample, "Parenchyma" = "PA")) %>% 
+  mutate(
+    lignin_raw = H + C + G + `5H` + S + P,
+    "Lignin [% of CW]" = case_when(sample == "TEs" ~ (lignin_raw / SUM * 100) / 0.4,
+                                                 TRUE ~ lignin_raw / SUM * 100),
+    "**G** [% of lignin]" = G / lignin_raw * 100,
+    "**S** [% of lignin]" = S / lignin_raw * 100,
+    "**H** [% of lignin]" = H / lignin_raw * 100,
+    "**5H** [% of lignin]" = `5H` / lignin_raw * 100,
+    "**G**<sub>CHO</sub> [% of lignin]" = GCHO / lignin_raw * 100,
+    "**G**<sub>CHOH</sub> [% of lignin]" = GCHO / lignin_raw * 100,
+    "**S**<sub>CHO</sub> [% of lignin]" = SCHO / lignin_raw * 100,
+    "**S**<sub>CHOH</sub> [% of lignin]" = SCHO / lignin_raw * 100,
+    # "<sup>**H**</sup>&frasl;<sub>**G**</sub>" = H / G,
+    # "<sup>**5H**</sup>&frasl;<sub>**G**</sub>" = `5H` / G,
+    "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S / G,
+    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO / GCHOH,
+    "<sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>" = SCHO / SCHOH,
+    sample = ordered(sample,
+      levels = c(
+        "WT",
+        "TEs",
+        "PA"
+      )
+    ),
+    type = ordered(type, levels = c("hypocotyl", "culture"))
+  )  %>%
+  # rename("**H**" = H,
+  #        "**C**" = C,
+  #        "**G**" = G,
+  #        "**5H**" = `5H`,
+  #        "**S**" = S,
+  #        "**P**" = P) %>%
+  # select(-c(SUM, lignin_raw, GCHO, SCHO, GCHOH, SCHOH)) %>%
+  select(-c(5:16)) %>%
+  pivot_longer(!c(type, sample, replicate, method), names_to = "variable", values_to = "value") %>%
+  mutate(variable = ordered(variable, levels = c(
+    "Lignin [% of CW]",
+    "**G** [% of lignin]",
+    "**S** [% of lignin]",
+    "**H** [% of lignin]",
+    "**5H** [% of lignin]",
+    "**G**<sub>CHO</sub> [% of lignin]",
+    "**G**<sub>CHOH</sub> [% of lignin]",
+    "**S**<sub>CHO</sub> [% of lignin]",
+    "**S**<sub>CHOH</sub> [% of lignin]",
+    "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
+    # "<sup>**H**</sup>&frasl;<sub>**G**</sub>",
+    # "<sup>**5H**</sup>&frasl;<sub>**G**</sub>",
+    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>",
+    "<sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>"
+  )))
+
+pyro_TE_avg <- pyro_TE_data %>%
+  group_by(type, sample, method, variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE))
+```
+
+
+##### Plot TE overview
+
+```{r}
+letters <- letter_groups(pyro_TE_data,
+                         value,
+                         sample,
+                         "tukey",
+                         variable,
+                         print_position = "above")
+
+pyro_TE_plot <- ggplot(pyro_TE_data,
+                    aes(x = sample,
+                        y = value)) +
+  geom_col(data = pyro_TE_avg,
+           aes(y = mean,
+               fill = type)) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = c(pal_dawn[1], "grey80", "grey80"), name = "Sample") +
+  theme_leo() +
+  theme(strip.text.y.left = element_textbox_simple(halign = 0.5, 
+                                               orientation = "left-rotated"),
+        strip.placement = "outside",
+        legend.position = "right",
+        axis.text.x = element_markdown(),
+        axis.title = element_blank()) +
+  facet_wrap(~ variable,
+             ncol = 6,
+             scales = "free_y",
+             strip.position = "left")
+
+pdf("biochem_TE_supp.pdf", width = twocol, height = onecol)
+pyro_TE_plot
+dev.off()
+```
+
+### [unused] Thioacidolysis-FID
+
+#### Load data
+
+```{r}
+pyro_lignin <- pyro_data %>% 
+  filter(variable == "Total lignin") %>% 
+  group_by(sample) %>% 
+  summarise(total_lignin = mean(value, na.rm = TRUE))
+
+thio_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Biochemistry/thio.csv") %>%
+  group_by(type, sample, replicate, method) %>% 
+  mutate(
+    # across(where(is.numeric), ~ .x / 100),
+    "<i>O</i>–4-linked <sup>**S**</sup>&frasl;<sub>**G**</sub>" = sum(SCHO_term, SCHO_int, SCHOH_int, na.rm = TRUE) / sum(GCHO_term, GCHO_int, GCHOH_int, na.rm = TRUE),
+    "<i>O</i>–4-linked <sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>" = sum(SCHO_term, SCHO_int, na.rm = TRUE) / (SCHOH_int),
+    "<i>O</i>–4-linked <sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = sum(GCHO_term, GCHO_int, na.rm = TRUE) / (GCHOH_int),
+    sample = ordered(sample,
+      levels = c(
+        "WT",
+        "<i>ccr1-3</i>",
+        "<i>fah1</i>",
+        "<i>cad4</i>;<i>5</i>",
+        "<i>Q-5</i>"
+      )
+    )
+  ) %>%
+  left_join(pyro_lignin) %>% 
+  mutate(
+    "<i>O</i>–4-linked **G**" = sum(GCHO_term, GCHO_int, GCHOH_int, na.rm = TRUE) / total_lignin,
+    "<i>O</i>–4-linked **S**" = sum(SCHO_term, SCHO_int, SCHOH_int, na.rm = TRUE) / total_lignin,
+    "<i>O</i>–4-linked **G**<sub>CHO</sub>" = sum(GCHO_term, GCHO_int, na.rm = TRUE) / total_lignin,
+    "<i>O</i>–4-linked **G**<sub>CHOH</sub>" = sum(GCHOH_int, na.rm = TRUE) / total_lignin,
+    "<i>O</i>–4-linked **S**<sub>CHO</sub>" = sum(SCHO_term, SCHO_int, na.rm = TRUE) / total_lignin,
+    "<i>O</i>–4-linked **S**<sub>CHOH</sub>" = sum(SCHOH_int, na.rm = TRUE) / total_lignin,
+    ) %>% 
+  select(-c(SCHO_term, SCHO_int, SCHOH_int, GCHO_term, GCHO_int, GCHOH_int, total_lignin)) %>%
+  pivot_longer(!c(type, sample, replicate, method), names_to = "variable", values_to = "value") %>% 
+  mutate(variable = ordered(variable, levels = c(
+    "<i>O</i>–4-linked **G**",
+    "<i>O</i>–4-linked **S**",
+    "<i>O</i>–4-linked **G**<sub>CHO</sub>",
+    "<i>O</i>–4-linked **G**<sub>CHOH</sub>",
+    "<i>O</i>–4-linked **S**<sub>CHO</sub>",
+    "<i>O</i>–4-linked **S**<sub>CHOH</sub>",
+    "<i>O</i>–4-linked <sup>**S**</sup>&frasl;<sub>**G**</sub>",
+    "<i>O</i>–4-linked <sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>",
+    "<i>O</i>–4-linked <sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>"
+  )))
+
+thio_avg <- thio_data %>%
+  group_by(type, sample, method, variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE))
+```
+
+#### Plot overview
+
+```{r}
+letters <- letter_groups(thio_data,
+                         value,
+                         sample,
+                         "tukey",
+                         variable,
+                         print_position = "above")
+
+thio_plot <- ggplot(thio_data,
+                    aes(x = sample,
+                        y = value)) +
+  geom_col(data = thio_avg,
+           aes(y = mean,
+               fill = sample)) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = c(pal_dawn[1], "grey80", "grey80", "grey80", pal_dawn[3])) +
+  theme_leo() +
+  theme(strip.text = element_markdown(),
+        axis.text.x = element_markdown(),
+        axis.title = element_blank()) +
+  facet_wrap(~ variable,
+             scales = "free_y")
+
+thio_plot
+```
+
+### Assemble figure
+
+```{r}
+pdf("biochem_supp.pdf", height = twocol, width = twocol)
+pyro_plot + thio_plot +
+  plot_layout(ncol = 1, heights = c(1, 1)) &
+  plot_annotation(
+    tag_levels = "A"
+  ) &
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
+dev.off()
+```
+
+## Expression
+
+### Viability
+
+#### Load viability and differentiation data
+
+```{r}
+growth_estimates <- read_csv(paste0(datapath, "PhD/Cell cultures/2021_timelines/2021_timeline_counts.csv"),
+  col_types = "Dccnnnnnc"
+) %>%
+  select(-comment)
+
+growth_files <-
+  list.files(
+    path = paste0(datapath, "PhD/2021-01_inductions/"),
+    pattern = "*.txt",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_tsv(flnm,
+    comment = "#",
+    col_names = "code",
+    col_types = "c",
+    # locale = locale(decimal_mark = ",")
+  ) %>%
+    mutate(filename = basename(flnm)) %>%
+    separate(filename, into = c("date", "replicate", "dpi", "treatment"), sep = "_") %>%
+    mutate(
+      date = ymd(as_date(date)),
+      replicate = str_remove(replicate, fixed("R")),
+      dpi = as.numeric(str_remove(dpi, fixed("d"))),
+      treatment = str_remove(treatment, fixed(".txt"))
+    )
+}
+
+
+growth_data <- map(growth_files, read_plus) %>%
+  bind_rows() %>%
+  mutate(
+    code = str_to_lower(code),
+    nTEs_alive = str_count(code, "k"),
+    nTEs_dead = str_count(code, "l"),
+    TEs_alive = str_count(code, "i"),
+    TEs_dead = str_count(code, "o")
+  ) %>%
+  add_row(growth_estimates) %>%
+  mutate(
+    n = nTEs_alive + nTEs_dead + TEs_alive + TEs_dead,
+    nTE_viab = nTEs_alive / (nTEs_alive + nTEs_dead),
+    TE_prop = (TEs_alive + TEs_dead) / n,
+    TE_viab = TEs_alive / (TEs_alive + TEs_dead),
+    TE_viab = case_when(
+      is.nan(TE_viab) ~ 1,
+      TRUE ~ TE_viab
+    )
+  )
+
+growth_avg <- growth_data %>%
+  group_by(treatment, dpi) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+writexl::write_xlsx(growth_data, "TE_differentiation.xlsx")
+```
+
+#### Sigmoid fits
+
+```{r}
+
+growth_fine <- tibble(
+  dpi = rep(rep(seq(0, 21, 0.1), times = 3), times = 4),
+  variable = rep(rep(c("nTE_viab", "TE_prop", "TE_viab"), each = 211, length.out = 633), times = 4),
+  replicate = rep(c("1", "2", "3", "4"), each = 633, length.out = 2532)
+)
+
+growth_long <- growth_data %>%
+  filter(treatment == "ind") %>%
+  pivot_longer(
+    cols = c(TE_viab, TE_prop),
+    names_to = "variable",
+    values_to = "value"
+  )
+
+growth_sigmoid <- growth_long %>%
+  select(replicate, dpi, variable, value) %>%
+  full_join(growth_fine) %>%
+  filter(variable != "nTE_viab") %>%
+  group_by(variable) %>%
+  nest(data = c(replicate, dpi, value)) %>%
+  mutate(
+    model_drc = map(data, ~ drc::drm(value ~ dpi, data = .x, fct = drc::G.3())),
+    tidy_drc = map(model_drc, tidy),
+    tidy_drc = map(tidy_drc, `[`, c("term", "estimate"))
+  ) %>%
+  unnest(tidy_drc) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(
+    # data = map2(data, b, ~ mutate(.x, b_drc = round(.y, digits = 1))),
+    data = map2(data, b, ~ mutate(.x, b_drc = 1)), # set b to 1 to avoid singular gradients (no idea why)
+    data = map2(data, d, ~ mutate(.x, d_drc = round(.y, digits = 1))),
+    data = map2(data, e, ~ mutate(.x, e_drc = round(.y, digits = 1))),
+    model_nls = map(data, ~ nls(
+      value ~ b / (1 + exp(-d * (dpi - e))),
+      start = c(b = unique(.x$b_drc), d = unique(.x$d_drc), e = unique(.x$e_drc)),
+      data = .x
+    )),
+    tidy_nls = map(model_nls, tidy),
+    tidy_nls = map(tidy_nls, `[`, c("term", "estimate")),
+    predicted = map2(model_nls, data, ~ predict(.x, newdata = .y))
+  ) %>%
+  select(-b, -d, -e) %>%
+  unnest(tidy_nls) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  unnest(c(data, predicted)) %>%
+  mutate(variable = recode(variable,
+    nTE_viab = "Non-TE viability",
+    TE_prop = "TE proportion",
+    TE_viab = "TE viability"
+  ))
+
+sigmoid_inflection <- growth_sigmoid %>%
+  group_by(variable) %>%
+  summarise(
+    inflection_x = mean(round(e, digits = 1)),
+    inflection_y = mean(predicted[round(dpi, digits = 1) == round(inflection_x, digits = 1)])
+  )
+
+growth_facet <- ggplot(
+  growth_sigmoid,
+  aes(
+    x = dpi,
+    y = value
+  )
+) +
+  geom_rect(
+    data = tibble(variable = "TE viability", dpi = 1, value = 1),
+    fill = "grey80",
+    xmin = 4.8,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf
+  ) +
+  geom_text(
+    data = tibble(variable = "TE viability", dpi = c(0, 15), value = 0.5, label = c("TEs alive", "TEs dead"), just = c(0, 1)),
+    aes(label = label,
+        hjust = just),
+    family = "Helvetica",
+    size = ggtext_size,
+  ) +
+  # annotate("rect",
+  #   ymin = -Inf,
+  #   ymax = Inf,
+  #   xmin = 3,
+  #   xmax = 7,
+  #   fill = "grey90"
+  # ) +
+  geom_segment(
+    data = sigmoid_inflection,
+    aes(
+      x = inflection_x,
+      xend = inflection_x,
+      y = inflection_y,
+      yend = Inf
+    ),
+    size = 0.2,
+    linetype = 2,
+    # arrow = arrow(ends = "first",
+    #               type = "closed",
+    #               angle = 10,
+    #               length = unit(1.5, "mm"))
+  ) +
+  geom_point(
+    # aes(colour = replicate),
+    alpha = 0.5,
+    shape = 21,
+    fill = "white",
+    size = 1,
+    stroke = 0.2
+  ) +
+  geom_text(
+    data = sigmoid_inflection,
+    aes(
+      x = inflection_x,
+      y = 0.9,
+      label = paste(" ", inflection_x, "days")
+    ),
+    family = "Helvetica",
+    size = ggtext_size,
+    hjust = 0
+  ) +
+  # stat_smooth(geom = "line",
+  #             aes(group = replicate),
+  #             size = 0.2,
+  #             alpha = 0.5,
+  #             span = 0.9) +
+  geom_line(aes(y = predicted),
+    colour = "#275d95",
+    size = 0.2
+  ) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    labels = c("0", "25", "50", "75", "100")
+  ) +
+  labs(
+    y = "Proportion [%]",
+    x = "Days past induction"
+  ) +
+  theme_leo() +
+  theme(strip.placement = "outside") +
+  facet_wrap(~variable, ncol = 3)
+
+pdf("TE_growth_sigmoid.pdf", width = twocol, height = onecol * 0.4)
+growth_facet
+dev.off()
+```
+
+### Binary time points
+
+```{r}
+expression_short <- read_csv("/run/media/leonard/data/grsync/Documents/Uni/Master/Master thesis/Laccases/Expression/R_file.csv") %>%
+  mutate(
+    time = case_when(
+      time == 0 ~ "Proliferation",
+      TRUE ~ "SCW formation"
+    ),
+    dataset = recode(dataset,
+                     "array" = "Microarray",
+                     "seq" = "RNA-Seq"),
+    laccase = ordered(laccase, levels = c(
+      "LAC1",
+      "LAC2",
+      "LAC3",
+      "LAC4",
+      "LAC5",
+      "LAC6",
+      "LAC7",
+      "LAC8",
+      "LAC9",
+      "LAC10",
+      "LAC11",
+      "LAC12",
+      "LAC13",
+      "LAC14",
+      "LAC15",
+      "LAC16",
+      "LAC17",
+      "XCP2",
+      "IRX3"
+    ))
+  )
+
+expression_highlight <- tibble(laccase = c("LAC4", "LAC5", "LAC10", "LAC11", "LAC12", "LAC17")) %>%
+  mutate(laccase = ordered(laccase, levels = c(
+    "LAC1",
+    "LAC2",
+    "LAC3",
+    "LAC4",
+    "LAC5",
+    "LAC6",
+    "LAC7",
+    "LAC8",
+    "LAC9",
+    "LAC10",
+    "LAC11",
+    "LAC12",
+    "LAC13",
+    "LAC14",
+    "LAC15",
+    "LAC16",
+    "LAC17",
+    "XCP2",
+    "IRX3"
+  )))
+
+expression_plot <- ggplot(
+  expression_short,
+  aes(x = laccase)
+) +
+  geom_tile(
+    data = expression_highlight,
+    aes(
+      y = 3,
+      width = 0.75,
+      height = Inf
+    ),
+    fill = "#ffcc3d"
+  ) +
+  annotate("tile",
+           x = c(18, 19),
+           y = 1,
+           height = Inf,
+           width = 0.75,
+           fill = "grey95") +
+  scale_fill_manual(values = c("black", "white")) +
+  scale_x_discrete(drop = F) +
+  geom_pointrange(aes(
+    y = absolute,
+    fill = time,
+    ymin = absolute - absolute.sd,
+    ymax = absolute + absolute.sd
+  ),
+  shape = 21,
+  stroke = 0.2
+  ) +
+  labs(y = "Relative expression") +
+  coord_flip(ylim = c(0, 8)) +
+  theme_leo() +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_text(hjust = 0, face = "italic"),
+    axis.ticks = element_blank(),
+    # panel.border = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_blank()
+  ) +
+  facet_wrap(~dataset, nrow = 1)
+
+pdf("Blaschek2022_figureS1.pdf", width = onecol * 0.6, height = onecol * 0.65)
+expression_plot
+dev.off()
+```
+
+### Timeline
+
+#### Load data
+
+##### Microarray
+
+```{r}
+array <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Expression/microarray.csv") %>% 
+  pivot_longer(-c(type, gene, locus), names_to = "rep_time", values_to = "expression") %>% 
+  separate(rep_time, into = c("replicate", "time")) %>% 
+  mutate(day = as.numeric(str_remove(time, "h")) / 24,
+         method = "Microarray",
+         sample = "Induced")
+```
+
+##### RT-qPCR
+
+```{r}
+qPCR <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Expression/qPCR.csv") %>% 
+  fill(sample, gene) %>% 
+  left_join(array %>% select(gene, type)) %>% 
+  mutate(type = case_when(is.na(type) ~ "reference",
+                          TRUE ~ type),
+         method = "RT-qPCR") %>% 
+  pivot_longer(-c(method, type, sample, gene, day), names_to = "replicate", values_to = "expression")
+```
+
+##### Merge
+
+```{r}
+expression <- array %>% 
+  bind_rows(qPCR) %>% 
+  select(-c(locus, time)) %>% 
+  mutate(type = case_when(type %in% c("SCW", "PCD") ~ paste(type, "marker"),
+                          TRUE ~ type))
+
+expression_avg <- expression %>% 
+  group_by(sample, type, gene, day, method) %>% 
+  summarise(mean = mean(expression, na.rm = TRUE),
+            SD = sd(expression, na.rm = TRUE)) %>% 
+  filter(gene %in% c(
+    "XCP2",
+    "CesA7/IRX3",
+    "CCR1",
+    "CAD4",
+    "CAD5",
+    "F5H1"
+  ) | grepl("LAC", gene)) %>% 
+  mutate(gene = ordered(gene, levels = c(
+    "CesA7/IRX3",
+    "XCP2",
+    "CCR1",
+    "F5H1",
+    "CAD4",
+    "CAD5",
+    "LAC1",
+    "LAC2",
+    "LAC3",
+    "LAC4",
+    "LAC5",
+    "LAC6",
+    "LAC7",
+    "LAC8",
+    # "LAC9",
+    "LAC10",
+    "LAC11",
+    "LAC12",
+    "LAC13",
+    "LAC14",
+    "LAC15",
+    "LAC16",
+    "LAC17"
+  )),
+  type = ordered(type, levels = c(
+    "SCW marker",
+    "PCD marker",
+    "phenylpropanoid",
+    "LAC"
+  )),
+  sample = ordered(sample, levels = c(
+    "Induced",
+    "Control"
+  ))) %>% 
+  drop_na()
+  
+```
+
+#### Plot profiles
+
+##### Microarray
+
+```{r}
+array_profiles <- ggplot(
+  expression_avg %>% filter(method == "Microarray"),
+  aes(
+    x = day,
+    y = mean
+  )
+) +
+  # geom_rect(
+  #   aes(fill = type),
+  #   xmin = -Inf,
+  #   xmax = Inf,
+  #   ymin = -Inf,
+  #   ymax = Inf
+  # ) +
+  geom_rect(
+    fill = "grey80",
+    xmin = 4.8,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf
+  ) +
+  geom_ribbon(aes(
+    ymin = mean - SD,
+    ymax = mean + SD
+  ),
+  alpha = 0.2) +
+  geom_line(aes(colour = type)) +
+  scale_colour_manual(values = c(
+    "#e69f00",
+    "#d55e00",
+    "#019e73",
+    "#0072b2"
+  ), 
+  name = "Type of gene",
+  guide = guide_legend(title.position = "top")) +
+  labs(x = "Days past induction",
+       y = "Relative expression [microarray]") +
+  theme_leo() +
+  theme(strip.text = element_text(face = "italic"),
+        legend.position = "right",
+        strip.placement = "outside") +
+  facet_wrap(~ gene, ncol = 7)
+
+pdf("array_profiles.pdf", width = twocol, height = onecol)
+array_profiles
+dev.off()
+```
+
+##### RT-qPCR
+
+```{r}
+qPCR_profiles <- ggplot(
+  expression_avg %>% filter(method == "RT-qPCR"),
+  aes(
+    x = day,
+    y = mean
+  )
+) +
+  # geom_rect(
+  #   aes(fill = type),
+  #   xmin = -Inf,
+  #   xmax = Inf,
+  #   ymin = -Inf,
+  #   ymax = Inf
+  # ) +
+  geom_rect(
+    fill = "grey80",
+    xmin = 4.8,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf
+  ) +
+  geom_ribbon(aes(
+    group = sample,
+    ymin = mean - SD,
+    ymax = mean + SD
+  ),
+  alpha = 0.2) +
+  geom_line(aes(colour = type,
+                linetype = sample)) +
+  scale_linetype_discrete(
+    name = "Culture conditions",
+    guide = guide_legend(title.position = "top")) +
+  scale_colour_manual(values = c(
+    "#e69f00",
+    "#d55e00",
+    "#019e73",
+    "#0072b2"
+  ), 
+  name = "Type of gene",
+  guide = "none") +
+  labs(x = "Days past induction",
+       y = "Relative expression [RT-qPCR &#8710;Ct]") +
+  theme_leo() +
+  theme(
+    strip.placement = "outside",
+    # legend.position = c(0.05,0.9),
+    legend.position = "right",
+    # legend.title = element_blank(),
+    axis.title.y = element_markdown(),
+    strip.text = element_text(face = "italic")
+    ) +
+  facet_wrap(~ gene, ncol = 5)
+
+pdf("qPCR_profiles.pdf", width = twocol, height = onecol)
+qPCR_profiles
+dev.off()
+```
+
+#### Assemble figure
+
+```{r}
+pdf("Blaschek2022_figureS1.pdf", width = twocol, height = twocol * 1.2)
+growth_facet + array_profiles + qPCR_profiles + pyro_TE_plot +
+  plot_layout(
+    ncol = 1,
+    heights = c(0.75, 2, 1.5, 1.5)
+    # design = layout
+    ) &
+  plot_annotation(
+    tag_levels = "A"
+  ) &
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
+```
+
+
 
 
 

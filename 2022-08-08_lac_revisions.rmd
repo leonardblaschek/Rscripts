@@ -1,7 +1,7 @@
 ---
 title: "LAC revisions"
 author: "Leonard Blaschek"
-date: '2022-08-08'
+date: '2022-08-11'
 output: 
   pdf_document:
     latex_engine: lualatex
@@ -18,23 +18,21 @@ knitr::opts_chunk$set(echo = TRUE)
 
 \newpage
 
-# High resolution Wiesner images
+# [TODO] High resolution Wiesner images
 
 > *In new supplementary figure - images of higher resolution and magnification images be provided as supplemental for the different mutants compared to the WT*
 
-# Lodging supplement
+# Lodging supplement and stem thickness 
 
 > *In new supplementary figure - images of the stem growth of the different plants without plastic support to show when after bolting the plants fall over as well as quantification of the leaning angle ranges*
 
-As discussed on Monday, in addition to the stem base angle (**A**) I've estimated a new metric I call *straightness*, which is the height of the bounding box of the main stem divided by the total length of the main stem. Consequently, straightness is $\approx$ 1 for completely straight plants, and goes toward 0 for plants that have fallen over, are curled, or both (**C**). Unfortunately, while that metric was able to pinpoint more unstable plants than the stem base angle, they all were of different genotypes. In the end, straightness is not actually significantly different in any mutant. I then related both the stem base angle and the straightness to stem length, by separating each genotype into two groups along the respective median stem length (**B**, **D**). However, as you see below, that didn't add anything either. The only consequence of doing so is that I lost the statistical power to detect the differences that are there overall.
+As discussed on Monday, in addition to the stem base angle I've estimated a new metric I call *straightness*, which is the height of the bounding box of the main stem divided by the total length of the main stem. Consequently, straightness is $\approx$ 1 for completely straight plants, and goes toward 0 for plants that have fallen over, are curled, or both. Unfortunately, while that metric was able to pinpoint more unstable plants than the stem base angle, they all were of different genotypes. In the end, straightness is not actually significantly different in any mutant. I then related both the stem base angle and the straightness to stem length, by separating each genotype into two groups along the respective median stem length. However, as you see below, that didn't add anything either. The only consequence of doing so is that I lost the statistical power to detect the differences that are there overall.
 
-```{r, echo=FALSE, fig.align='center'}
-knitr::include_graphics("lodging.pdf")
-```
+I also tried a mixed model, predicting the straightness or stem base angle from the plant height and the genotype. The resulting model is significant for the stem base angle, but the R\textsuperscript{2} is only 0.13, so I don't think we should include that.
 
-I also tried a mixed model, predicting the straightness or stem base angle from the plant height and the genotype. The resulting model is significant for the stem base angle (mirroring the significant differences between genotypes in **A** above), but the R\textsuperscript{2} is only 0.13, so I don't think we should include that.
+This has convinced me that the issue here is not the metric but the biological variability of this "lodging" phenotype. 
 
-This has convinced me that the issue here is not the metric but the biological variability of this "lodging" phenotype. At this point, I don't see a better alternative than figure S2 as I've sent it to you earlier:
+As discussed on 2022-08-11, we use the figure as initially proposed.
 
 ```{r, echo=FALSE, fig.align='center'}
 knitr::include_graphics("/home/leonard/Dropbox/2021_lac_manuscript/Submission/PlantCell_revised/supplementary/Blaschek2022_figureS2.pdf")
@@ -66,39 +64,39 @@ knitr::include_graphics("/home/leonard/Dropbox/2021_lac_manuscript/Submission/Pl
 
 I played around with this for the last hour. The regression models I get are lousy. We can explain 10% of PC collapse with **S**/**G** ratio and 24% of MX collapse with lignin/cellulose ratio. Because of the low number of data points we lack the statistical power to add multiple predictors (if I do, they are insignificant). The reason that these models are so much poorer than the ones in the collapse article is likely twofold: a) much fewer data points and -- I think most importantly -- b) unlinked data, where we only have averages per plant instead of specific data for individual TEs.
 
-# Mäule intensity
+# Mäule correlations and intensity
 
 Measured the absorbance of the Mäule stain. I'd say the noteworthy thing here is that the Mäule stain -- in contrast to the Wiesner test -- still detects a stain in the IF SCW that's quite a bit more intense than the unstained background (the dotted line represents the phloem median). This of course goes well with our claim that the little lignin remaining in the IF SCW is largely composed of **S**.
 
-```{r, echo=FALSE, fig.align='center'}
-knitr::include_graphics("maule_plot_OD.pdf")
-```
+Played around with the correlation between Mäule and Raman **S**/**G** a littleto find the best model. *Best* here means good model that is also easy to interpret. If I take the log of the Mäule hue as well, the R\textsuperscript{2} is 0.01 higher. But then I couldn't add the visual scale to ease interpretation, so I stuck with \texttt{hue\textasciitilde ln(S/G)}.
 
-# Correlate Mäule hue to S/G
-
-Played around with it a little, best result see below. *Best* here means good model that is also easy to interpret. If I take the log of the Mäule hue as well, the R\textsuperscript{2} is 0.01 higher. But then I couldn't add the visual scale to ease interpretation, so I stuck with \texttt{hue\textasciitilde ln(S/G)}.
+Included both Mäule absorbance and correlation into figure S4:
 
 ```{r, echo=FALSE, fig.align='center'}
-knitr::include_graphics("maule_SG.pdf")
-```
-
-# Stem thickness/height ratio
-
-Here's the relevant data. Summarised very concisely, loss of *LAC*s affects only axial, not radial growth. Consequently, I don't think the thickness/height ratio adds anything that isn't shown in the stem thickness and stem number plots. Those two we could include, since they also suggest an answer to the question whether tissue organisation is significantly changed: no it isn't.
-
-```{r, echo=FALSE, fig.align='center'}
-knitr::include_graphics("thickness.pdf")
+knitr::include_graphics("/home/leonard/Dropbox/2021_lac_manuscript/Submission/PlantCell_revised/supplementary/Blaschek2022_figureS4.pdf")
 ```
 
 # Gene expression
 
 > *Please make a figure for the gene expression analysis using (i) the microarray data, (ii) the confirmatory RT-qPCR and (iii) the confirmation of lignin and its composition in induced TEs compared to uninduced cells – the aim of this analysis is to (i) show that LAC are not corregulated well with phenylpropanoid biosynthetic genes, (ii) phenylpropanoid biosynthetic genes are expressed in uninduced condition (except for F5H1), (iii) LACs are exclusively expressed in induced conditions (which lignifies but has no S) making them the “real” lignin genes, and (iv) LAC paralogs vary in temporal expression during TE differentiation (with LAC4, LAC11 and LAC17 tighly associated to SCW and PCD of TEs), whereas LAC12 has an extended expression (suggesting expression in both TEs and XP)*
 
+As discussed, this is the proposed new figure S1, including timelines of TE differentiation and gene expression determined by microarray and RT-qPCR analysis, and culture lignin analysis by pyrolysis.
+
+```{r, echo=FALSE, fig.align='center'}
+knitr::include_graphics("Blaschek2022_figureS1.pdf")
+```
+
 # Biochemistry
 
 > *I did not mention it, but of course it is also important to make nice supplemental figures for the biochemical analysis (pyrolysis but also thioacidolysis) to show (i) that specific xylem cell types have different lignin that whole xylem (comparing TE cell culture with WT stem), and (ii) that LAC mutation (Q-5) shows defects in lignin and composition relative to WT and our reference mutants – I would then like to extend this to show the relationship between Raman lignin aspects and biochemistry (again as we did in the ACS article).* 
 
-# Graphical abstract
+As discussed, here is the simplified biochemsitry supplement, with updated axis titles and without thioacidolysis´.
+
+```{r, echo=FALSE, fig.align='center'}
+knitr::include_graphics("biochem_supp.pdf")
+```
+
+# [TODO] Graphical abstract
 
 # *Optional*: Tissue composition
 
@@ -108,3 +106,4 @@ knitr::include_graphics("thickness.pdf")
 
 - Change the letter of the statistical test in Fig S5B for MX --- **done**
 - Fix "\textit{cad4};\textit{5} (overaccumulates \textbf{G}\textsubscript{CHO\textcolor{red}{H}})" to "\textit{cad4};\textit{5} (overaccumulates \textbf{G}\textsubscript{CHO})" in figure S5B --- **done**
+- Update supplemental dataset and statistics
