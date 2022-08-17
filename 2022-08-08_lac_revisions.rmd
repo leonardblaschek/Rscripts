@@ -1,7 +1,7 @@
 ---
 title: "LAC revisions"
 author: "Leonard Blaschek"
-date: '2022-08-11'
+date: '2022-08-12'
 output: 
   pdf_document:
     latex_engine: lualatex
@@ -76,14 +76,14 @@ Included both Mäule absorbance and correlation into figure S4:
 knitr::include_graphics("/home/leonard/Dropbox/2021_lac_manuscript/Submission/PlantCell_revised/supplementary/Blaschek2022_figureS4.pdf")
 ```
 
-# Gene expression
+# New figure 1 (cell culture expression and biochemistry)
 
 > *Please make a figure for the gene expression analysis using (i) the microarray data, (ii) the confirmatory RT-qPCR and (iii) the confirmation of lignin and its composition in induced TEs compared to uninduced cells – the aim of this analysis is to (i) show that LAC are not corregulated well with phenylpropanoid biosynthetic genes, (ii) phenylpropanoid biosynthetic genes are expressed in uninduced condition (except for F5H1), (iii) LACs are exclusively expressed in induced conditions (which lignifies but has no S) making them the “real” lignin genes, and (iv) LAC paralogs vary in temporal expression during TE differentiation (with LAC4, LAC11 and LAC17 tighly associated to SCW and PCD of TEs), whereas LAC12 has an extended expression (suggesting expression in both TEs and XP)*
 
-As discussed, this is the proposed new figure S1, including timelines of TE differentiation and gene expression determined by microarray and RT-qPCR analysis, and culture lignin analysis by pyrolysis.
+As discussed, this is the proposed new figure 1, including images of living and dead TEs, timelines of TE differentiation and gene expression determined by microarray and RT-qPCR analysis and culture lignin analysis by pyrolysis. I decided to make the co-regulation analysis a whoel new panel, to not confuse the existing figures with mutliple colour scales.
 
 ```{r, echo=FALSE, fig.align='center'}
-knitr::include_graphics("Blaschek2022_figureS1.pdf")
+knitr::include_graphics("/home/leonard/Dropbox/2021_lac_manuscript/Submission/PlantCell_revised/figures/Blaschek2022_figure1.pdf")
 ```
 
 # Biochemistry
@@ -96,11 +96,15 @@ As discussed, here is the simplified biochemsitry supplement, with updated axis 
 knitr::include_graphics("biochem_supp.pdf")
 ```
 
+# Magnification validation
+
+Here's the figure using the images acquired by William.
+
+```{r, echo=FALSE, fig.align='center'}
+knitr::include_graphics("/home/leonard/Dropbox/2021_lac_manuscript/Submission/PlantCell_revised/supplementary/magnification_validation.pdf")
+```
+
 # [TODO] Graphical abstract
-
-# *Optional*: Tissue composition
-
-> *Additionally, measurements of the relative vascular tissues in setm section for each genotype to define (%tage of IF, %tage of VB and within %tage of MX, XF and PX?)*
 
 # Fixes
 

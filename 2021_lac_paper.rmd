@@ -5883,7 +5883,8 @@ read_plus <- function(flnm) {
     nest()
 }
 
-rmn_ref <- map_dfr(rmn_files, read_plus)
+rmn_ref <- map_dfr(rmn_files, read_plus) %>% 
+  filter(!(replicate %in% c("5", "6")))
 
 #### baseline correction ####
 rmn_als <- function(x) {
@@ -5964,15 +5965,15 @@ rmn_ref_sum <- rmn_ref_scaled %>%
       corrected.intensity[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] +
         corrected.intensity[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1] +
         corrected.intensity[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1] +
-        corrected.intensity[abs(wavenumber - 1624) == min(abs(wavenumber - 1624))][1],
+        corrected.intensity[abs(wavenumber - 1634) == min(abs(wavenumber - 1634))][1],
     "total_lignin" = (scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1] / 2) +
       scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "P_rel" = scaled_lig[abs(wavenumber - 993) == min(abs(wavenumber - 993))][1],
     "G_rel" = scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
     "G_tot" = scaled[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
     "GOH_rel" = scaled_lig[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1],
-    "GCHO_rel" = scaled_lig[abs(wavenumber - 1624) == min(abs(wavenumber - 1624))][1],
-    "GCHO_tot" = scaled[abs(wavenumber - 1624) == min(abs(wavenumber - 1624))][1],
+    "GCHO_rel" = scaled_lig[abs(wavenumber - 1634) == min(abs(wavenumber - 1634))][1],
+    "GCHO_tot" = scaled[abs(wavenumber - 1634) == min(abs(wavenumber - 1634))][1],
     "S_rel" = scaled_lig[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "S_tot" = scaled[abs(wavenumber - 1334) == min(abs(wavenumber - 1334))][1],
     "cellulose" =
@@ -5986,7 +5987,7 @@ rmn_ref_sum <- rmn_ref_scaled %>%
       scaled_lig[abs(wavenumber - 1273) == min(abs(wavenumber - 1273))][1],
     "GOH.G" = scaled_lig[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1] /
       scaled_lig[abs(wavenumber - 1600) == min(abs(wavenumber - 1600))][1],
-    "GCHO.GOH" = scaled_lig[abs(wavenumber - 1624) == min(abs(wavenumber - 1624))][1] /
+    "GCHO.GOH" = scaled_lig[abs(wavenumber - 1634) == min(abs(wavenumber - 1634))][1] /
       scaled_lig[abs(wavenumber - 1658) == min(abs(wavenumber - 1658))][1],
     "O4_van_rel" = scaled_lig[abs(wavenumber - 1303) == min(abs(wavenumber - 1303))][1],
     "other_van_rel" = scaled_lig[abs(wavenumber - 785) == min(abs(wavenumber - 785))][1],
@@ -5998,6 +5999,10 @@ rmn_ref_sum <- rmn_ref_scaled %>%
 
 rmn_ref_n <- rmn_ref_sum %>% 
   group_by(genotype, cell_type)
+
+rmn_ref_avg <- rmn_ref_sum %>% 
+  group_by(genotype, cell_type) %>% 
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
 ```
 
 ## Plot spectra
@@ -6088,11 +6093,11 @@ partial_spec <- function(min_wn, max_wn) {
     )
   ) +
     geom_vline(
-      xintercept = c(378, 1273, 1334, 1600, 1624, 1658),
+      xintercept = c(378, 1273, 1334, 1600, 1634, 1658),
       linetype = 2,
       size = 0.2
     ) +
-    geom_line(aes(group = interaction(genotype)),
+    geom_line(aes(group = replicate),
       alpha = 0.5,
       size = 0.2
     ) +
@@ -6110,7 +6115,8 @@ partial_spec <- function(min_wn, max_wn) {
       plot.margin = unit(c(1, 1, 1, 6), "mm"),
       legend.position = "right",
       legend.text = element_markdown()
-    )
+    ) +
+    facet_wrap(~genotype)
 }
 
 full <- partial_spec(300, 1700)
@@ -6180,22 +6186,21 @@ violin_data <- rmn_lac_sum %>%
 
 ref_labels <- tribble(
   ~genotype, ~cell_type, ~variable, ~label,
-  "fah1", "PMX", "<sup>**S**</sup>&frasl;<sub>**G**</sub>", "<i>fah1</i> MX (traces of <b>S</b>)",
+  "fah1", "MX", "<sup>**S**</sup>&frasl;<sub>**G**</sub>", "<i>fah1</i> MX (traces of <b>S</b>)",
   "ccr1_3", "IF", "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>", "<i>ccr1-3</i> IF (traces of lignin)",
   "cad4x5", "IF", "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>", "<i>cad4;5</i> IF (overaccumulates <b>G</b><sub>CHO</sub>)"
 )
 
-ref_data <- rmn_ref_sum %>%
+ref_data <- rmn_ref_avg %>%
   select(
     genotype,
     cell_type,
-    replicate,
     "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>" = lig.cellu,
     "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S.G,
     "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO.GOH
   ) %>%
   pivot_longer(
-    cols = -c(genotype:replicate),
+    cols = -c(genotype, cell_type),
     names_to = "variable",
     values_to = "value"
   ) %>%
@@ -6210,7 +6215,7 @@ ref_data <- rmn_ref_sum %>%
         "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>"
       )
     ),
-    cell_type = c("IF", "MX", "IF"),
+    # cell_type = c("IF", "MX", "IF"),
     cell_type = ordered(cell_type,
       levels = c(
         "IF",
@@ -6420,22 +6425,21 @@ violin_data_avg <- violin_data %>%
 
 ref_labels <- tribble(
   ~genotype, ~cell_type, ~variable, ~label,
-  "fah1", "PMX", "<sup>**S**</sup>&frasl;<sub>**G**</sub>", "<i>fah1</i> MX (traces of <b>S</b>)",
+  "fah1", "MX", "<sup>**S**</sup>&frasl;<sub>**G**</sub>", "<i>fah1</i> MX (traces of <b>S</b>)",
   "ccr1_3", "IF", "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>", "<i>ccr1-3</i> IF (traces of lignin)",
   "cad4x5", "IF", "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>", "<i>cad4;5</i> IF (overaccumulates <b>G</b><sub>CHO</sub>)"
 )
 
-ref_data <- rmn_ref_sum %>%
+ref_data <- rmn_ref_avg %>%
   select(
     genotype,
     cell_type,
-    replicate,
     "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>" = lig.cellu,
     "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S.G,
     "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO.GOH
   ) %>%
   pivot_longer(
-    cols = -c(genotype:replicate),
+    cols = -c(genotype, cell_type),
     names_to = "variable",
     values_to = "value"
   ) %>%
@@ -6647,24 +6651,23 @@ violin_data_avg <- violin_data %>%
 
 ref_labels <- tribble(
   ~genotype, ~cell_type, ~variable, ~label,
-  "fah1", "PMX", "<b>S</b>", "<i>fah1</i> MX (traces of <b>S</b>)",
-  "fah1", "PMX", "<b>G</b>", "<i>fah1</i> MX (traces of <b>S</b>)",
-  "cad4x5", "IF", "<b>G</b><sub>CHOH</sub>", "<i>cad4;5</i> IF (depleted of <b>G</b><sub>CHOH</sub>)",
+  "fah1", "MX", "<b>S</b>", "<i>fah1</i> MX (traces of <b>S</b>)",
+  "fah1", "MX", "<b>G</b>", "<i>fah1</i> MX (overaccumulates <b>G</b>)",
+  # "cad4x5", "IF", "<b>G</b><sub>CHOH</sub>", "<i>cad4;5</i> IF (depleted of <b>G</b><sub>CHOH</sub>)",
   "cad4x5", "IF", "<b>G</b><sub>CHO</sub>", "<i>cad4;5</i> IF (overaccumulates <b>G</b><sub>CHO</sub>)"
 )
 
-ref_data <- rmn_ref_sum %>%
+ref_data <- rmn_ref_avg %>%
   select(
     genotype,
     cell_type,
-    replicate,
     "<b>S</b>" = S_rel,
     "<b>G</b>" = G_rel,
-    "<b>G</b><sub>CHOH</sub>" = GOH_rel,
+    # "<b>G</b><sub>CHOH</sub>" = GOH_rel,
     "<b>G</b><sub>CHO</sub>" = GCHO_rel
   ) %>%
   pivot_longer(
-    cols = -c(genotype:replicate),
+    cols = -c(genotype, cell_type),
     names_to = "variable",
     values_to = "value"
   ) %>%
@@ -6745,7 +6748,8 @@ lig_violin <- ggplot(
             label.size = NA,
             x = 4,
             hjust = 0.5,
-            vjust = c(0.2, 1, 1, 0.5),
+            label.padding = unit(0.2, "lines"),
+            vjust = c(1, 1, 0.5),
             family = "Helvetica",
             size = ggtext_size,
             colour = "grey") +
@@ -8959,7 +8963,7 @@ pyro_TE_plot <- ggplot(pyro_TE_data,
   theme(strip.text.y.left = element_textbox_simple(halign = 0.5, 
                                                orientation = "left-rotated"),
         strip.placement = "outside",
-        legend.position = "right",
+        legend.position = "none",
         axis.text.x = element_markdown(),
         axis.title = element_blank()) +
   facet_wrap(~ variable,
@@ -9444,14 +9448,14 @@ expression_avg <- expression %>%
             SD = sd(expression, na.rm = TRUE)) %>% 
   filter(gene %in% c(
     "XCP2",
-    "CesA7/IRX3",
+    "CesA7",
     "CCR1",
     "CAD4",
     "CAD5",
     "F5H1"
   ) | grepl("LAC", gene)) %>% 
   mutate(gene = ordered(gene, levels = c(
-    "CesA7/IRX3",
+    "CesA7",
     "XCP2",
     "CCR1",
     "F5H1",
@@ -9533,9 +9537,9 @@ array_profiles <- ggplot(
        y = "Relative expression [microarray]") +
   theme_leo() +
   theme(strip.text = element_text(face = "italic"),
-        legend.position = "right",
+        legend.position = "none",
         strip.placement = "outside") +
-  facet_wrap(~ gene, ncol = 7)
+  facet_wrap(~ gene, ncol = 7, scales = "free_y")
 
 pdf("array_profiles.pdf", width = twocol, height = onecol)
 array_profiles
@@ -9591,30 +9595,89 @@ qPCR_profiles <- ggplot(
   theme(
     strip.placement = "outside",
     # legend.position = c(0.05,0.9),
-    legend.position = "right",
+    legend.position = "none",
     # legend.title = element_blank(),
     axis.title.y = element_markdown(),
     strip.text = element_text(face = "italic")
     ) +
-  facet_wrap(~ gene, ncol = 5)
+  facet_wrap(~ gene, ncol = 5, scales = "free_y")
 
 pdf("qPCR_profiles.pdf", width = twocol, height = onecol)
 qPCR_profiles
 dev.off()
 ```
 
+#### Co-regulation 
+
+```{r}
+corr_data <- expression_avg %>% 
+  filter(method == "Microarray") %>% 
+  ungroup() %>% 
+  select(gene, day, mean) %>% 
+  pivot_wider(names_from = gene, values_from = mean) %>% 
+  column_to_rownames("day")
+
+corr_matrix <- cor(corr_data)
+
+corr_tibble <- corr_matrix %>% 
+  as_tibble(rownames = "gene1") %>% 
+  pivot_longer(-gene1, names_to = "gene2", values_to = "correlation") %>% 
+  mutate(gene1 = ordered(gene1, levels = levels(expression_avg$gene)),
+         gene2 = ordered(gene2, levels = levels(expression_avg$gene))) %>% 
+  filter(gene2 %in% c("CesA7", "XCP2"))
+
+corr_plot <- ggplot(corr_tibble,
+       aes(x = gene1,
+           y = gene2)) +
+  geom_tile(aes(fill = correlation),
+            colour = "white") +
+  # scale_fill_gradientn(colours = rev(pal_ostwald_cont), name = "Pearson's <i>r</i>") +
+  scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-1, 1)) +
+  theme_leo() +
+  theme(
+    # axis.text.x = element_text(angle = 90, hjust = 1),
+    strip.placement = "outside",
+    axis.title = element_blank(),
+    # legend.position = "right"
+    ) 
+
+# pdf("microarray_corrs.pdf")
+corr_plot
+# dev.off()
+```
+
+
 #### Assemble figure
 
 ```{r}
-pdf("Blaschek2022_figureS1.pdf", width = twocol, height = twocol * 1.2)
-growth_facet + array_profiles + qPCR_profiles + pyro_TE_plot +
+
+layout <- "
+#AAA
+#AAA
+BBBB
+BBBB
+BBBB
+BBBB
+BBBB
+CCCC
+CCCC
+CCCC
+CCCC
+CCCC
+DDDD
+EEEE
+EEEE
+EEEE
+"
+pdf("Blaschek2022_figureS1.pdf", width = twocol, height = twocol)
+growth_facet +  pyro_TE_plot + array_profiles + corr_plot + qPCR_profiles +
   plot_layout(
-    ncol = 1,
-    heights = c(0.75, 2, 1.5, 1.5)
+    design = layout
+    # heights = c(0.75, 2, 0.4, 1.5, 1.5)
     # design = layout
     ) &
   plot_annotation(
-    tag_levels = "A"
+    tag_levels = list(LETTERS[2:6])
   ) &
   theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 ```
