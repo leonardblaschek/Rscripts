@@ -26,6 +26,7 @@ library(tukeygrps)
 library(vroom)
 library(scales)
 library(sf)
+library(gggenes)
 
 ## import Helvetica ####
 font_add(
@@ -3939,12 +3940,13 @@ dab_slopes <- ggplot(
     size = ggtext_size,
     family = "Helvetica"
   ) +
-  labs(y = "DAB oxidation rate") +
+  labs(y = "DAB oxidation rate<br>at pH 5") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
   theme_leo() +
   theme(
     axis.title.x = element_blank(),
-    axis.text.x = element_markdown(angle = 45, hjust = 1, vjust = 1)
+    axis.text.x = element_markdown(angle = 45, hjust = 1, vjust = 1),
+    axis.title.y = element_markdown()
   ) +
   facet_wrap(~cell_type, ncol = 6)
 
@@ -4322,11 +4324,12 @@ daf_slopes <- ggplot(
     size = ggtext_size,
     family = "Helvetica"
   ) +
-  labs(y = "DAF oxidation rate") +
+  labs(y = "DAF oxidation rate<br>at pH 5") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
   theme_leo() +
   theme(
     axis.title.x = element_blank(),
+    axis.title.y = element_markdown(),
     axis.text.x = element_markdown(angle = 45, hjust = 1, vjust = 1)
   ) +
   facet_wrap(~cell_type, ncol = 6)
@@ -4859,7 +4862,7 @@ layout <- "
 ABBBBBB
 ACCCCCC
 "
-pdf("Blaschek2022_figure2.pdf", width = twocol, height = onecol * 1.2)
+pdf("Blaschek2022_figure3.pdf", width = twocol, height = onecol * 1.2)
 ph_cont + daf_slopes + dab_slopes + 
   plot_layout(nrow = 3) &
   plot_annotation(
@@ -6214,9 +6217,11 @@ ref_data <- rmn_ref_avg %>%
         "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
         "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>"
       )
-    ),
-    # cell_type = c("IF", "MX", "IF"),
-    cell_type = ordered(cell_type,
+    )
+  ) %>% 
+  rename("actual_cell_type" = cell_type) %>% 
+  mutate(cell_type = c("IF", "MX", "IF"),
+         cell_type = ordered(cell_type,
       levels = c(
         "IF",
         "LP",
@@ -6224,8 +6229,7 @@ ref_data <- rmn_ref_avg %>%
         "PX",
         "MX"
       )
-    )
-  )
+    ))
 
 violin_data_avg <- violin_data %>%
   group_by(genotype, cell_type, replicate, variable, instance) %>%
@@ -8684,6 +8688,72 @@ geno_tab <- knitr::kable(geno_data,
 
 readr::write_file(geno_tab, "lac_tableS1.txt")
 ```
+
+## Gene models
+
+```{r}
+scheme_genes <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Expression/scheme_features.csv") %>% 
+  group_by(gene) %>% 
+  mutate(beginning = min(c(start, stop)),
+         end = max(c(start, stop)))
+
+scheme_labels <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Expression/scheme_labels.csv")
+
+gene_scheme <- ggplot(
+  scheme_genes,
+  aes(
+    xmin = start,
+    xmax = stop,
+    y = gene,
+    fill = type
+  )
+) +
+  geom_feature(
+    data = scheme_labels,
+    aes(x = position, y = gene, forward = forward)
+  ) +
+  geom_segment(
+    aes(x = beginning,
+        xend = end,
+        y = 1,
+        yend = 1),
+    colour = "grey"
+  ) +
+  geom_feature_label(
+    data = scheme_labels,
+    aes(x = position, y = gene, label = name, forward = forward),
+    family = "Helvetica"
+  ) +
+  geom_gene_arrow(
+    data = scheme_genes %>% filter(is.na(forward)),
+    arrow_body_height = unit(4, "mm"),
+    arrowhead_width = unit(0, "mm")
+  ) +
+  geom_gene_arrow(
+    data = scheme_genes %>% filter(!is.na(forward)),
+    aes(forward = forward),
+    arrow_body_height = unit(4, "mm"),
+    arrowhead_width = unit(2, "mm")
+  ) +
+  # facet_wrap(~ molecule, scales = "free", ncol = 1) +
+  geom_gene_label(aes(label = feature),
+    align = "left",
+    min.size = 6,
+    grow = FALSE,
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = c(lighten(pal_ostwald_disc[1], 0.2), pal_ostwald_disc[3], "grey80")) +
+  theme_leo() +
+  theme(axis.text.x = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        panel.border = element_blank())
+
+pdf("gene_models.pdf", width = twocol, height = onecol * 0.3)
+gene_scheme
+dev.off()
+```
+
 
 
 ## PCA
