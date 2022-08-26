@@ -173,6 +173,751 @@ datapath <- ifelse(dir.exists("/data/"), "/data/",
 )
 ```
 
+# WT Expression
+
+## Viability
+
+### Load viability and differentiation data
+
+```{r}
+growth_estimates <- read_csv(paste0(datapath, "PhD/Cell cultures/2021_timelines/2021_timeline_counts.csv"),
+  col_types = "Dccnnnnnc"
+) %>%
+  select(-comment)
+
+growth_files <-
+  list.files(
+    path = paste0(datapath, "PhD/2021-01_inductions/"),
+    pattern = "*.txt",
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+read_plus <- function(flnm) {
+  read_tsv(flnm,
+    comment = "#",
+    col_names = "code",
+    col_types = "c",
+    # locale = locale(decimal_mark = ",")
+  ) %>%
+    mutate(filename = basename(flnm)) %>%
+    separate(filename, into = c("date", "replicate", "dpi", "treatment"), sep = "_") %>%
+    mutate(
+      date = ymd(as_date(date)),
+      replicate = str_remove(replicate, fixed("R")),
+      dpi = as.numeric(str_remove(dpi, fixed("d"))),
+      treatment = str_remove(treatment, fixed(".txt"))
+    )
+}
+
+
+growth_data <- map(growth_files, read_plus) %>%
+  bind_rows() %>%
+  mutate(
+    code = str_to_lower(code),
+    nTEs_alive = str_count(code, "k"),
+    nTEs_dead = str_count(code, "l"),
+    TEs_alive = str_count(code, "i"),
+    TEs_dead = str_count(code, "o")
+  ) %>%
+  add_row(growth_estimates) %>%
+  mutate(
+    n = nTEs_alive + nTEs_dead + TEs_alive + TEs_dead,
+    nTE_viab = nTEs_alive / (nTEs_alive + nTEs_dead),
+    TE_prop = (TEs_alive + TEs_dead) / n,
+    TE_viab = TEs_alive / (TEs_alive + TEs_dead),
+    TE_viab = case_when(
+      is.nan(TE_viab) ~ 1,
+      TRUE ~ TE_viab
+    ),
+    comment = case_when(is.na(code) ~ "viability estimated",
+                        TRUE ~ "viability quantified")
+  )
+
+growth_avg <- growth_data %>%
+  group_by(treatment, dpi) %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+```
+
+### Sigmoid fits
+
+```{r}
+
+growth_fine <- tibble(
+  dpi = rep(rep(seq(0, 21, 0.1), times = 3), times = 4),
+  variable = rep(rep(c("nTE_viab", "TE_prop", "TE_viab"), each = 211, length.out = 633), times = 4),
+  replicate = rep(c("1", "2", "3", "4"), each = 633, length.out = 2532)
+)
+
+growth_long <- growth_data %>%
+  filter(treatment == "ind") %>%
+  pivot_longer(
+    cols = c(TE_viab, TE_prop),
+    names_to = "variable",
+    values_to = "value"
+  )
+
+growth_sigmoid <- growth_long %>%
+  select(replicate, dpi, variable, value) %>%
+  full_join(growth_fine) %>%
+  filter(variable != "nTE_viab") %>%
+  group_by(variable) %>%
+  nest(data = c(replicate, dpi, value)) %>%
+  mutate(
+    model_drc = map(data, ~ drc::drm(value ~ dpi, data = .x, fct = drc::G.3())),
+    tidy_drc = map(model_drc, tidy),
+    tidy_drc = map(tidy_drc, `[`, c("term", "estimate"))
+  ) %>%
+  unnest(tidy_drc) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  mutate(
+    # data = map2(data, b, ~ mutate(.x, b_drc = round(.y, digits = 1))),
+    data = map2(data, b, ~ mutate(.x, b_drc = 1)), # set b to 1 to avoid singular gradients (no idea why)
+    data = map2(data, d, ~ mutate(.x, d_drc = round(.y, digits = 1))),
+    data = map2(data, e, ~ mutate(.x, e_drc = round(.y, digits = 1))),
+    model_nls = map(data, ~ nls(
+      value ~ b / (1 + exp(-d * (dpi - e))),
+      start = c(b = unique(.x$b_drc), d = unique(.x$d_drc), e = unique(.x$e_drc)),
+      data = .x
+    )),
+    tidy_nls = map(model_nls, tidy),
+    tidy_nls = map(tidy_nls, `[`, c("term", "estimate")),
+    predicted = map2(model_nls, data, ~ predict(.x, newdata = .y))
+  ) %>%
+  select(-b, -d, -e) %>%
+  unnest(tidy_nls) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  unnest(c(data, predicted)) %>%
+  mutate(variable = recode(variable,
+    nTE_viab = "Non-TE viability",
+    TE_prop = "TE proportion",
+    TE_viab = "TE viability"
+  ))
+
+sigmoid_inflection <- growth_sigmoid %>%
+  group_by(variable) %>%
+  summarise(
+    inflection_x = mean(round(e, digits = 1)),
+    inflection_y = mean(predicted[round(dpi, digits = 1) == round(inflection_x, digits = 1)])
+  )
+
+growth_facet <- ggplot(
+  growth_sigmoid,
+  aes(
+    x = dpi,
+    y = value
+  )
+) +
+  geom_rect(
+    data = tibble(variable = "TE viability", dpi = 1, value = 1),
+    fill = "grey80",
+    xmin = 4.8,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf
+  ) +
+  geom_text(
+    data = tibble(variable = "TE viability", dpi = c(0, 15), value = 0.5, label = c("TEs alive", "TEs dead"), just = c(0, 1)),
+    aes(label = label,
+        hjust = just),
+    family = "Helvetica",
+    size = ggtext_size,
+  ) +
+  # annotate("rect",
+  #   ymin = -Inf,
+  #   ymax = Inf,
+  #   xmin = 3,
+  #   xmax = 7,
+  #   fill = "grey90"
+  # ) +
+  geom_segment(
+    data = sigmoid_inflection,
+    aes(
+      x = inflection_x,
+      xend = inflection_x,
+      y = inflection_y,
+      yend = Inf
+    ),
+    size = 0.2,
+    linetype = 2,
+    # arrow = arrow(ends = "first",
+    #               type = "closed",
+    #               angle = 10,
+    #               length = unit(1.5, "mm"))
+  ) +
+  geom_point(
+    # aes(colour = replicate),
+    alpha = 0.5,
+    shape = 21,
+    fill = "white",
+    size = 1,
+    stroke = 0.2
+  ) +
+  geom_text(
+    data = sigmoid_inflection,
+    aes(
+      x = inflection_x,
+      y = 0.9,
+      label = paste(" ", inflection_x, "days")
+    ),
+    family = "Helvetica",
+    size = ggtext_size,
+    hjust = 0
+  ) +
+  # stat_smooth(geom = "line",
+  #             aes(group = replicate),
+  #             size = 0.2,
+  #             alpha = 0.5,
+  #             span = 0.9) +
+  geom_line(aes(y = predicted),
+    colour = "#275d95",
+    size = 0.2
+  ) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    labels = c("0", "25", "50", "75", "100")
+  ) +
+  labs(
+    y = "Proportion [%]",
+    x = "Days past induction"
+  ) +
+  theme_leo() +
+  theme(strip.placement = "outside") +
+  facet_wrap(~variable, ncol = 3)
+
+pdf("TE_growth_sigmoid.pdf", width = twocol, height = onecol * 0.4)
+growth_facet
+dev.off()
+```
+
+## pyrolysis
+
+### Load data
+
+```{r}
+pyro_TE_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Biochemistry/pyrolysis.csv") %>%
+  filter(sample %in% c("WT", "TEs", "Parenchyma")) %>%
+  mutate(sample = recode(sample, "Parenchyma" = "PA")) %>% 
+  mutate(
+    lignin_raw = H + C + G + `5H` + S + P,
+    "Lignin [% of CW]" = case_when(sample == "TEs" ~ (lignin_raw / SUM * 100) / 0.4,
+                                                 TRUE ~ lignin_raw / SUM * 100),
+    "**G** [% of lignin]" = G / lignin_raw * 100,
+    "**S** [% of lignin]" = S / lignin_raw * 100,
+    "**H** [% of lignin]" = H / lignin_raw * 100,
+    "**5H** [% of lignin]" = `5H` / lignin_raw * 100,
+    "**G**<sub>CHO</sub> [% of lignin]" = GCHO / lignin_raw * 100,
+    "**G**<sub>CHOH</sub> [% of lignin]" = GCHOH / lignin_raw * 100,
+    "**S**<sub>CHO</sub> [% of lignin]" = SCHO / lignin_raw * 100,
+    "**S**<sub>CHOH</sub> [% of lignin]" = SCHOH / lignin_raw * 100,
+    # "<sup>**H**</sup>&frasl;<sub>**G**</sub>" = H / G,
+    # "<sup>**5H**</sup>&frasl;<sub>**G**</sub>" = `5H` / G,
+    "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S / G,
+    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO / GCHOH,
+    "<sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>" = SCHO / SCHOH,
+    sample = ordered(sample,
+      levels = c(
+        "WT",
+        "TEs",
+        "PA"
+      )
+    ),
+    type = ordered(type, levels = c("hypocotyl", "culture"))
+  )  %>%
+  # rename("**H**" = H,
+  #        "**C**" = C,
+  #        "**G**" = G,
+  #        "**5H**" = `5H`,
+  #        "**S**" = S,
+  #        "**P**" = P) %>%
+  # select(-c(SUM, lignin_raw, GCHO, SCHO, GCHOH, SCHOH)) %>%
+  select(-c(5:16)) %>%
+  pivot_longer(!c(type, sample, replicate, method), names_to = "variable", values_to = "value") %>%
+  mutate(variable = ordered(variable, levels = c(
+    "Lignin [% of CW]",
+    "**G** [% of lignin]",
+    "**S** [% of lignin]",
+    "**H** [% of lignin]",
+    "**5H** [% of lignin]",
+    "**G**<sub>CHO</sub> [% of lignin]",
+    "**G**<sub>CHOH</sub> [% of lignin]",
+    "**S**<sub>CHO</sub> [% of lignin]",
+    "**S**<sub>CHOH</sub> [% of lignin]",
+    "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
+    # "<sup>**H**</sup>&frasl;<sub>**G**</sub>",
+    # "<sup>**5H**</sup>&frasl;<sub>**G**</sub>",
+    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>",
+    "<sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>"
+  )))
+
+pyro_TE_avg <- pyro_TE_data %>%
+  group_by(type, sample, method, variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE))
+```
+
+
+### Plot TE overview
+
+```{r}
+letters <- letter_groups(pyro_TE_data,
+                         value,
+                         sample,
+                         "tukey",
+                         variable,
+                         print_position = "above")
+
+pyro_TE_plot <- ggplot(pyro_TE_data,
+                    aes(x = sample,
+                        y = value)) +
+  geom_col(data = pyro_TE_avg,
+           aes(y = mean,
+               fill = type)) +
+  geom_quasirandom(
+    shape = 16,
+    alpha = 0.5,
+    size = 0.5,
+    width = 0.5) +
+  geom_text(
+    data = letters,
+    aes(label = Letters),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
+  scale_fill_manual(values = c(pal_dawn[1], "grey80", "grey80"), name = "Sample") +
+  theme_leo() +
+  theme(strip.text.y.left = element_textbox_simple(halign = 0.5, 
+                                               orientation = "left-rotated"),
+        strip.placement = "outside",
+        legend.position = "none",
+        axis.text.x = element_markdown(),
+        axis.title = element_blank()) +
+  facet_wrap(~ variable,
+             ncol = 6,
+             scales = "free_y",
+             strip.position = "left")
+
+pdf("biochem_TE_supp.pdf", width = twocol, height = onecol)
+pyro_TE_plot
+dev.off()
+```
+
+#### Statistics
+
+```{r}
+stat_tab <- pyro_TE_data %>%
+  drop_na(value) %>% 
+  rowwise() %>%
+  mutate(sample = strip_html(sample),
+         variable = str_remove_all(strip_html(variable), fixed("*"))) %>%
+  group_by(sample, variable) %>%
+  mutate(
+    "n" = n(),
+    sample = paste0(sample, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    value,
+    sample,
+    "tukey",
+    variable,
+    table = TRUE
+  )
+
+  anova_tab <- stat_tab$anova %>% 
+    add_column(
+      "variable" = stat_tab$variable) %>% 
+    distinct()
+  write_csv(anova_tab, paste0(stat_path, "01C_anova.csv"))
+
+  tukey_tab <- stat_tab$tukey %>%
+    add_column(
+      "variable" = stat_tab$variable) %>% 
+    distinct()
+  write_csv(tukey_tab, paste0(stat_path, "01C_tukey.csv"))
+```
+
+## [unused] Expression as binary time points
+
+```{r, eval=FALSE}
+expression_short <- read_csv("/run/media/leonard/data/grsync/Documents/Uni/Master/Master thesis/Laccases/Expression/R_file.csv") %>%
+  mutate(
+    time = case_when(
+      time == 0 ~ "Proliferation",
+      TRUE ~ "SCW formation"
+    ),
+    dataset = recode(dataset,
+                     "array" = "Microarray",
+                     "seq" = "RNA-Seq"),
+    laccase = ordered(laccase, levels = c(
+      "LAC1",
+      "LAC2",
+      "LAC3",
+      "LAC4",
+      "LAC5",
+      "LAC6",
+      "LAC7",
+      "LAC8",
+      "LAC9",
+      "LAC10",
+      "LAC11",
+      "LAC12",
+      "LAC13",
+      "LAC14",
+      "LAC15",
+      "LAC16",
+      "LAC17",
+      "XCP2",
+      "IRX3"
+    ))
+  )
+
+expression_highlight <- tibble(laccase = c("LAC4", "LAC5", "LAC10", "LAC11", "LAC12", "LAC17")) %>%
+  mutate(laccase = ordered(laccase, levels = c(
+    "LAC1",
+    "LAC2",
+    "LAC3",
+    "LAC4",
+    "LAC5",
+    "LAC6",
+    "LAC7",
+    "LAC8",
+    "LAC9",
+    "LAC10",
+    "LAC11",
+    "LAC12",
+    "LAC13",
+    "LAC14",
+    "LAC15",
+    "LAC16",
+    "LAC17",
+    "XCP2",
+    "IRX3"
+  )))
+
+expression_plot <- ggplot(
+  expression_short,
+  aes(x = laccase)
+) +
+  geom_tile(
+    data = expression_highlight,
+    aes(
+      y = 3,
+      width = 0.75,
+      height = Inf
+    ),
+    fill = "#ffcc3d"
+  ) +
+  annotate("tile",
+           x = c(18, 19),
+           y = 1,
+           height = Inf,
+           width = 0.75,
+           fill = "grey95") +
+  scale_fill_manual(values = c("black", "white")) +
+  scale_x_discrete(drop = F) +
+  geom_pointrange(aes(
+    y = absolute,
+    fill = time,
+    ymin = absolute - absolute.sd,
+    ymax = absolute + absolute.sd
+  ),
+  shape = 21,
+  stroke = 0.2
+  ) +
+  labs(y = "Relative expression") +
+  coord_flip(ylim = c(0, 8)) +
+  theme_leo() +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_text(hjust = 0, face = "italic"),
+    axis.ticks = element_blank(),
+    # panel.border = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_blank()
+  ) +
+  facet_wrap(~dataset, nrow = 1)
+
+pdf("Blaschek2022_figureS1.pdf", width = onecol * 0.6, height = onecol * 0.65)
+expression_plot
+dev.off()
+```
+
+## Timeline
+
+### Load data
+
+#### Microarray
+
+```{r}
+array <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Expression/microarray.csv") %>% 
+  pivot_longer(-c(type, gene, locus), names_to = "rep_time", values_to = "expression") %>% 
+  separate(rep_time, into = c("replicate", "time")) %>% 
+  mutate(day = as.numeric(str_remove(time, "h")) / 24,
+         method = "Microarray",
+         sample = "Induced")
+```
+
+#### RT-qPCR
+
+```{r}
+qPCR <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Expression/qPCR.csv") %>% 
+  fill(sample, gene) %>% 
+  left_join(array %>% select(gene, type)) %>% 
+  mutate(type = case_when(is.na(type) ~ "reference",
+                          TRUE ~ type),
+         method = "RT-qPCR") %>% 
+  pivot_longer(-c(method, type, sample, gene, day), names_to = "replicate", values_to = "expression")
+```
+
+#### Merge
+
+```{r}
+expression <- array %>% 
+  bind_rows(qPCR) %>% 
+  select(-c(locus, time)) %>% 
+  mutate(type = case_when(type %in% c("SCW", "PCD") ~ paste(type, "marker"),
+                          TRUE ~ type))
+
+expression_avg <- expression %>% 
+  group_by(sample, type, gene, day, method) %>% 
+  summarise(mean = mean(expression, na.rm = TRUE),
+            SD = sd(expression, na.rm = TRUE)) %>% 
+  filter(gene %in% c(
+    "XCP2",
+    "CesA7",
+    "CCR1",
+    "CAD4",
+    "CAD5",
+    "F5H1"
+  ) | grepl("LAC", gene)) %>% 
+  mutate(gene = ordered(gene, levels = c(
+    "CesA7",
+    "XCP2",
+    "CCR1",
+    "F5H1",
+    "CAD4",
+    "CAD5",
+    "LAC1",
+    "LAC2",
+    "LAC3",
+    "LAC4",
+    "LAC5",
+    "LAC6",
+    "LAC7",
+    "LAC8",
+    # "LAC9",
+    "LAC10",
+    "LAC11",
+    "LAC12",
+    "LAC13",
+    "LAC14",
+    "LAC15",
+    "LAC16",
+    "LAC17"
+  )),
+  type = ordered(type, levels = c(
+    "SCW marker",
+    "PCD marker",
+    "phenylpropanoid",
+    "LAC"
+  )),
+  sample = ordered(sample, levels = c(
+    "Induced",
+    "Control"
+  ))) %>% 
+  drop_na()
+  
+```
+
+### Plot profiles
+
+#### Microarray
+
+```{r}
+array_profiles <- ggplot(
+  expression_avg %>% filter(method == "Microarray"),
+  aes(
+    x = day,
+    y = mean
+  )
+) +
+  # geom_rect(
+  #   aes(fill = type),
+  #   xmin = -Inf,
+  #   xmax = Inf,
+  #   ymin = -Inf,
+  #   ymax = Inf
+  # ) +
+  geom_rect(
+    fill = "grey80",
+    xmin = 4.8,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf
+  ) +
+  geom_ribbon(aes(
+    ymin = mean - SD,
+    ymax = mean + SD
+  ),
+  alpha = 0.2) +
+  geom_line(aes(colour = type)) +
+  scale_colour_manual(values = c(
+    "#e69f00",
+    "#d55e00",
+    "#019e73",
+    "#0072b2"
+  ), 
+  name = "Type of gene",
+  guide = guide_legend(title.position = "top")) +
+  labs(x = "Days past induction",
+       y = "Relative expression [microarray]") +
+  theme_leo() +
+  theme(strip.text = element_text(face = "italic"),
+        legend.position = "none",
+        strip.placement = "outside") +
+  facet_wrap(~ gene, ncol = 7, scales = "free_y")
+
+pdf("array_profiles.pdf", width = twocol, height = onecol)
+array_profiles
+dev.off()
+```
+
+#### RT-qPCR
+
+```{r}
+qPCR_profiles <- ggplot(
+  expression_avg %>% filter(method == "RT-qPCR"),
+  aes(
+    x = day,
+    y = mean
+  )
+) +
+  # geom_rect(
+  #   aes(fill = type),
+  #   xmin = -Inf,
+  #   xmax = Inf,
+  #   ymin = -Inf,
+  #   ymax = Inf
+  # ) +
+  geom_rect(
+    fill = "grey80",
+    xmin = 4.8,
+    xmax = Inf,
+    ymin = -Inf,
+    ymax = Inf
+  ) +
+  geom_ribbon(aes(
+    group = sample,
+    ymin = mean - SD,
+    ymax = mean + SD
+  ),
+  alpha = 0.2) +
+  geom_line(aes(colour = type,
+                linetype = sample)) +
+  scale_linetype_discrete(
+    name = "Culture conditions",
+    guide = guide_legend(title.position = "top")) +
+  scale_colour_manual(values = c(
+    "#e69f00",
+    "#d55e00",
+    "#019e73",
+    "#0072b2"
+  ), 
+  name = "Type of gene",
+  guide = "none") +
+  labs(x = "Days past induction",
+       y = "Relative expression [RT-qPCR &#8710;Ct]") +
+  theme_leo() +
+  theme(
+    strip.placement = "outside",
+    # legend.position = c(0.05,0.9),
+    legend.position = "none",
+    # legend.title = element_blank(),
+    axis.title.y = element_markdown(),
+    strip.text = element_text(face = "italic")
+    ) +
+  facet_wrap(~ gene, ncol = 5, scales = "free_y")
+
+pdf("qPCR_profiles.pdf", width = twocol, height = onecol)
+qPCR_profiles
+dev.off()
+```
+
+### Co-regulation 
+
+```{r}
+corr_data <- expression_avg %>% 
+  filter(method == "Microarray") %>% 
+  ungroup() %>% 
+  select(gene, day, mean) %>% 
+  pivot_wider(names_from = gene, values_from = mean) %>% 
+  column_to_rownames("day")
+
+corr_matrix <- cor(corr_data)
+
+corr_tibble <- corr_matrix %>% 
+  as_tibble(rownames = "gene1") %>% 
+  pivot_longer(-gene1, names_to = "gene2", values_to = "correlation") %>% 
+  mutate(gene1 = ordered(gene1, levels = levels(expression_avg$gene)),
+         gene2 = ordered(gene2, levels = levels(expression_avg$gene))) %>% 
+  filter(gene2 %in% c("CesA7", "XCP2"))
+
+corr_plot <- ggplot(corr_tibble,
+       aes(x = gene1,
+           y = gene2)) +
+  geom_tile(aes(fill = correlation),
+            colour = "white") +
+  # scale_fill_gradientn(colours = rev(pal_ostwald_cont), name = "Pearson's <i>r</i>") +
+  scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-1, 1)) +
+  theme_leo() +
+  theme(
+    # axis.text.x = element_text(angle = 90, hjust = 1),
+    strip.placement = "outside",
+    axis.title = element_blank(),
+    # legend.position = "right"
+    ) 
+
+# pdf("microarray_corrs.pdf")
+corr_plot
+# dev.off()
+```
+
+
+### Assemble figure
+
+```{r}
+
+layout <- "
+#AAA
+#AAA
+BBBB
+BBBB
+BBBB
+BBBB
+BBBB
+CCCC
+CCCC
+CCCC
+CCCC
+CCCC
+DDDD
+EEEE
+EEEE
+EEEE
+"
+pdf("Blaschek2022_figure1.pdf", width = twocol, height = twocol)
+growth_facet +  pyro_TE_plot + array_profiles + corr_plot + qPCR_profiles +
+  plot_layout(
+    design = layout
+    # heights = c(0.75, 2, 0.4, 1.5, 1.5)
+    # design = layout
+    ) &
+  plot_annotation(
+    tag_levels = list(LETTERS[2:6])
+  ) &
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
+```
+
 # Phenotyping
 
 ## Height of single to quintuple mutants
@@ -558,12 +1303,12 @@ stat_tab <- pheno_data %>%
   anova_tab <- stat_tab$anova %>% 
     add_column("variable" = "height [cm]") %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "01G_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "02G_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column("variable" = "height [cm]") %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "01G_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "02G_tukey.csv"))
 ```
 
 ### Silique size
@@ -700,12 +1445,12 @@ stat_tab <- siliques_avg %>% filter(genotype %in% c(WT, quad_it, Q_it)) %>%
   anova_tab <- stat_tab$anova %>% 
     add_column("variable" = "silique length [cm]") %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S02D_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S02G_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column("variable" = "silique length [cm]") %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S02D_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S02G_tukey.csv"))
 ```
 
 ### [unused] Silique number
@@ -817,7 +1562,7 @@ dev.off()
 
 #### Format data
 
-```{r, eval=FALSE}
+```{r}
 thickness_data <- pheno_data %>% 
   filter(genotype %in% c(WT, quad_it, Q_it)) %>% 
   mutate(
@@ -832,7 +1577,7 @@ thickness_data <- pheno_data %>%
 
 #### Thickness
 
-```{r, eval=FALSE}
+```{r}
 letters <- letter_groups(thickness_data,
   thickness,
   genotype,
@@ -887,9 +1632,40 @@ thickness
 dev.off()
 ```
 
+##### Statistics
+
+```{r}
+stat_tab <- thickness_data %>%
+  drop_na(stems) %>% 
+  rowwise() %>%
+  mutate(genotype = strip_html(genotype)) %>%
+  group_by(genotype) %>%
+  mutate(
+    "n" = n(),
+    genotype = paste0(genotype, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    thickness,
+    genotype,
+    "tukey",
+    table = TRUE
+  )
+
+  anova_tab <- stat_tab$anova %>% 
+    add_column("variable" = "stem diameter [cm]") %>% 
+    distinct()
+  write_csv(anova_tab, paste0(stat_path, "S02B_anova.csv"))
+
+  tukey_tab <- stat_tab$tukey %>%
+    add_column("variable" = "stem diameter [cm]") %>% 
+    distinct()
+  write_csv(tukey_tab, paste0(stat_path, "S02B_tukey.csv"))
+```
+
+
 #### Thickness/height
 
-```{r, eval=FALSE}
+```{r}
 letters <- letter_groups(thickness_data,
   T.H,
   genotype,
@@ -945,9 +1721,39 @@ thickness.height
 dev.off()
 ```
 
+##### Statistics
+
+```{r}
+stat_tab <- thickness_data %>%
+  drop_na(stems) %>% 
+  rowwise() %>%
+  mutate(genotype = strip_html(genotype)) %>%
+  group_by(genotype) %>%
+  mutate(
+    "n" = n(),
+    genotype = paste0(genotype, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    T.H,
+    genotype,
+    "tukey",
+    table = TRUE
+  )
+
+  anova_tab <- stat_tab$anova %>% 
+    add_column("variable" = "stem diameter [cm] / stem height [cm]") %>% 
+    distinct()
+  write_csv(anova_tab, paste0(stat_path, "S02C_anova.csv"))
+
+  tukey_tab <- stat_tab$tukey %>%
+    add_column("variable" = "stem diameter [cm] / stem height [cm]") %>% 
+    distinct()
+  write_csv(tukey_tab, paste0(stat_path, "S02C_tukey.csv"))
+```
+
 #### Stem number
 
-```{r, eval=FALSE}
+```{r}
 letters <- letter_groups(thickness_data,
   stems,
   genotype,
@@ -1002,6 +1808,39 @@ pdf("stem_count.pdf", height = onecol * 0.5, width = onecol * 1.5)
 stem_no
 dev.off()
 ```
+
+##### Statistics
+
+```{r}
+stat_tab <- thickness_data %>%
+  drop_na(stems) %>% 
+  rowwise() %>%
+  mutate(genotype = strip_html(genotype)) %>%
+  group_by(genotype) %>%
+  mutate(
+    "n" = n(),
+    genotype = paste0(genotype, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    stems,
+    genotype,
+    "tukey",
+    table = TRUE
+  )
+
+  anova_tab <- stat_tab$anova %>% 
+    add_column("variable" = "stem count") %>% 
+    distinct()
+  write_csv(anova_tab, paste0(stat_path, "S02D_anova.csv"))
+
+  tukey_tab <- stat_tab$tukey %>%
+    add_column("variable" = "stem count") %>% 
+    distinct()
+  write_csv(tukey_tab, paste0(stat_path, "S02D_tukey.csv"))
+```
+
+
+
 
 
 
@@ -1340,12 +2179,12 @@ stat_tab <- nested_rosette_area %>%
   anova_tab <- stat_tab$anova %>% 
     add_column("variable" = "rosette growth rate [cm²/day]") %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "01C_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "02C_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column("variable" = "rosette growth rate [cm²/day]") %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "01C_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "02C_tukey.csv"))
 ```
 
 ### Stem growth
@@ -1574,12 +2413,12 @@ stat_tab <- flower_data %>%
   anova_tab <- stat_tab$anova %>% 
     add_column("variable" = "bolting [dpg]") %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S02C_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S02F_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column("variable" = "bolting [dpg]") %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S02C_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S02F_tukey.csv"))
 ```
 
 #### [unused] Hue over time
@@ -1905,12 +2744,12 @@ stat_tab <- nested_stem_data %>%
   anova_tab <- stat_tab$anova %>% 
     add_column("variable" = "stem growth rate [cm/day]") %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "01F_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "02F_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column("variable" = "stem growth rate [cm/day]") %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "01F_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "02F_tukey.csv"))
 ```
 
 ### Stem angle
@@ -2068,14 +2907,14 @@ stat_tab <- angles %>%
   )
 
   anova_tab <- stat_tab$kruskal %>% 
-    add_column("variable" = "stem base angle [delta90]") %>% 
+    add_column("variable" = "stem base angle [∆90°]") %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S01F_kruskal.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S02K_kruskal.csv"))
 
   tukey_tab <- stat_tab$dunn %>%
-    add_column("variable" = "stem base angle [delta90]") %>% 
+    add_column("variable" = "stem base angle [∆90°]") %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "01F_dunn.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "02K_dunn.csv"))
 ```
 
 #### [unused] Plot straightness
@@ -2326,12 +3165,12 @@ stat_tab <- nested_root_data %>%
   anova_tab <- stat_tab$anova %>% 
     add_column("variable" = "root growth rate [cm/day]") %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S02B_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S02E_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column("variable" = "root growth rate [cm/day]") %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S02B_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S02E_tukey.csv"))
 ```
 
 
@@ -3980,14 +4819,14 @@ stat_tab <- avg_slopes_dab %>%
       "variable" = "DAB oxidation rate",
       "cell_type" = stat_tab$cell_type) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "02C_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "03C_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
       "variable" = "DAB oxidation rate",
       "cell_type" = stat_tab$cell_type) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "02C_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "03C_tukey.csv"))
 ```
 
 ## DAF pH 5
@@ -4364,14 +5203,14 @@ stat_tab <- avg_slopes_daf %>%
       "variable" = "DAF oxidation rate",
       "cell_type" = stat_tab$cell_type) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "02B_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "03B_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
       "variable" = "DAF oxidation rate",
       "cell_type" = stat_tab$cell_type) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "02B_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "03B_tukey.csv"))
 ```
 
 ## [unused] DAF pH 6
@@ -5079,14 +5918,14 @@ stat_tab <- Wiesner_avg %>%
       "variable" = "Wiesner stain absorbance",
       "cell_type" = stat_tab$cell_type) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "03B_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "04B_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
       "variable" = "Wiesner stain absorbance",
       "cell_type" = stat_tab$cell_type) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "03B_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "04B_tukey.csv"))
 ```
 
 ## [unused] IF profiles
@@ -5558,134 +6397,6 @@ maule_OD_plot <- ggplot(
 
 pdf("maule_plot_OD.pdf", width = twocol, height = onecol * 0.4)
 maule_OD_plot
-dev.off()
-```
-
-## Mäule hue and S/G ratio
-
-```{r}
-maule_avg <- maule_hue %>% 
-  group_by(genotype, cell_type) %>% 
-  summarise(hue = mean(hue, na.rm = TRUE))
-
-rmn_maule <- rmn_lac_sum %>% 
-  group_by(genotype, cell_type) %>% 
-  summarise("S/G" = mean(S.G, na.rm = TRUE),
-            "S" = mean(S_rel, na.rm = TRUE)) %>% 
-  mutate(genotype = ordered(case_when(
-      genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
-    ),
-    levels = c(WT, triple_it, quad_it, Q_it)
-    )) %>% 
-  left_join(maule_avg) %>% 
-  pivot_longer(c(`S/G`, S), names_to = "Raman band", values_to = "value") %>% 
-  mutate(value_sq = value^2) %>%
-  filter(`Raman band` == "S/G") %>% 
-  drop_na()
-
-S.G_lm <- lm(hue ~ log(value), data = rmn_maule)
-rsq <- summary(S.G_lm)$adj.r.squared
-
-hue_palette1 <- hue_pal(h = c(330, 360) + 20, c = 200, l = 45, direction = 1)
-hue_palette2 <- hue_pal(h = c(10, 60) + 20, c = 200, l = 45, direction = 1)
-hue_palette <- c(hue_palette1(n = 4), hue_palette2(n = 5))
-show_col(hue_palette)
-
-
-bar_data <- tibble(
-  colour = as.character(c(1:9)),
-  hue = seq(from = 330, to = 410, by = 10)
-) %>%
-  mutate(
-    genotype = "<i>Q</i>",
-    value = 1
-  )
-
-
-rmn_maule_plot <- ggplot(rmn_maule,
-                         aes(x = log(value),
-                             y = hue)) +
-  geom_smooth(method = "lm",
-              se = FALSE,
-              colour = "black",
-              size = 0.2,
-              linetype = 2) +
-  geom_point(aes(colour = genotype)) +
-  # geom_label(aes(colour = genotype,
-  #               label = cell_type),
-  #           label.r = unit(1.2, "mm"),
-  #           label.padding = unit(0.5, "mm"),
-  #           family = "Helvetica",
-  #           fontface = "bold",
-  #           size = ggtext_size) +
-  annotate("richtext",
-           label = paste0("R<sup>2</sup> = ", round(rsq, digits = 2)),
-           y = 410,
-           x = 1.8,
-           family = "Helvetica",
-           size = ggtext_size,
-           label.size = NA) +
-  annotate("rect",
-           fill = "grey95",
-           xmin = -Inf,
-           xmax = 0.25,
-           ymin = -Inf,
-           ymax = Inf) +
-  geom_tile(
-    data = bar_data,
-    aes(fill = colour,
-        height = 10.2, 
-        width = 0.05,
-        y = hue),
-    position = position_nudge(y = 0, x = 1.92)
-  ) +
-  geom_text(data = bar_data %>% filter(colour == 9),
-            position = position_nudge(y = 5, x = 1.96),
-            label = "Visual hue scale",
-            angle = -90,
-            hjust = 0,
-            family = "Helvetica",
-            size = ggtext_size) +
-  scale_y_continuous(limits = c(324, 416), 
-                     expand = expansion(add = 0),
-                     breaks = c(340, 360, 380, 400),
-                     labels = c("340", "360", "20", "40")) +
-  scale_color_manual(values = pal_dawn, guide = guide_legend()) +
-  scale_fill_manual(values = hue_palette, guide = "none") +
-  labs(y = "Mäule hue",
-       x = "Log<sub><i>e</i></sub> Raman <sup><b>S</b></sup>/<sub><b>G</b></sub>") +
-  theme_leo() +
-  theme(axis.title.x = element_markdown(),
-        axis.title.y = element_markdown(),
-        legend.position = c(0.08, 0.5),
-        legend.title = element_blank(),
-        legend.text = element_markdown(),
-        legend.key.width = unit(2, "mm"),
-        plot.margin = unit(c(1, 7, 1, 1), "mm")) +
-  coord_cartesian(xlim = c(0, 1.8), clip = "off")
-
-pdf("maule_SG.pdf", height = onecol * 0.5, width = twocol)
-rmn_maule_plot
-dev.off()
-```
-
-## Assemble figure
-
-```{r}
-layout <- "
-A
-B
-C
-"
-
-pdf("Blaschek2022_figureS4.pdf", height = onecol * 1.5, width = twocol)
-maule_hue_plot + maule_OD_plot + rmn_maule_plot +
-  plot_layout(design = layout) &
-  plot_annotation(
-    tag_levels = "A"
-  ) &
-  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
 ```
 
@@ -6358,14 +7069,14 @@ stat_tab <- violin_data_avg %>%
       "variable" = stat_tab$variable,
       "cell_type" = stat_tab$cell_type) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "04B_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "05B_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
       "variable" = stat_tab$variable,
       "cell_type" = stat_tab$cell_type) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "04B_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "05B_tukey.csv"))
 ```
 
 ### Supplemental figure
@@ -6580,13 +7291,13 @@ stat_tab <- violin_data_avg %>%
     add_column(
       "variable" = stat_tab$variable) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S05A_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S06A_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
       "variable" = stat_tab$variable) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S05A_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S06A_tukey.csv"))
 ```
 
 #### Complete lignin
@@ -6826,14 +7537,14 @@ stat_tab <- violin_data_avg %>%
       "variable" = stat_tab$variable,
       "cell_type" = stat_tab$cell_type) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S05B_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S06B_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
       "variable" = stat_tab$variable,
       "cell_type" = stat_tab$cell_type) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S05B_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S06B_tukey.csv"))
 ```
 
 #### Assemble figure 
@@ -6842,6 +7553,204 @@ stat_tab <- violin_data_avg %>%
 pdf("Raman_supp_fig.pdf", width = twocol, height = twocol)
 lig_violin_WT + lig_violin +
   plot_layout(ncol = 1, heights = c(1, 4)) &
+  plot_annotation(
+    tag_levels = "A"
+  ) &
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
+dev.off()
+```
+# Mäule correlations and figure
+
+## Mäule hue and S/G ratio
+
+```{r}
+maule_avg <- maule_hue %>% 
+  group_by(genotype, cell_type) %>% 
+  summarise(hue = mean(hue, na.rm = TRUE))
+
+rmn_maule <- rmn_lac_sum %>% 
+  group_by(genotype, cell_type) %>% 
+  summarise("S/G" = mean(S.G, na.rm = TRUE),
+            "S" = mean(S_rel, na.rm = TRUE)) %>% 
+  mutate(genotype = ordered(case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    levels = c(WT, triple_it, quad_it, Q_it)
+    )) %>% 
+  left_join(maule_avg) %>% 
+  pivot_longer(c(`S/G`, S), names_to = "Raman band", values_to = "value") %>% 
+  mutate(value_sq = value^2) %>%
+  filter(`Raman band` == "S/G") %>% 
+  drop_na()
+
+S.G_lm <- lm(hue ~ log(value), data = rmn_maule)
+rsq <- summary(S.G_lm)$adj.r.squared
+
+hue_palette1 <- hue_pal(h = c(330, 360) + 20, c = 200, l = 45, direction = 1)
+hue_palette2 <- hue_pal(h = c(10, 60) + 20, c = 200, l = 45, direction = 1)
+hue_palette <- c(hue_palette1(n = 4), hue_palette2(n = 5))
+show_col(hue_palette)
+
+
+bar_data <- tibble(
+  colour = as.character(c(1:9)),
+  hue = seq(from = 330, to = 410, by = 10)
+) %>%
+  mutate(
+    genotype = "<i>Q</i>",
+    value = 1
+  )
+
+
+rmn_maule_plot <- ggplot(rmn_maule,
+                         aes(x = log(value),
+                             y = hue)) +
+  geom_smooth(method = "lm",
+              se = FALSE,
+              colour = "black",
+              size = 0.2,
+              linetype = 2) +
+  geom_point(aes(colour = genotype)) +
+  # geom_label(aes(colour = genotype,
+  #               label = cell_type),
+  #           label.r = unit(1.2, "mm"),
+  #           label.padding = unit(0.5, "mm"),
+  #           family = "Helvetica",
+  #           fontface = "bold",
+  #           size = ggtext_size) +
+  annotate("richtext",
+           label = paste0("R<sup>2</sup> = ", round(rsq, digits = 2)),
+           y = 410,
+           x = 1.7,
+           family = "Helvetica",
+           size = ggtext_size,
+           label.size = NA) +
+  annotate("rect",
+           fill = "grey95",
+           xmin = -Inf,
+           xmax = 0.25,
+           ymin = -Inf,
+           ymax = Inf) +
+  geom_tile(
+    data = bar_data,
+    aes(fill = colour,
+        height = 10.2, 
+        width = 0.05,
+        y = hue),
+    position = position_nudge(y = 0, x = 1.94)
+  ) +
+  geom_text(data = bar_data %>% filter(colour == 9),
+            position = position_nudge(y = 5, x = 2),
+            label = "Visual hue scale",
+            angle = -90,
+            hjust = 0,
+            family = "Helvetica",
+            size = ggtext_size) +
+  scale_y_continuous(limits = c(324, 416), 
+                     expand = expansion(add = 0),
+                     breaks = c(340, 360, 380, 400),
+                     labels = c("340", "360", "20", "40")) +
+  scale_color_manual(values = pal_dawn, guide = guide_legend()) +
+  scale_fill_manual(values = hue_palette, guide = "none") +
+  labs(y = "Mäule hue",
+       x = "Log<sub><i>e</i></sub> Raman <sup><b>S</b></sup>/<sub><b>G</b></sub>") +
+  theme_leo() +
+  theme(axis.title.x = element_markdown(),
+        axis.title.y = element_markdown(),
+        legend.position = c(0.08, 0.5),
+        legend.title = element_blank(),
+        legend.text = element_markdown(),
+        legend.key.width = unit(2, "mm"),
+        plot.margin = unit(c(1, 7, 1, 1), "mm")) +
+  coord_cartesian(xlim = c(0, 1.8), clip = "off")
+
+pdf("maule_SG.pdf", height = onecol * 0.5, width = onecol)
+rmn_maule_plot
+dev.off()
+```
+
+## Mäule intensity and total lignin
+
+```{r}
+maule_avg <- maule_OD %>% 
+  group_by(genotype, cell_type) %>% 
+  summarise(OD = mean(OD, na.rm = TRUE))
+
+rmn_maule <- rmn_lac_sum %>% 
+  group_by(genotype, cell_type) %>% 
+  summarise("Total lignin" = mean(lig.cellu, na.rm = TRUE)) %>% 
+  mutate(genotype = ordered(case_when(
+      genotype == "WT" ~ genotype,
+      TRUE ~ paste0("<i>", genotype, "</i>")
+    ),
+    levels = c(WT, triple_it, quad_it, Q_it)
+    )) %>% 
+  left_join(maule_avg) %>% 
+  drop_na()
+
+lig_lm <- lm(OD ~ `Total lignin`, data = rmn_maule)
+rsq <- summary(lig_lm)$adj.r.squared
+
+rmn_maule_OD <- ggplot(
+  rmn_maule,
+  aes(
+    x = `Total lignin`,
+    y = OD
+  )
+) +
+  geom_smooth(
+    method = "lm",
+    se = FALSE,
+    colour = "black",
+    size = 0.2,
+    linetype = 2
+  ) +
+  geom_point(aes(colour = genotype)) +
+  annotate("richtext",
+    label = paste0("R<sup>2</sup> = ", round(rsq, digits = 2)),
+    y = 0.31,
+    x = 9.5,
+    fill = NA,
+    family = "Helvetica",
+    size = ggtext_size,
+    label.size = NA
+  ) +
+  # annotate("rect",
+  #   fill = "grey95",
+  #   xmin = -Inf,
+  #   xmax = 0.25,
+  #   ymin = -Inf,
+  #   ymax = Inf
+  # ) +
+  scale_color_manual(values = pal_dawn, guide = guide_legend()) +
+  labs(
+    y = "Mäule absorbance",
+    x = "Raman <sup>lignin</sup>/<sub>cellulose</sub>"
+  ) +
+  theme_leo() +
+  theme(
+    axis.title.x = element_markdown(),
+    axis.title.y = element_markdown()
+  )
+
+pdf("maule_lignin.pdf", height = onecol * 0.5, width = onecol)
+rmn_maule_OD
+dev.off()
+```
+
+## Assemble figure
+
+```{r}
+layout <- "
+AA
+BB
+CD
+"
+
+pdf("maule.pdf", height = onecol * 1.5, width = twocol)
+maule_hue_plot + maule_OD_plot + rmn_maule_plot + rmn_maule_OD +
+  plot_layout(design = layout) &
   plot_annotation(
     tag_levels = "A"
   ) &
@@ -7107,13 +8016,13 @@ stat_tab <- CC_data_avg %>%
     add_column(
       "variable" = "CC autofluorescence realtive to CML") %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "05D_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "06D_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
       "variable" = "CC autofluorescence realtive to CML") %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "05D_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "06D_tukey.csv"))
 ```
 
 ### [unused] S2/S3 layers
@@ -7391,13 +8300,13 @@ stat_tab <- CC_abs_avg %>%
     add_column(
       "layer" = stat_tab$layer) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S06B_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S10B_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
       "layer" = stat_tab$layer) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S06B_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S10B_tukey.csv"))
 ```
 
 
@@ -7825,14 +8734,14 @@ stat_tab <- collapse_avg %>%
       "variable" = stat_tab$cell_type
       ) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "06_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "07B_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
       "variable" = stat_tab$cell_type
       ) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "06_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "07B_tukey.csv"))
 ```
 
 ### Plot SX collapse
@@ -7961,14 +8870,14 @@ stat_tab <- collapse_avg %>%
       "variable" = stat_tab$cell_type
       ) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S07B_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S11B_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
       "variable" = stat_tab$cell_type
       ) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S07B_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S11B_tukey.csv"))
 ```
 
 ### Plot perimeter length
@@ -8106,7 +9015,7 @@ stat_tab <- perim_length_avg %>%
       "cell_type" = stat_tab$cell_type
       ) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S08A_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S12A_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
@@ -8114,7 +9023,7 @@ stat_tab <- perim_length_avg %>%
       "cell_type" = stat_tab$cell_type
       ) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S08A_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S12A_tukey.csv"))
 ```
 
 ### Draw perimeters
@@ -8421,14 +9330,14 @@ stat_tab <- swelling_data_avg %>%
       "cell_type" = "IF"
       ) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "07B_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "08B_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
       "cell_type" = "IF"
       ) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "07B_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "08B_tukey.csv"))
 ```
 
 #### Supplementary figure
@@ -8553,14 +9462,14 @@ stat_tab <- swelling_data_avg %>%
       "cell_type" = "MX"
       ) %>% 
     distinct()
-  write_csv(anova_tab, paste0(stat_path, "S08B_anova.csv"))
+  write_csv(anova_tab, paste0(stat_path, "S12B_anova.csv"))
 
   tukey_tab <- stat_tab$tukey %>%
     add_column(
       "cell_type" = "MX"
       ) %>% 
     distinct()
-  write_csv(tukey_tab, paste0(stat_path, "S08B_tukey.csv"))
+  write_csv(tukey_tab, paste0(stat_path, "S12B_tukey.csv"))
 ```
 
 ### [unused] Relative thickness
@@ -8689,6 +9598,36 @@ geno_tab <- knitr::kable(geno_data,
 readr::write_file(geno_tab, "lac_tableS1.txt")
 ```
 
+## RT-qPCR primers
+
+```{r}
+options(knitr.kable.NA = '')
+geno_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Expression/primers.csv")
+
+geno_tab <- knitr::kable(geno_data,
+  "latex",
+  # align = "lllllcccc",
+  # caption = "Raman bands validated by Py--GC/MS.",
+  # col.names = c(
+  #   "Band no.",
+  #   "Band intensity at",
+  #   "Normalised to",
+  #   "Assigned polymer",
+  #   "Assigned structure",
+  #   "Pearson's r",
+  #   "P-value",
+  #   "Pearson's r",
+  #   "P-value"
+  # ),
+  booktabs = TRUE,
+  linesep = ""
+) %>%
+  kableExtra::column_spec(c(4, 5), monospace = TRUE) %>%
+  kableExtra::column_spec(1, italic = TRUE)
+
+readr::write_file(geno_tab, "lac_table_qPCR_primers.txt")
+```
+
 ## PCA
 
 ```{r}
@@ -8777,9 +9716,9 @@ pyro_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Biochemistry/py
     "**H** [% of lignin]" = H / lignin_raw * 100,
     "**5H** [% of lignin]" = `5H` / lignin_raw * 100,
     "**G**<sub>CHO</sub> [% of lignin]" = GCHO / lignin_raw * 100,
-    "**G**<sub>CHOH</sub> [% of lignin]" = GCHO / lignin_raw * 100,
+    "**G**<sub>CHOH</sub> [% of lignin]" = GCHOH / lignin_raw * 100,
     "**S**<sub>CHO</sub> [% of lignin]" = SCHO / lignin_raw * 100,
-    "**S**<sub>CHOH</sub> [% of lignin]" = SCHO / lignin_raw * 100,
+    "**S**<sub>CHOH</sub> [% of lignin]" = SCHOH / lignin_raw * 100,
     # "<sup>**H**</sup>&frasl;<sub>**G**</sub>" = H / G,
     # "<sup>**5H**</sup>&frasl;<sub>**G**</sub>" = `5H` / G,
     "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S / G,
@@ -8824,6 +9763,10 @@ pyro_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Biochemistry/py
 pyro_avg <- pyro_data %>%
   group_by(type, sample, method, variable) %>%
   summarise(mean = mean(value, na.rm = TRUE))
+
+pyro_n <- pyro_data %>% 
+  group_by(type, sample, method, variable) %>% 
+  summarise(n = n())
 ```
 
 ##### Plot mutant overview
@@ -8868,122 +9811,46 @@ pdf("biochem_supp.pdf", width = twocol, height = onecol)
 pyro_plot
 dev.off()
 ```
-#### Cell culture
 
-##### Load TE data
+###### Statistics
 
 ```{r}
-pyro_TE_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Biochemistry/pyrolysis.csv") %>%
-  filter(sample %in% c("WT", "TEs", "Parenchyma")) %>%
-  mutate(sample = recode(sample, "Parenchyma" = "PA")) %>% 
+stat_tab <- pyro_data %>%
+  drop_na(value) %>% 
+  rowwise() %>%
+  mutate(genotype = strip_html(sample),
+         variable = str_remove_all(strip_html(variable), fixed("*"))) %>%
+  group_by(genotype, variable) %>%
   mutate(
-    lignin_raw = H + C + G + `5H` + S + P,
-    "Lignin [% of CW]" = case_when(sample == "TEs" ~ (lignin_raw / SUM * 100) / 0.4,
-                                                 TRUE ~ lignin_raw / SUM * 100),
-    "**G** [% of lignin]" = G / lignin_raw * 100,
-    "**S** [% of lignin]" = S / lignin_raw * 100,
-    "**H** [% of lignin]" = H / lignin_raw * 100,
-    "**5H** [% of lignin]" = `5H` / lignin_raw * 100,
-    "**G**<sub>CHO</sub> [% of lignin]" = GCHO / lignin_raw * 100,
-    "**G**<sub>CHOH</sub> [% of lignin]" = GCHO / lignin_raw * 100,
-    "**S**<sub>CHO</sub> [% of lignin]" = SCHO / lignin_raw * 100,
-    "**S**<sub>CHOH</sub> [% of lignin]" = SCHO / lignin_raw * 100,
-    # "<sup>**H**</sup>&frasl;<sub>**G**</sub>" = H / G,
-    # "<sup>**5H**</sup>&frasl;<sub>**G**</sub>" = `5H` / G,
-    "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S / G,
-    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO / GCHOH,
-    "<sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>" = SCHO / SCHOH,
-    sample = ordered(sample,
-      levels = c(
-        "WT",
-        "TEs",
-        "PA"
-      )
-    ),
-    type = ordered(type, levels = c("hypocotyl", "culture"))
-  )  %>%
-  # rename("**H**" = H,
-  #        "**C**" = C,
-  #        "**G**" = G,
-  #        "**5H**" = `5H`,
-  #        "**S**" = S,
-  #        "**P**" = P) %>%
-  # select(-c(SUM, lignin_raw, GCHO, SCHO, GCHOH, SCHOH)) %>%
-  select(-c(5:16)) %>%
-  pivot_longer(!c(type, sample, replicate, method), names_to = "variable", values_to = "value") %>%
-  mutate(variable = ordered(variable, levels = c(
-    "Lignin [% of CW]",
-    "**G** [% of lignin]",
-    "**S** [% of lignin]",
-    "**H** [% of lignin]",
-    "**5H** [% of lignin]",
-    "**G**<sub>CHO</sub> [% of lignin]",
-    "**G**<sub>CHOH</sub> [% of lignin]",
-    "**S**<sub>CHO</sub> [% of lignin]",
-    "**S**<sub>CHOH</sub> [% of lignin]",
-    "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
-    # "<sup>**H**</sup>&frasl;<sub>**G**</sub>",
-    # "<sup>**5H**</sup>&frasl;<sub>**G**</sub>",
-    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>",
-    "<sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>"
-  )))
+    "n" = n(),
+    genotype = paste0(genotype, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    value,
+    genotype,
+    "tukey",
+    variable,
+    table = TRUE
+  )
 
-pyro_TE_avg <- pyro_TE_data %>%
-  group_by(type, sample, method, variable) %>%
-  summarise(mean = mean(value, na.rm = TRUE))
-```
+  anova_tab <- stat_tab$anova %>% 
+    add_column(
+      "variable" = stat_tab$variable) %>% 
+    distinct()
+  write_csv(anova_tab, paste0(stat_path, "S07_anova.csv"))
 
-
-##### Plot TE overview
-
-```{r}
-letters <- letter_groups(pyro_TE_data,
-                         value,
-                         sample,
-                         "tukey",
-                         variable,
-                         print_position = "above")
-
-pyro_TE_plot <- ggplot(pyro_TE_data,
-                    aes(x = sample,
-                        y = value)) +
-  geom_col(data = pyro_TE_avg,
-           aes(y = mean,
-               fill = type)) +
-  geom_quasirandom(
-    shape = 16,
-    alpha = 0.5,
-    size = 0.5,
-    width = 0.5) +
-  geom_text(
-    data = letters,
-    aes(label = Letters),
-    size = ggtext_size,
-    family = "Helvetica"
-  ) +
-  scale_fill_manual(values = c(pal_dawn[1], "grey80", "grey80"), name = "Sample") +
-  theme_leo() +
-  theme(strip.text.y.left = element_textbox_simple(halign = 0.5, 
-                                               orientation = "left-rotated"),
-        strip.placement = "outside",
-        legend.position = "none",
-        axis.text.x = element_markdown(),
-        axis.title = element_blank()) +
-  facet_wrap(~ variable,
-             ncol = 6,
-             scales = "free_y",
-             strip.position = "left")
-
-pdf("biochem_TE_supp.pdf", width = twocol, height = onecol)
-pyro_TE_plot
-dev.off()
+  tukey_tab <- stat_tab$tukey %>%
+    add_column(
+      "variable" = stat_tab$variable) %>% 
+    distinct()
+  write_csv(tukey_tab, paste0(stat_path, "S07_tukey.csv"))
 ```
 
 ### [unused] Thioacidolysis-FID
 
 #### Load data
 
-```{r}
+```{r, eval=FALSE}
 pyro_lignin <- pyro_data %>% 
   filter(variable == "Total lignin") %>% 
   group_by(sample) %>% 
@@ -9036,7 +9903,7 @@ thio_avg <- thio_data %>%
 
 #### Plot overview
 
-```{r}
+```{r, eval=FALSE}
 letters <- letter_groups(thio_data,
                          value,
                          sample,
@@ -9074,7 +9941,7 @@ thio_plot
 
 ### Assemble figure
 
-```{r}
+```{r, eval=FALSE}
 pdf("biochem_supp.pdf", height = twocol, width = twocol)
 pyro_plot + thio_plot +
   plot_layout(ncol = 1, heights = c(1, 1)) &
@@ -9083,606 +9950,6 @@ pyro_plot + thio_plot +
   ) &
   theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
-```
-
-## WT Expression
-
-### Viability
-
-#### Load viability and differentiation data
-
-```{r}
-growth_estimates <- read_csv(paste0(datapath, "PhD/Cell cultures/2021_timelines/2021_timeline_counts.csv"),
-  col_types = "Dccnnnnnc"
-) %>%
-  select(-comment)
-
-growth_files <-
-  list.files(
-    path = paste0(datapath, "PhD/2021-01_inductions/"),
-    pattern = "*.txt",
-    recursive = FALSE,
-    full.names = TRUE
-  )
-
-read_plus <- function(flnm) {
-  read_tsv(flnm,
-    comment = "#",
-    col_names = "code",
-    col_types = "c",
-    # locale = locale(decimal_mark = ",")
-  ) %>%
-    mutate(filename = basename(flnm)) %>%
-    separate(filename, into = c("date", "replicate", "dpi", "treatment"), sep = "_") %>%
-    mutate(
-      date = ymd(as_date(date)),
-      replicate = str_remove(replicate, fixed("R")),
-      dpi = as.numeric(str_remove(dpi, fixed("d"))),
-      treatment = str_remove(treatment, fixed(".txt"))
-    )
-}
-
-
-growth_data <- map(growth_files, read_plus) %>%
-  bind_rows() %>%
-  mutate(
-    code = str_to_lower(code),
-    nTEs_alive = str_count(code, "k"),
-    nTEs_dead = str_count(code, "l"),
-    TEs_alive = str_count(code, "i"),
-    TEs_dead = str_count(code, "o")
-  ) %>%
-  add_row(growth_estimates) %>%
-  mutate(
-    n = nTEs_alive + nTEs_dead + TEs_alive + TEs_dead,
-    nTE_viab = nTEs_alive / (nTEs_alive + nTEs_dead),
-    TE_prop = (TEs_alive + TEs_dead) / n,
-    TE_viab = TEs_alive / (TEs_alive + TEs_dead),
-    TE_viab = case_when(
-      is.nan(TE_viab) ~ 1,
-      TRUE ~ TE_viab
-    )
-  )
-
-growth_avg <- growth_data %>%
-  group_by(treatment, dpi) %>%
-  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
-
-writexl::write_xlsx(growth_data, "TE_differentiation.xlsx")
-```
-
-#### Sigmoid fits
-
-```{r}
-
-growth_fine <- tibble(
-  dpi = rep(rep(seq(0, 21, 0.1), times = 3), times = 4),
-  variable = rep(rep(c("nTE_viab", "TE_prop", "TE_viab"), each = 211, length.out = 633), times = 4),
-  replicate = rep(c("1", "2", "3", "4"), each = 633, length.out = 2532)
-)
-
-growth_long <- growth_data %>%
-  filter(treatment == "ind") %>%
-  pivot_longer(
-    cols = c(TE_viab, TE_prop),
-    names_to = "variable",
-    values_to = "value"
-  )
-
-growth_sigmoid <- growth_long %>%
-  select(replicate, dpi, variable, value) %>%
-  full_join(growth_fine) %>%
-  filter(variable != "nTE_viab") %>%
-  group_by(variable) %>%
-  nest(data = c(replicate, dpi, value)) %>%
-  mutate(
-    model_drc = map(data, ~ drc::drm(value ~ dpi, data = .x, fct = drc::G.3())),
-    tidy_drc = map(model_drc, tidy),
-    tidy_drc = map(tidy_drc, `[`, c("term", "estimate"))
-  ) %>%
-  unnest(tidy_drc) %>%
-  pivot_wider(names_from = term, values_from = estimate) %>%
-  mutate(
-    # data = map2(data, b, ~ mutate(.x, b_drc = round(.y, digits = 1))),
-    data = map2(data, b, ~ mutate(.x, b_drc = 1)), # set b to 1 to avoid singular gradients (no idea why)
-    data = map2(data, d, ~ mutate(.x, d_drc = round(.y, digits = 1))),
-    data = map2(data, e, ~ mutate(.x, e_drc = round(.y, digits = 1))),
-    model_nls = map(data, ~ nls(
-      value ~ b / (1 + exp(-d * (dpi - e))),
-      start = c(b = unique(.x$b_drc), d = unique(.x$d_drc), e = unique(.x$e_drc)),
-      data = .x
-    )),
-    tidy_nls = map(model_nls, tidy),
-    tidy_nls = map(tidy_nls, `[`, c("term", "estimate")),
-    predicted = map2(model_nls, data, ~ predict(.x, newdata = .y))
-  ) %>%
-  select(-b, -d, -e) %>%
-  unnest(tidy_nls) %>%
-  pivot_wider(names_from = term, values_from = estimate) %>%
-  unnest(c(data, predicted)) %>%
-  mutate(variable = recode(variable,
-    nTE_viab = "Non-TE viability",
-    TE_prop = "TE proportion",
-    TE_viab = "TE viability"
-  ))
-
-sigmoid_inflection <- growth_sigmoid %>%
-  group_by(variable) %>%
-  summarise(
-    inflection_x = mean(round(e, digits = 1)),
-    inflection_y = mean(predicted[round(dpi, digits = 1) == round(inflection_x, digits = 1)])
-  )
-
-growth_facet <- ggplot(
-  growth_sigmoid,
-  aes(
-    x = dpi,
-    y = value
-  )
-) +
-  geom_rect(
-    data = tibble(variable = "TE viability", dpi = 1, value = 1),
-    fill = "grey80",
-    xmin = 4.8,
-    xmax = Inf,
-    ymin = -Inf,
-    ymax = Inf
-  ) +
-  geom_text(
-    data = tibble(variable = "TE viability", dpi = c(0, 15), value = 0.5, label = c("TEs alive", "TEs dead"), just = c(0, 1)),
-    aes(label = label,
-        hjust = just),
-    family = "Helvetica",
-    size = ggtext_size,
-  ) +
-  # annotate("rect",
-  #   ymin = -Inf,
-  #   ymax = Inf,
-  #   xmin = 3,
-  #   xmax = 7,
-  #   fill = "grey90"
-  # ) +
-  geom_segment(
-    data = sigmoid_inflection,
-    aes(
-      x = inflection_x,
-      xend = inflection_x,
-      y = inflection_y,
-      yend = Inf
-    ),
-    size = 0.2,
-    linetype = 2,
-    # arrow = arrow(ends = "first",
-    #               type = "closed",
-    #               angle = 10,
-    #               length = unit(1.5, "mm"))
-  ) +
-  geom_point(
-    # aes(colour = replicate),
-    alpha = 0.5,
-    shape = 21,
-    fill = "white",
-    size = 1,
-    stroke = 0.2
-  ) +
-  geom_text(
-    data = sigmoid_inflection,
-    aes(
-      x = inflection_x,
-      y = 0.9,
-      label = paste(" ", inflection_x, "days")
-    ),
-    family = "Helvetica",
-    size = ggtext_size,
-    hjust = 0
-  ) +
-  # stat_smooth(geom = "line",
-  #             aes(group = replicate),
-  #             size = 0.2,
-  #             alpha = 0.5,
-  #             span = 0.9) +
-  geom_line(aes(y = predicted),
-    colour = "#275d95",
-    size = 0.2
-  ) +
-  scale_y_continuous(
-    limits = c(0, 1),
-    labels = c("0", "25", "50", "75", "100")
-  ) +
-  labs(
-    y = "Proportion [%]",
-    x = "Days past induction"
-  ) +
-  theme_leo() +
-  theme(strip.placement = "outside") +
-  facet_wrap(~variable, ncol = 3)
-
-pdf("TE_growth_sigmoid.pdf", width = twocol, height = onecol * 0.4)
-growth_facet
-dev.off()
-```
-
-### Binary time points
-
-```{r}
-expression_short <- read_csv("/run/media/leonard/data/grsync/Documents/Uni/Master/Master thesis/Laccases/Expression/R_file.csv") %>%
-  mutate(
-    time = case_when(
-      time == 0 ~ "Proliferation",
-      TRUE ~ "SCW formation"
-    ),
-    dataset = recode(dataset,
-                     "array" = "Microarray",
-                     "seq" = "RNA-Seq"),
-    laccase = ordered(laccase, levels = c(
-      "LAC1",
-      "LAC2",
-      "LAC3",
-      "LAC4",
-      "LAC5",
-      "LAC6",
-      "LAC7",
-      "LAC8",
-      "LAC9",
-      "LAC10",
-      "LAC11",
-      "LAC12",
-      "LAC13",
-      "LAC14",
-      "LAC15",
-      "LAC16",
-      "LAC17",
-      "XCP2",
-      "IRX3"
-    ))
-  )
-
-expression_highlight <- tibble(laccase = c("LAC4", "LAC5", "LAC10", "LAC11", "LAC12", "LAC17")) %>%
-  mutate(laccase = ordered(laccase, levels = c(
-    "LAC1",
-    "LAC2",
-    "LAC3",
-    "LAC4",
-    "LAC5",
-    "LAC6",
-    "LAC7",
-    "LAC8",
-    "LAC9",
-    "LAC10",
-    "LAC11",
-    "LAC12",
-    "LAC13",
-    "LAC14",
-    "LAC15",
-    "LAC16",
-    "LAC17",
-    "XCP2",
-    "IRX3"
-  )))
-
-expression_plot <- ggplot(
-  expression_short,
-  aes(x = laccase)
-) +
-  geom_tile(
-    data = expression_highlight,
-    aes(
-      y = 3,
-      width = 0.75,
-      height = Inf
-    ),
-    fill = "#ffcc3d"
-  ) +
-  annotate("tile",
-           x = c(18, 19),
-           y = 1,
-           height = Inf,
-           width = 0.75,
-           fill = "grey95") +
-  scale_fill_manual(values = c("black", "white")) +
-  scale_x_discrete(drop = F) +
-  geom_pointrange(aes(
-    y = absolute,
-    fill = time,
-    ymin = absolute - absolute.sd,
-    ymax = absolute + absolute.sd
-  ),
-  shape = 21,
-  stroke = 0.2
-  ) +
-  labs(y = "Relative expression") +
-  coord_flip(ylim = c(0, 8)) +
-  theme_leo() +
-  theme(
-    axis.title.y = element_blank(),
-    axis.text.x = element_blank(),
-    axis.text.y = element_text(hjust = 0, face = "italic"),
-    axis.ticks = element_blank(),
-    # panel.border = element_blank(),
-    legend.position = "bottom",
-    legend.title = element_blank()
-  ) +
-  facet_wrap(~dataset, nrow = 1)
-
-pdf("Blaschek2022_figureS1.pdf", width = onecol * 0.6, height = onecol * 0.65)
-expression_plot
-dev.off()
-```
-
-### Timeline
-
-#### Load data
-
-##### Microarray
-
-```{r}
-array <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Expression/microarray.csv") %>% 
-  pivot_longer(-c(type, gene, locus), names_to = "rep_time", values_to = "expression") %>% 
-  separate(rep_time, into = c("replicate", "time")) %>% 
-  mutate(day = as.numeric(str_remove(time, "h")) / 24,
-         method = "Microarray",
-         sample = "Induced")
-```
-
-##### RT-qPCR
-
-```{r}
-qPCR <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Expression/qPCR.csv") %>% 
-  fill(sample, gene) %>% 
-  left_join(array %>% select(gene, type)) %>% 
-  mutate(type = case_when(is.na(type) ~ "reference",
-                          TRUE ~ type),
-         method = "RT-qPCR") %>% 
-  pivot_longer(-c(method, type, sample, gene, day), names_to = "replicate", values_to = "expression")
-```
-
-##### Merge
-
-```{r}
-expression <- array %>% 
-  bind_rows(qPCR) %>% 
-  select(-c(locus, time)) %>% 
-  mutate(type = case_when(type %in% c("SCW", "PCD") ~ paste(type, "marker"),
-                          TRUE ~ type))
-
-expression_avg <- expression %>% 
-  group_by(sample, type, gene, day, method) %>% 
-  summarise(mean = mean(expression, na.rm = TRUE),
-            SD = sd(expression, na.rm = TRUE)) %>% 
-  filter(gene %in% c(
-    "XCP2",
-    "CesA7",
-    "CCR1",
-    "CAD4",
-    "CAD5",
-    "F5H1"
-  ) | grepl("LAC", gene)) %>% 
-  mutate(gene = ordered(gene, levels = c(
-    "CesA7",
-    "XCP2",
-    "CCR1",
-    "F5H1",
-    "CAD4",
-    "CAD5",
-    "LAC1",
-    "LAC2",
-    "LAC3",
-    "LAC4",
-    "LAC5",
-    "LAC6",
-    "LAC7",
-    "LAC8",
-    # "LAC9",
-    "LAC10",
-    "LAC11",
-    "LAC12",
-    "LAC13",
-    "LAC14",
-    "LAC15",
-    "LAC16",
-    "LAC17"
-  )),
-  type = ordered(type, levels = c(
-    "SCW marker",
-    "PCD marker",
-    "phenylpropanoid",
-    "LAC"
-  )),
-  sample = ordered(sample, levels = c(
-    "Induced",
-    "Control"
-  ))) %>% 
-  drop_na()
-  
-```
-
-#### Plot profiles
-
-##### Microarray
-
-```{r}
-array_profiles <- ggplot(
-  expression_avg %>% filter(method == "Microarray"),
-  aes(
-    x = day,
-    y = mean
-  )
-) +
-  # geom_rect(
-  #   aes(fill = type),
-  #   xmin = -Inf,
-  #   xmax = Inf,
-  #   ymin = -Inf,
-  #   ymax = Inf
-  # ) +
-  geom_rect(
-    fill = "grey80",
-    xmin = 4.8,
-    xmax = Inf,
-    ymin = -Inf,
-    ymax = Inf
-  ) +
-  geom_ribbon(aes(
-    ymin = mean - SD,
-    ymax = mean + SD
-  ),
-  alpha = 0.2) +
-  geom_line(aes(colour = type)) +
-  scale_colour_manual(values = c(
-    "#e69f00",
-    "#d55e00",
-    "#019e73",
-    "#0072b2"
-  ), 
-  name = "Type of gene",
-  guide = guide_legend(title.position = "top")) +
-  labs(x = "Days past induction",
-       y = "Relative expression [microarray]") +
-  theme_leo() +
-  theme(strip.text = element_text(face = "italic"),
-        legend.position = "none",
-        strip.placement = "outside") +
-  facet_wrap(~ gene, ncol = 7, scales = "free_y")
-
-pdf("array_profiles.pdf", width = twocol, height = onecol)
-array_profiles
-dev.off()
-```
-
-##### RT-qPCR
-
-```{r}
-qPCR_profiles <- ggplot(
-  expression_avg %>% filter(method == "RT-qPCR"),
-  aes(
-    x = day,
-    y = mean
-  )
-) +
-  # geom_rect(
-  #   aes(fill = type),
-  #   xmin = -Inf,
-  #   xmax = Inf,
-  #   ymin = -Inf,
-  #   ymax = Inf
-  # ) +
-  geom_rect(
-    fill = "grey80",
-    xmin = 4.8,
-    xmax = Inf,
-    ymin = -Inf,
-    ymax = Inf
-  ) +
-  geom_ribbon(aes(
-    group = sample,
-    ymin = mean - SD,
-    ymax = mean + SD
-  ),
-  alpha = 0.2) +
-  geom_line(aes(colour = type,
-                linetype = sample)) +
-  scale_linetype_discrete(
-    name = "Culture conditions",
-    guide = guide_legend(title.position = "top")) +
-  scale_colour_manual(values = c(
-    "#e69f00",
-    "#d55e00",
-    "#019e73",
-    "#0072b2"
-  ), 
-  name = "Type of gene",
-  guide = "none") +
-  labs(x = "Days past induction",
-       y = "Relative expression [RT-qPCR &#8710;Ct]") +
-  theme_leo() +
-  theme(
-    strip.placement = "outside",
-    # legend.position = c(0.05,0.9),
-    legend.position = "none",
-    # legend.title = element_blank(),
-    axis.title.y = element_markdown(),
-    strip.text = element_text(face = "italic")
-    ) +
-  facet_wrap(~ gene, ncol = 5, scales = "free_y")
-
-pdf("qPCR_profiles.pdf", width = twocol, height = onecol)
-qPCR_profiles
-dev.off()
-```
-
-#### Co-regulation 
-
-```{r}
-corr_data <- expression_avg %>% 
-  filter(method == "Microarray") %>% 
-  ungroup() %>% 
-  select(gene, day, mean) %>% 
-  pivot_wider(names_from = gene, values_from = mean) %>% 
-  column_to_rownames("day")
-
-corr_matrix <- cor(corr_data)
-
-corr_tibble <- corr_matrix %>% 
-  as_tibble(rownames = "gene1") %>% 
-  pivot_longer(-gene1, names_to = "gene2", values_to = "correlation") %>% 
-  mutate(gene1 = ordered(gene1, levels = levels(expression_avg$gene)),
-         gene2 = ordered(gene2, levels = levels(expression_avg$gene))) %>% 
-  filter(gene2 %in% c("CesA7", "XCP2"))
-
-corr_plot <- ggplot(corr_tibble,
-       aes(x = gene1,
-           y = gene2)) +
-  geom_tile(aes(fill = correlation),
-            colour = "white") +
-  # scale_fill_gradientn(colours = rev(pal_ostwald_cont), name = "Pearson's <i>r</i>") +
-  scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-1, 1)) +
-  theme_leo() +
-  theme(
-    # axis.text.x = element_text(angle = 90, hjust = 1),
-    strip.placement = "outside",
-    axis.title = element_blank(),
-    # legend.position = "right"
-    ) 
-
-# pdf("microarray_corrs.pdf")
-corr_plot
-# dev.off()
-```
-
-
-#### Assemble figure
-
-```{r}
-
-layout <- "
-#AAA
-#AAA
-BBBB
-BBBB
-BBBB
-BBBB
-BBBB
-CCCC
-CCCC
-CCCC
-CCCC
-CCCC
-DDDD
-EEEE
-EEEE
-EEEE
-"
-pdf("Blaschek2022_figureS1.pdf", width = twocol, height = twocol)
-growth_facet +  pyro_TE_plot + array_profiles + corr_plot + qPCR_profiles +
-  plot_layout(
-    design = layout
-    # heights = c(0.75, 2, 0.4, 1.5, 1.5)
-    # design = layout
-    ) &
-  plot_annotation(
-    tag_levels = list(LETTERS[2:6])
-  ) &
-  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 ```
 
 ## Mutant expression
@@ -10416,6 +10683,8 @@ ggplot() +
 
 ### Combined results
 
+#### Load data
+
 ```{r}
 result_files <-
   list.files(
@@ -10691,6 +10960,40 @@ ex_bar
 dev.off()
 ```
 
+##### Statistics
+
+```{r}
+stat_tab <- bar_data %>%
+  drop_na(value) %>% 
+  rowwise() %>%
+  mutate(genotype = strip_html(sample),
+         variable = str_remove_all(strip_html(gene), fixed("*"))) %>%
+  group_by(genotype, variable) %>%
+  mutate(
+    "n" = n(),
+    genotype = paste0(genotype, " (n = ", n, ")")
+  ) %>%
+  letter_groups(.,
+    value,
+    genotype,
+    "tukey",
+    variable,
+    table = TRUE
+  )
+
+  anova_tab <- stat_tab$anova %>% 
+    add_column(
+      "variable" = stat_tab$variable) %>% 
+    distinct()
+  write_csv(anova_tab, paste0(stat_path, "S01B_anova.csv"))
+
+  tukey_tab <- stat_tab$tukey %>%
+    add_column(
+      "variable" = stat_tab$variable) %>% 
+    distinct()
+  write_csv(tukey_tab, paste0(stat_path, "S01B_tukey.csv"))
+```
+
 #### Heatmap
 
 ```{r}
@@ -10744,21 +11047,6 @@ ex_heatmap <- ggplot() +
 pdf("mutant_expression.pdf", height = onecol, width = onecol)
 ex_heatmap
 dev.off()
-```
-
-### Export data
-
-```{r}
-# function to strip html for excel exports
-strip_html <- function(s) {
-    rvest::html_text(rvest::read_html(charToRaw(as.character(s))))
-}
-
-normalised_plain <- normalised %>% 
-  mutate(gene = strip_html(gene),
-         sample = strip_html(sample))
-writexl::write_xlsx(results, "Cp_values.xlsx")
-writexl::write_xlsx(normalised_plain, "normalised.xlsx")
 ```
 
 ### Gene models
@@ -11003,6 +11291,20 @@ dev.off()
 
 ```{r}
 writexl::write_xlsx(list(
+  "cell culture differentiation" = growth_data %>% 
+    select(replicate, "days past induction" = dpi, treatment, "TE proportion" = TE_prop, "TE viability" = TE_viab, n, comment) %>% 
+    arrange(`days past induction`, treatment, replicate),
+  "cell culture gene expression" = expression,
+  "mutant expression" = normalised %>% 
+    rowwise() %>% 
+    mutate(gene = strip_html(gene),
+         sample = strip_html(sample)) %>% 
+    select(-c(date, concentration, ref)),
+  "pyrolysis-GCMS in cell cultures" = pyro_TE_data %>% 
+    select(-method) %>% 
+    rowwise() %>%
+    mutate(variable = str_remove_all(strip_html(variable), fixed("*"))) %>% 
+    pivot_wider(names_from = variable, values_from = value),
   "plant height at harvest" = pheno_full %>%
     rename("height [cm]" = height, "mean height of the corresponding WT[cm]" = mean_WT, "height [% of WT]" = rel_height) %>%
     rowwise() %>%
@@ -11038,6 +11340,14 @@ writexl::write_xlsx(list(
     rename("growth rate [cm per day]" = estimate) %>%
     rowwise() %>%
     mutate(genotype = strip_html(genotype)),
+  "stem thickness and count" = thickness_data %>% 
+    select(genotype, 'replicate' = rep, "stem height [cm]" = stretched.height, "stem diameter [cm]" = thickness, "diameter/height" = T.H, "stem count" = stems) %>% 
+    rowwise() %>%
+    mutate(genotype = strip_html(genotype)),
+  "stem base angles" = angles %>% 
+    select(genotype, replicate, dpg, "stem base angle [∆90°]" = base_d90) %>% 
+    rowwise() %>%
+    mutate(genotype = strip_html(genotype)),
   # "LAC pH optimum absorbance" = pH_data %>% rename("start of linear phase" = lm_start, "end of linear phase" = lm_stop),
   "LAC pH optimum oxidation rates" = nested_pH_data %>%
     select(-c(date, data, fit, term, lm_start, lm_stop)) %>%
@@ -11060,12 +11370,17 @@ writexl::write_xlsx(list(
     select(-first_image) %>%
     rowwise() %>%
     mutate(genotype = strip_html(genotype)),
-  "Mäule data" = maule_data %>%
+  "Mäule hue" = maule_hue %>%
     select(-hue255) %>%
     mutate(hue = case_when(hue > 360 ~ hue - 360, TRUE ~ hue)) %>%
     rowwise() %>%
     mutate(genotype = strip_html(genotype)),
-  "Raman spectra" = rmn_lac_scaled %>% select(-c(ID, peak_pos, peak_pos_ref, AUC)) %>% rename("cell" = TE, "baseline corrected intensity (BCI)" = corrected.intensity, "BCI scaled to AUC" = scaled, "BCI scaled to total lignin" = scaled_lig, "BCI scaled to total cellulose" = scaled_cellu),
+  "Mäule absorbance" = maule_OD %>% 
+    rename("absorbance" = OD,
+           "absorbance of the phloem" = PH_OD) %>% 
+    rowwise() %>%
+    mutate(genotype = strip_html(genotype)),
+  # "Raman spectra" = rmn_lac_scaled %>% select(-c(ID, peak_pos, peak_pos_ref, AUC)) %>% rename("cell" = TE, "baseline corrected intensity (BCI)" = corrected.intensity, "BCI scaled to AUC" = scaled, "BCI scaled to total lignin" = scaled_lig, "BCI scaled to total cellulose" = scaled_cellu),
   "Raman bands" = rmn_lac_sum %>%
     select(genotype,
       replicate,
@@ -11083,6 +11398,16 @@ writexl::write_xlsx(list(
       "S/G" = S.G,
       "G-CHO/G-CHOH" = GCHO.GOH
     ),
+  "pyrolysis-GCMS in mutants" = pyro_data %>% 
+    select(-method) %>% 
+    rowwise() %>%
+    mutate(variable = str_remove_all(strip_html(variable), fixed("*")),
+           sample = strip_html(sample)) %>% 
+    pivot_wider(names_from = variable, values_from = value),
+  "UV-fluorescence by objective" = mag_data %>% 
+    select(genotype, magnification, "line profile #" = ROI, "pixel value" = value, "position relative to CC" = position, "pixel value scaled to CML" = scaled_CML) %>% 
+    rowwise() %>%
+    mutate(genotype = strip_html(genotype)),
   "absolute autofluorescence" = CC_abs %>%
     select(genotype, replicate, "cell wall layer" = layer, "pixel value [16 bit]" = value) %>%
     rowwise() %>%
@@ -11115,7 +11440,7 @@ use_zip64 = FALSE
 
 ```{r}
 stat_tables <- list.files(
-  path = "/home/leonard/Dropbox/2021_lac_manuscript/Submission/PlantCell/supplementary/Statistics/",
+  path = stat_path,
   full.names = TRUE
 )
 
@@ -11174,7 +11499,7 @@ list_of_tables <- stat_table %>%
   group_split(`Figure panel`)
 
 list_of_tables %>% 
-  map(~pull(.,`Figure panel`)) %>% # Pull out Species variable
+  map(~pull(.,`Figure panel`)) %>% # Pull out panel variable
   map(~as.character(.)) %>% # Convert factor to character
   map(~unique(.)) -> names(list_of_tables) # Set this as names for list members
 
