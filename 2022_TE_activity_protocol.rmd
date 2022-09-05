@@ -1,0 +1,216 @@
+---
+title: "Methods and data analysis for activity assays in cell cultures"
+author: "Leonard Blaschek"
+date: '2022-09-02'
+output: 
+  pdf_document:
+    latex_engine: lualatex
+    fig_caption: yes
+    fig_height: 6
+    includes:
+      in_header: rmd_temp.tex
+sansfont: IBM Plex Sans
+monofont: Inconsolata
+keep_tex: yes
+citation_package: biblatex
+bibliography: /home/leonard/Documents/Bibliography/Zotero_lib.bib
+csl: elife.csl
+link-citations: true
+linkcolor: KU
+urlcolor: KU
+citecolor: KU
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(kableExtra)
+library(showtext)
+
+#### import IBMPlexSans ####
+font_add(
+  "IBMPlexSans",
+  regular = "/OFL_fonts/IBMPlexSans-Light.otf",
+  italic = "/OFL_fonts/IBMPlexSans-LightItalic.otf",
+  bold = "/OFL_fonts/IBMPlexSans-SemiBold.otf",
+  bolditalic = "/OFL_fonts/IBMPlexSans-SemiBoldItalic.otf"
+)
+showtext_auto()
+
+#### generating plot theme ####
+theme_leo <- function(base_size = 11,
+                      base_family = "IBMPlexSans") {
+  theme_minimal(
+    base_size = base_size,
+    base_family = base_family
+  ) %+replace%
+    theme(
+      strip.text = element_text(hjust = 0, face = "italic"),
+      axis.ticks = element_line(
+        size = 0.25,
+        lineend = "square",
+        color = "black"
+      ),
+      axis.text.x = element_text(
+        colour = "black", # flipped coords
+        margin = margin(1, 1, 1, 1)
+      ),
+      axis.text.y = element_text(
+        colour = "black",
+        angle = 0,
+        vjust = 0.5,
+        hjust = 1,
+        margin = margin(1, 1, 1, 1)
+      ),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      # panel.border = element_rect(fill = NA, color = "black", size = 0.25),
+      panel.spacing = unit(1.5, "mm"),
+      legend.position = "bottom",
+      legend.text = element_text(size = rel(0.8)),
+      legend.key.height = unit(4, "mm"),
+      complete = TRUE
+    )
+}
+
+ggtext_size <- 8 / (14 / 5)
+```
+
+# Protocol
+
+## Stock solutions
+
+```{r, echo=FALSE, message=FALSE}
+options(knitr.kable.NA = '')
+stock_table <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Tables/substrates.csv") %>% 
+  select(-Supplier, - `Working concentration sections`)
+
+kable(stock_table,
+  "latex",
+  caption = "Stock solutions, working concentrations and absorbance extrema of LAC substrates.",
+  col.names = c(
+    "Compound",
+    "Abbrev.",
+    "Product No.",
+    "Stock",
+    "Solvent",
+    "Working",
+    "$\\lambda$\\textsubscript{max}",
+    "$\\lambda$\\textsubscript{min}"
+  ),
+  escape = F,
+  booktabs = T,
+  linesep = ""
+) %>%
+  kable_styling(latex_options = c(
+    "striped",
+    "HOLD_position",
+    "scale_down"
+  )) %>% 
+  footnote(
+    general = "All compounds purchased from Sigma-Aldrich",
+    # alphabet = c("\\\\cite{Espin1997}", "\\\\cite{Richardson2000}"),
+    general_title = "",
+    threeparttable = T,
+    escape = F
+  )
+```
+
+## Harvesting and washing of cells
+
+### Harvesting
+
+1. Harvest 10 ml of culture per day; this is enough for roughly 30 wells (*e.g*. 8 substrates for pH 4--7). At later stages (>5 d) of the non-induced cultures, harvesting 5 ml or even 3 ml is enough due to the density of the culture.
+2. Spin down the cells (2 min @ 3000 *g*, or whatever pellets the cells properly), discard the supernatant
+3. Resuspend the cells in 70% ethanol to a total volume of ~2 ml and transfer to a 2 ml eppendorf
+4. Spin down the eppendorf, discard the supernatant and fill up with 70% ethanol; vortex well
+5. Store at -20°C
+
+### Washing prior to the activity assay
+
+1. Take the required amount of cells from the freezer (I calculate 60 ml per well, plus margins)
+2. Wash cells twice in 70% ethanol and twice in MilliQ
+3. Store in the fridge (I washed cells for one week of experiments in advance, longer storage reduces activity)
+
+## Starting the assay
+
+### Plate layout
+
+My usually used plate layout looked as you can see below, testing one replicate for one substrate across the whole differentiation timeline at pH 4--7. This can of course be changed freely.
+
+```{r, echo = FALSE, include = TRUE, warning=FALSE, fig.height=4, fig.cap="Plate layout of a typical LAC acitivty assay."}
+plate <- tibble(
+  row = rep(LETTERS[1:8], length.out = 96, each = 12),
+  column = rep(1:12, length.out = 96, each = 1),
+  sample = rep(c("nTE", "TE"), each = 12, length.out = 96),
+  pH = rep(c(4:7), each = 24, length.out = 96),
+  day = rep(c(0:9, 14, 21), length.out = 96),
+  substrate = ordered("ABTS",
+    levels = c("ABTS", "DAF", "MBTH", "PYGL", "SGZ")
+  ),
+  concentration = 5,
+  replicate = 5
+) %>%
+  mutate(sample = case_when(
+    row %in% c("B", "D", "F", "H") & column == 1 ~ "neg. ctrl.",
+    TRUE ~ sample
+  ))
+
+ggplot(plate) +
+  geom_tile(aes(x = column, y = reorder(row, desc(row)), fill = substrate, alpha = pH),
+    colour = rgb(1, 1, 1, 1),
+    # fill = "#66CCCC",
+    size = 2
+  ) +
+  geom_text(
+    data = plate %>% filter(sample != "neg. ctrl."),
+    aes(
+      x = column, y = reorder(row, desc(row)),
+      label = paste(sample, "\nDPI:", day)
+    ),
+    size = 2, family = "IBMPlexSans"
+  ) +
+  geom_text(
+    data = plate %>% filter(sample == "neg. ctrl."),
+    aes(
+      x = column, y = reorder(row, desc(row)),
+      label = "NEGATIVE\nCONTROL"
+    ),
+    size = 2, family = "IBMPlexSans"
+  ) +
+  # labs(title = paste("Replicate", unique(plate$replicate))) +
+  scale_x_continuous(breaks = c(1:12), position = "top", expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  scale_fill_manual(
+    values = c(
+      "#66CCCC",
+      "#6699FF",
+      "#D35877",
+      "#FFCC66",
+      "#FF99CC"
+    ),
+    drop = FALSE
+  ) +
+  theme_leo() +
+  theme(
+    axis.line = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    legend.position = "right"
+  ) +
+  coord_fixed()
+```
+
+### Reaction mix
+
+The final reaction mix contains:
+
+* 100 µl 0.2M buffer (half strength, *i.e.* 100 µl 0.1M buffer, for SGZ, otherwise it precipitates)
+* 60 µl washed cells (H~2~O for the negative control)
+* 40 µl of appropriately diluted substrate (see table) --- added after the first two measurements
+
+### Hidex program
+
+The used program of the Hidex plate reader should be named something like "TE_activity". It measures the whole spectrum every ten minutes and includes a pause after 10 min (two measurements), to add the substrate. The average of the first two measurements is used to estimate cell density (detailed below).
+
+# References

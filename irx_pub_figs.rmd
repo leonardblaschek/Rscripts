@@ -606,9 +606,8 @@ dev.off()
 ```{r, echo=FALSE, fig.showtext=TRUE, message=FALSE, warning=FALSE, out.width='100%'}
 
 #### load data and calculate proportions of intact/collapsed cells ####
-em_data <- read_csv(paste0(datapath, "PhD/IRX/EM/AD_collapse.csv")) %>%
-  add_row(read_csv("/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/data/CPD_collapse_2.csv")) %>% 
-  pivot_longer(cols = c(PX, MX), names_to = "cell.type", values_to = "count") %>%
+em_data <- read_csv("/home/leonard/Dropbox/2020_IRX manuscript/Submission/2022-06_PlantCell_revisions/data/CPD_collapse_3.csv") %>%
+  pivot_longer(cols = c(Fully, Partially, Intact), names_to = "state", values_to = "count") %>%
   mutate(
     state = ordered(state, levels = c("Fully", "Partially", "Intact")),
     cell.type = ordered(cell.type, levels = c("PX", "MX")),
@@ -620,8 +619,10 @@ em_data <- read_csv(paste0(datapath, "PhD/IRX/EM/AD_collapse.csv")) %>%
   mutate(proportion = (count / sum) * 100)
 
 n_em <- em_data %>% 
-  group_by(experiment, treatment, days, cell.type) %>% 
+  group_by(treatment, days, cell.type) %>% 
   summarise(n = sum(count))
+
+write_csv(em_data, "em_data_final.csv")
 
 #### calculate error bars for stacked bar plots ####
 em_data_avg <- em_data %>%
