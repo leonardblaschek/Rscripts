@@ -145,15 +145,23 @@ strip_html <- function(s) {
     rvest::html_text(rvest::read_html(charToRaw(as.character(s))))
 }
 
+#function to print zero without decimals
+clean_zero <- function(l){
+    max.decimals = max(nchar(str_extract(l, "\\.[0-9]+")), na.rm = T)-1
+    lnew = formatC(l, replace.zero = T, zero.print = "0",
+        digits = max.decimals, format = "f", preserve.width=T)
+    return(lnew)
+}
+
 # convenience vectors of mutant types
 Q <- "Q"
-quad <- c("Q-4", "Q-5", "Q-10", "Q-12", "Q-17")
-triple <- c("Q-4/10", "Q-4/12", "Q-4/17", "Q-5/10", "Q-5/12", "Q-5/17", "Q-10/12", "Q-12/17")
+quad <- c("Q−4", "Q−5", "Q−10", "Q−12", "Q−17")
+triple <- c("Q−4/10", "Q−4/12", "Q−4/17", "Q−5/10", "Q−5/12", "Q−5/17", "Q−10/12", "Q−12/17")
 WT <- "WT"
 
 Q_it <- "<i>Q</i>"
-quad_it <- c("<i>Q-4</i>", "<i>Q-5</i>", "<i>Q-10</i>", "<i>Q-12</i>", "<i>Q-17</i>")
-triple_it <- c("<i>Q-4/10</i>", "<i>Q-4/12</i>", "<i>Q-4/17</i>", "<i>Q-5/10</i>", "<i>Q-5/12</i>", "<i>Q-5/17</i>", "<i>Q-10/12</i>", "<i>Q-12/17</i>")
+quad_it <- c("<i>Q−4</i>", "<i>Q−5</i>", "<i>Q−10</i>", "<i>Q−12</i>", "<i>Q−17</i>")
+triple_it <- c("<i>Q−4/10</i>", "<i>Q−4/12</i>", "<i>Q−4/17</i>", "<i>Q−5/10</i>", "<i>Q−5/12</i>", "<i>Q−5/17</i>", "<i>Q−10/12</i>", "<i>Q−12/17</i>")
 
 # convenience figure size functions
 ggtext_size <- 6 / (14 / 5)
@@ -402,19 +410,19 @@ pyro_TE_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Biochemistry
     lignin_raw = H + C + G + `5H` + S + P,
     "Lignin [% of CW]" = case_when(sample == "TEs" ~ (lignin_raw / SUM * 100) / 0.4,
                                                  TRUE ~ lignin_raw / SUM * 100),
-    "**G** [% of lignin]" = G / lignin_raw * 100,
-    "**S** [% of lignin]" = S / lignin_raw * 100,
-    "**H** [% of lignin]" = H / lignin_raw * 100,
-    "**5H** [% of lignin]" = `5H` / lignin_raw * 100,
-    "**G**<sub>CHO</sub> [% of lignin]" = GCHO / lignin_raw * 100,
-    "**G**<sub>CHOH</sub> [% of lignin]" = GCHOH / lignin_raw * 100,
-    "**S**<sub>CHO</sub> [% of lignin]" = SCHO / lignin_raw * 100,
-    "**S**<sub>CHOH</sub> [% of lignin]" = SCHOH / lignin_raw * 100,
-    # "<sup>**H**</sup>&frasl;<sub>**G**</sub>" = H / G,
-    # "<sup>**5H**</sup>&frasl;<sub>**G**</sub>" = `5H` / G,
-    "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S / G,
-    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO / GCHOH,
-    "<sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>" = SCHO / SCHOH,
+    "G [% of lignin]" = G / lignin_raw * 100,
+    "S [% of lignin]" = S / lignin_raw * 100,
+    "H [% of lignin]" = H / lignin_raw * 100,
+    "5H [% of lignin]" = `5H` / lignin_raw * 100,
+    "G<sub>CHO</sub> [% of lignin]" = GCHO / lignin_raw * 100,
+    "G<sub>CHOH</sub> [% of lignin]" = GCHOH / lignin_raw * 100,
+    "S<sub>CHO</sub> [% of lignin]" = SCHO / lignin_raw * 100,
+    "S<sub>CHOH</sub> [% of lignin]" = SCHOH / lignin_raw * 100,
+    # "<sup>H</sup>&frasl;<sub>G</sub>" = H / G,
+    # "<sup>5H</sup>&frasl;<sub>G</sub>" = `5H` / G,
+    "<sup>S</sup>&frasl;<sub>G</sub>" = S / G,
+    "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>" = GCHO / GCHOH,
+    "<sup>S<sub>CHO&thinsp;</sub></sup>&frasl;<sub>S<sub>CHOH</sub></sub>" = SCHO / SCHOH,
     sample = ordered(sample,
       levels = c(
         "WT",
@@ -424,30 +432,30 @@ pyro_TE_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Biochemistry
     ),
     type = ordered(type, levels = c("hypocotyl", "culture"))
   )  %>%
-  # rename("**H**" = H,
-  #        "**C**" = C,
-  #        "**G**" = G,
-  #        "**5H**" = `5H`,
-  #        "**S**" = S,
-  #        "**P**" = P) %>%
+  # rename("H" = H,
+  #        "C" = C,
+  #        "G" = G,
+  #        "5H" = `5H`,
+  #        "S" = S,
+  #        "P" = P) %>%
   # select(-c(SUM, lignin_raw, GCHO, SCHO, GCHOH, SCHOH)) %>%
   select(-c(5:16)) %>%
   pivot_longer(!c(type, sample, replicate, method), names_to = "variable", values_to = "value") %>%
   mutate(variable = ordered(variable, levels = c(
     "Lignin [% of CW]",
-    "**G** [% of lignin]",
-    "**S** [% of lignin]",
-    "**H** [% of lignin]",
-    "**5H** [% of lignin]",
-    "**G**<sub>CHO</sub> [% of lignin]",
-    "**G**<sub>CHOH</sub> [% of lignin]",
-    "**S**<sub>CHO</sub> [% of lignin]",
-    "**S**<sub>CHOH</sub> [% of lignin]",
-    "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
-    # "<sup>**H**</sup>&frasl;<sub>**G**</sub>",
-    # "<sup>**5H**</sup>&frasl;<sub>**G**</sub>",
-    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>",
-    "<sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>"
+    "G [% of lignin]",
+    "S [% of lignin]",
+    "H [% of lignin]",
+    "5H [% of lignin]",
+    "G<sub>CHO</sub> [% of lignin]",
+    "G<sub>CHOH</sub> [% of lignin]",
+    "S<sub>CHO</sub> [% of lignin]",
+    "S<sub>CHOH</sub> [% of lignin]",
+    "<sup>S</sup>&frasl;<sub>G</sub>",
+    # "<sup>H</sup>&frasl;<sub>G</sub>",
+    # "<sup>5H</sup>&frasl;<sub>G</sub>",
+    "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>",
+    "<sup>S<sub>CHO&thinsp;</sub></sup>&frasl;<sub>S<sub>CHOH</sub></sub>"
   )))
 
 pyro_TE_avg <- pyro_TE_data %>%
@@ -484,6 +492,7 @@ pyro_TE_plot <- ggplot(pyro_TE_data,
     family = "Helvetica"
   ) +
   scale_fill_manual(values = c(pal_dawn[1], "grey80", "grey80"), name = "Sample") +
+  scale_y_continuous(labels = clean_zero) +
   theme_leo() +
   theme(strip.text.y.left = element_textbox_simple(halign = 0.5, 
                                                orientation = "left-rotated"),
@@ -769,6 +778,7 @@ array_profiles <- ggplot(
   ), 
   name = "Type of gene",
   guide = guide_legend(title.position = "top")) +
+  scale_y_continuous(labels = clean_zero) +
   labs(x = "Days past induction",
        y = "Relative expression [microarray]") +
   theme_leo() +
@@ -825,6 +835,7 @@ qPCR_profiles <- ggplot(
   ), 
   name = "Type of gene",
   guide = "none") +
+  scale_y_continuous(labels = clean_zero) +
   labs(x = "Days past induction",
        y = "Relative expression [RT-qPCR &#8710;Ct]") +
   theme_leo() +
@@ -996,7 +1007,7 @@ pheno_full <- bind_rows(pheno_2017, pheno_2020) %>%
     genotype = str_replace_all(genotype, "/", ";"),
     genotype = case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     mean_WT = mean(height[genotype == "WT"]),
     rel_height = height / mean_WT * 100
@@ -1166,15 +1177,15 @@ siliques <- read_csv(paste0(
   mutate(genotype = recode(genotype,
     "Col-0" = "WT",
     "lac4/5/10/12/17" = "Q",
-    "lac5/10/12/17" = "Q-4",
-    "lac4/10/12/17" = "Q-5",
-    "lac4/5/12/17" = "Q-10",
-    "lac4/5/10/17" = "Q-12",
-    "lac4/5/10/12" = "Q-17"
+    "lac5/10/12/17" = "Q−4",
+    "lac4/10/12/17" = "Q−5",
+    "lac4/5/12/17" = "Q−10",
+    "lac4/5/10/17" = "Q−12",
+    "lac4/5/10/12" = "Q−17"
   )) %>%
   mutate(genotype = ordered(case_when(
     genotype == "WT" ~ genotype,
-    TRUE ~ paste0("<i>", genotype, "</i>")
+    TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
   ),
   levels = c(WT, triple_it, quad_it, Q_it)
   ))
@@ -1201,16 +1212,16 @@ pheno_data <- read_csv(paste0(
   mutate(genotype = recode(genotype,
     "Col-0" = "WT",
     "lac4/5/10/12/17" = "Q",
-    "lac5/10/12/17" = "Q-4",
-    "lac4/10/12/17" = "Q-5",
-    "lac4/5/12/17" = "Q-10",
-    "lac4/5/10/17" = "Q-12",
-    "lac4/5/10/12" = "Q-17"
+    "lac5/10/12/17" = "Q−4",
+    "lac4/10/12/17" = "Q−5",
+    "lac4/5/12/17" = "Q−10",
+    "lac4/5/10/17" = "Q−12",
+    "lac4/5/10/12" = "Q−17"
   )) %>%
   mutate(rep = as.character(rep)) %>%
   mutate(genotype = ordered(case_when(
     genotype == "WT" ~ genotype,
-    TRUE ~ paste0("<i>", genotype, "</i>")
+    TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
   ),
   levels = c(WT, triple_it, quad_it, Q_it)
   )) %>%
@@ -1464,16 +1475,16 @@ sil_data <- read_csv(paste0(
     genotype = recode(genotype,
       "Col-0" = "WT",
       "lac4/5/10/12/17" = "Q",
-      "lac5/10/12/17" = "Q-4",
-      "lac4/10/12/17" = "Q-5",
-      "lac4/5/12/17" = "Q-10",
-      "lac4/5/10/17" = "Q-12",
-      "lac4/5/10/12" = "Q-17"
+      "lac5/10/12/17" = "Q−4",
+      "lac4/10/12/17" = "Q−5",
+      "lac4/5/12/17" = "Q−10",
+      "lac4/5/10/17" = "Q−12",
+      "lac4/5/10/12" = "Q−17"
     )
   ) %>%
   mutate(genotype = ordered(case_when(
     genotype == "WT" ~ genotype,
-    TRUE ~ paste0("<i>", genotype, "</i>")
+    TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
   ),
   levels = c(WT, triple_it, quad_it, Q_it)
   ))
@@ -1795,6 +1806,7 @@ stem_no <- ggplot(
   ) +
   labs(y = "Stem count") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  scale_y_continuous(labels = clean_zero) +
   # scale_x_discrete(limits = c(0, 1)) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
@@ -2015,11 +2027,11 @@ rosette_area_III <- map_dfr(rosette_files, read_plus) %>%
 rosette_area <- bind_rows(rosette_area_I, rosette_area_II, rosette_area_III) %>%
   mutate(genotype = ordered(case_when(
     genotype == "WT" ~ genotype,
-    TRUE ~ paste0("<i>", genotype, "</i>")
+    TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
   ),
   levels = c(WT, triple_it, quad_it, Q_it)
   )) %>%
-  filter(genotype != "<i>Q-4/12</i>")
+  filter(genotype != "<i>Q−4/12</i>")
 ```
 
 #### Area over time
@@ -2141,6 +2153,7 @@ rosette_growth_plot <- ggplot(
   ) +
   labs(y = "Growth [cm<sup>2</sup> day<sup>-1</sup>]") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  scale_y_continuous(labels = clean_zero) +
   # scale_x_discrete(limits = c(0, 1)) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
@@ -2266,7 +2279,7 @@ stem_data <- bind_rows(stem_data_II, stem_data_III) %>%
   mutate(
     genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     ),
@@ -2283,7 +2296,7 @@ stem_data <- bind_rows(stem_data_II, stem_data_III) %>%
   anti_join(
     read_csv(paste0(datapath, "PhD/Phenotyping/2021-04_lac_mutants/excluded_stems.csv"))
   ) %>%
-  filter(genotype != "<i>Q-4/12</i>") %>%
+  filter(genotype != "<i>Q−4/12</i>") %>%
   group_by(genotype, replicate) %>%
   mutate(
     flowering_start = dpg[height == min(height[height > 5])],
@@ -2799,7 +2812,7 @@ angles <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/lodging/stem_angle
     base_d90 = abs(90 - base_angle),
     genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     )
@@ -3027,7 +3040,7 @@ root_data <- read_csv(paste0(
 )) %>% 
   mutate(genotype = ordered(case_when(
     genotype == "WT" ~ genotype,
-    TRUE ~ paste0("<i>", genotype, "</i>")
+    TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
   ),
   levels = c(WT, triple_it, quad_it, Q_it)
   )) 
@@ -3745,7 +3758,7 @@ nested_pH_data <- pH_data %>%
                              ))) %>% 
   mutate(genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)))
 
@@ -3815,6 +3828,7 @@ ph_cont_pygl <- ggplot(
   ) +
   labs(y = "PYGL oxidation rate") +
   scale_color_manual(values = pal_dawn[c(1,7)], aesthetics = c("colour", "fill")) +
+  scale_y_continuous(labels = clean_zero) +
   theme_leo() +
   theme(
     legend.position = c(0.06, 0.9),
@@ -3959,7 +3973,7 @@ pygl_violin <- ggplot(
   ) +
   labs(y = "PYGL oxidation rate") +
   scale_color_manual(values = c(pal_dawn[1], "#E3E6E8", pal_dawn[7], "#F3EAD8"), aesthetics = c("colour", "fill")) +
-  scale_y_continuous(limits = c(0, 0.002)) +
+  scale_y_continuous(limits = c(0, 0.002), labels = clean_zero) +
   theme_leo() +
   theme(
     # axis.title.x = element_blank(),
@@ -4059,6 +4073,7 @@ activity_grid <- ggplot(
   #   "#275d95"
   # )) +
   scale_color_manual(values = pal_dawn[c(1,7)], aesthetics = c("colour", "fill")) +
+  scale_y_continuous(labels = clean_zero) +
   scale_linetype(guide = "none") +
   theme_leo() +
   theme(legend.position = "bottom") +
@@ -4127,6 +4142,7 @@ slopes <- ggplot(
     "#275d95"
   )) +
   scale_x_discrete() +
+  scale_y_continuous(labels = clean_zero) +
   theme_leo() +
   theme(legend.position = "bottom") +
   facet_wrap(
@@ -4174,6 +4190,7 @@ ph_cont <- ggplot(
   labs(y = "DAF oxidation rate") +
   # scale_colour_manual(values = c("#d25952", "#275d95")) +
   scale_color_manual(values = pal_dawn[c(1,7)], aesthetics = c("colour", "fill")) +
+  scale_y_continuous(labels = clean_zero) +
   expand_limits(y = 0) +
   theme_leo() +
   theme(
@@ -4307,7 +4324,7 @@ DAF_violin <- ggplot(
   ) +
   labs(y = "DAF oxidation rate") +
   scale_color_manual(values = c(pal_dawn[1], "#E3E6E8", pal_dawn[7], "#F3EAD8"), aesthetics = c("colour", "fill")) +
-  scale_y_continuous(limits = c(0, 0.0037)) +
+  scale_y_continuous(limits = c(0, 0.0037), labels = clean_zero) +
   theme_leo() +
   theme(
     # axis.title.x = element_blank(),
@@ -4427,6 +4444,7 @@ raw_absorbance <- ggplot(
     size = 0.5
   ) +
   scale_colour_manual(values = c("grey70", pal_dawn[1], "grey70", pal_dawn[7])) +
+  scale_y_continuous(labels = clean_zero) +
   labs(
     x = "Time [min]",
     y = "Corrected & zeroed<br>DAF absorbance"
@@ -4531,7 +4549,7 @@ data_dab <- data_dab %>%
   ) %>% 
   mutate(genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, quad_it, Q_it)),
     cell_type = recode(cell_type, 
@@ -4781,6 +4799,7 @@ dab_slopes <- ggplot(
   ) +
   labs(y = "DAB oxidation rate<br>at pH 5") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  scale_y_continuous(labels = clean_zero) +
   theme_leo() +
   theme(
     axis.title.x = element_blank(),
@@ -4884,7 +4903,7 @@ daf_IF_data <- map_dfr(c(daf_IF_files, daf_CC_files), read_csv) %>%
     date = as.Date(ymd(
       str_extract(image, "[:digit:]{4}-[:digit:]{2}-[:digit:]{2}")
     )),
-    genotype = str_remove(str_extract(image, "WT|Q-4|Q-5|Q-10|Q-12|Q-17|Q$|Q_"), "_"),
+    genotype = str_remove(str_extract(image, "WT|Q−4|Q−5|Q−10|Q−12|Q−17|Q$|Q_"), "_"),
     treatment = "none",
     pH = "5",
     substrate = "DAF"
@@ -4914,7 +4933,7 @@ data_daf <- data_daf %>%
   ) %>% 
   mutate(genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, quad_it, Q_it)),
     cell_type = recode(cell_type, 
@@ -5165,6 +5184,7 @@ daf_slopes <- ggplot(
   ) +
   labs(y = "DAF oxidation rate<br>at pH 5") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  scale_y_continuous(labels = clean_zero) +
   theme_leo() +
   theme(
     axis.title.x = element_blank(),
@@ -5246,11 +5266,11 @@ daf6_data <- map_dfr(daf6_files, read_csv) %>%
   mutate(
     genotype = ordered(genotype, levels = c(
       "WT",
-      "Q-4",
-      "Q-5",
-      "Q-10",
-      "Q-12",
-      "Q-17",
+      "Q−4",
+      "Q−5",
+      "Q−10",
+      "Q−12",
+      "Q−17",
       "Q"
     )),
     cell_type = ordered(cell_type, levels = c(
@@ -5614,11 +5634,11 @@ anim_save("Full_IF_1_animation.gif")
 single_violin_data <- nested_data_dab %>%
   full_join(nested_data_daf) %>%
   mutate(genotype = recode(genotype,
-    "Q-4" = "<i>Q-4</i>",
-    "Q-5" = "<i>Q-5</i>",
-    "Q-10" = "<i>Q-10</i>",
-    "Q-12" = "<i>Q-12</i>",
-    "Q-17" = "<i>Q-17</i>",
+    "Q−4" = "<i>Q−4</i>",
+    "Q−5" = "<i>Q−5</i>",
+    "Q−10" = "<i>Q−10</i>",
+    "Q−12" = "<i>Q−12</i>",
+    "Q−17" = "<i>Q−17</i>",
     "Q" = "<i>Q</i>"
   ))
 
@@ -5750,7 +5770,7 @@ Wiesner_data <- map_dfr(Wiesner_files, read_csv) %>%
     ),
     genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     ),
@@ -5871,8 +5891,9 @@ Wiesner_plot <- ggplot(
     size = ggtext_size,
     family = "Helvetica"
   ) +
-  labs(y = "Relative <b>G</b><sub>CHO</sub>") +
+  labs(y = "Relative G<sub>CHO</sub>") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  scale_y_continuous(labels = clean_zero) +
   # scale_x_discrete(limits = c(0, 1)) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
@@ -5965,19 +5986,19 @@ profile_data <- map_dfr(profile_files, read_profiles) %>%
   separate(filename, into = c("date", "genotype", "replicate"), sep = "_", extra = "drop") %>%
   mutate(genotype = ordered(genotype, levels = c(
     "WT",
-    "Q-4",
-    "Q-5",
-    "Q-10",
-    "Q-12",
-    "Q-17",
+    "Q−4",
+    "Q−5",
+    "Q−10",
+    "Q−12",
+    "Q−17",
     "Q"
   ))) %>%
   mutate(genotype = recode(genotype,
-    "Q-4" = "<i>Q-4</i>",
-    "Q-5" = "<i>Q-5</i>",
-    "Q-10" = "<i>Q-10</i>",
-    "Q-12" = "<i>Q-12</i>",
-    "Q-17" = "<i>Q-17</i>",
+    "Q−4" = "<i>Q−4</i>",
+    "Q−5" = "<i>Q−5</i>",
+    "Q−10" = "<i>Q−10</i>",
+    "Q−12" = "<i>Q−12</i>",
+    "Q−17" = "<i>Q−17</i>",
     "Q" = "<i>Q</i>"
   ))
 ```
@@ -6058,7 +6079,7 @@ read_CC <- function(flnm) {
 CC_Wiesner <- map_dfr(CC_Wiesner_files, read_CC) %>%
   mutate(genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     )) %>% 
@@ -6222,7 +6243,7 @@ maule_hue <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Mäule/maule_hu
     ),
     genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     )
@@ -6246,7 +6267,7 @@ maule_OD <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Mäule/maule_OD.
     ),
     genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     )
@@ -6379,7 +6400,7 @@ maule_OD_plot <- ggplot(
     scale = "width"
   ) +
   scale_fill_manual(values = pal_dawn) +
-  scale_y_continuous(limits = c(0, 0.5)) +
+  scale_y_continuous(limits = c(0, 0.5), labels = clean_zero) +
   labs(y = "Mäule stain absorbance") +
   theme_leo() +
   theme(
@@ -6734,7 +6755,7 @@ partial_spec <- function(min_wn, max_wn) {
     ) %>%
     mutate(genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     ))
@@ -6768,7 +6789,7 @@ partial_spec <- function(min_wn, max_wn) {
       alpha = 1,
       size = 0.4
     ))) +
-    scale_y_continuous(limits = c(-0.1, 8)) +
+    scale_y_continuous(limits = c(-0.1, 8), labels = clean_zero) +
     scale_x_reverse(expand = expansion(mult = 0.01)) +
     theme_leo() +
     theme(
@@ -6822,6 +6843,7 @@ partial_spec <- function(min_wn, max_wn) {
       y = "Normalised intensity",
       x = "Wavenumber [cm<sup>-1</sup>]"
     ) +
+    scale_y_continuous(labels = clean_zero) +
     scale_x_reverse(expand = expansion(mult = 0.01)) +
     theme_leo() +
     theme(
@@ -6852,7 +6874,7 @@ violin_data <- rmn_lac_sum %>%
   select(
     # "Total lignin" = total_lignin,
     "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>" = lig.cellu,
-    "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S.G,
+    "<sup>S</sup>&frasl;<sub>G</sub>" = S.G,
     # "S" = S_rel,
     # "G" = G_rel,
     # "P-units" = P_rel,
@@ -6861,7 +6883,7 @@ violin_data <- rmn_lac_sum %>%
     # "Benzaldehydes" = Benz_rel,
     # "G-CHOH" = GOH_rel,
     # "G-CHO" = GCHO_rel,
-    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO.GOH
+    "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>" = GCHO.GOH
   ) %>%
   filter(cell_type != "LP") %>%
   pivot_longer(
@@ -6874,8 +6896,8 @@ violin_data <- rmn_lac_sum %>%
       variable,
       levels = c(
         "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>",
-        "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
-        "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>"
+        "<sup>S</sup>&frasl;<sub>G</sub>",
+        "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>"
       )),
     cell_type = ordered(cell_type,
       levels = c(
@@ -6888,7 +6910,7 @@ violin_data <- rmn_lac_sum %>%
     ),
     genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     ),
@@ -6900,9 +6922,9 @@ violin_data <- rmn_lac_sum %>%
 
 ref_labels <- tribble(
   ~genotype, ~cell_type, ~variable, ~label,
-  "fah1", "MX", "<sup>**S**</sup>&frasl;<sub>**G**</sub>", "<i>fah1</i> MX (traces of <b>S</b>)",
+  "fah1", "MX", "<sup>S</sup>&frasl;<sub>G</sub>", "<i>fah1</i> MX (traces of S)",
   "ccr1_3", "IF", "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>", "<i>ccr1-3</i> IF (traces of lignin)",
-  "cad4x5", "IF", "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>", "<i>cad4;5</i> IF (overaccumulates <b>G</b><sub>CHO</sub>)"
+  "cad4x5", "IF", "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>", "<i>cad4;5</i> IF (overaccumulates G<sub>CHO</sub>)"
 )
 
 ref_data <- rmn_ref_avg %>%
@@ -6910,8 +6932,8 @@ ref_data <- rmn_ref_avg %>%
     genotype,
     cell_type,
     "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>" = lig.cellu,
-    "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S.G,
-    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO.GOH
+    "<sup>S</sup>&frasl;<sub>G</sub>" = S.G,
+    "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>" = GCHO.GOH
   ) %>%
   pivot_longer(
     cols = -c(genotype, cell_type),
@@ -6925,8 +6947,8 @@ ref_data <- rmn_ref_avg %>%
       variable,
       levels = c(
         "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>",
-        "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
-        "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>"
+        "<sup>S</sup>&frasl;<sub>G</sub>",
+        "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>"
       )
     )
   ) %>% 
@@ -6960,7 +6982,7 @@ letters <- letter_groups(violin_data,
   print_adjust = 1.5
 ) %>%
   mutate(value = case_when(
-    variable == "<sup>**S**</sup>&frasl;<sub>**G**</sub>" & cell_type %in% c("PX", "MX") ~
+    variable == "<sup>S</sup>&frasl;<sub>G</sub>" & cell_type %in% c("PX", "MX") ~
     value + 0.5,
     TRUE ~ value
   ))
@@ -7023,6 +7045,7 @@ lig_violin <- ggplot(
     family = "Helvetica"
   ) +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  scale_y_continuous(labels = clean_zero) +
   # scale_x_discrete(limits = c(0, 1)) +
   expand_limits(y = 0) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
@@ -7088,7 +7111,7 @@ violin_data <- rmn_lac_sum %>%
   select(
     # "Total lignin" = total_lignin,
     "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>" = lig.cellu,
-    "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S.G,
+    "<sup>S</sup>&frasl;<sub>G</sub>" = S.G,
     # "S" = S_rel,
     # "G" = G_rel,
     # "P-units" = P_rel,
@@ -7097,7 +7120,7 @@ violin_data <- rmn_lac_sum %>%
     # "Benzaldehydes" = Benz_rel,
     # "G-CHOH" = GOH_rel,
     # "G-CHO" = GCHO_rel,
-    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO.GOH
+    "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>" = GCHO.GOH
   ) %>%
   filter(genotype == "WT" & cell_type != "LP") %>%
   pivot_longer(
@@ -7109,8 +7132,8 @@ violin_data <- rmn_lac_sum %>%
     variable = ordered(variable,
       levels = c(
         "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>",
-        "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
-        "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>"
+        "<sup>S</sup>&frasl;<sub>G</sub>",
+        "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>"
       )
     ),
     cell_type = ordered(cell_type,
@@ -7124,7 +7147,7 @@ violin_data <- rmn_lac_sum %>%
     ),
     genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     ),
@@ -7140,9 +7163,9 @@ violin_data_avg <- violin_data %>%
 
 ref_labels <- tribble(
   ~genotype, ~cell_type, ~variable, ~label,
-  "fah1", "MX", "<sup>**S**</sup>&frasl;<sub>**G**</sub>", "<i>fah1</i> MX (traces of <b>S</b>)",
+  "fah1", "MX", "<sup>S</sup>&frasl;<sub>G</sub>", "<i>fah1</i> MX (traces of S)",
   "ccr1_3", "IF", "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>", "<i>ccr1-3</i> IF (traces of lignin)",
-  "cad4x5", "IF", "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>", "<i>cad4;5</i> IF (overaccumulates <b>G</b><sub>CHO</sub>)"
+  "cad4x5", "IF", "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>", "<i>cad4;5</i> IF (overaccumulates G<sub>CHO</sub>)"
 )
 
 ref_data <- rmn_ref_avg %>%
@@ -7150,8 +7173,8 @@ ref_data <- rmn_ref_avg %>%
     genotype,
     cell_type,
     "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>" = lig.cellu,
-    "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S.G,
-    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO.GOH
+    "<sup>S</sup>&frasl;<sub>G</sub>" = S.G,
+    "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>" = GCHO.GOH
   ) %>%
   pivot_longer(
     cols = -c(genotype, cell_type),
@@ -7165,8 +7188,8 @@ ref_data <- rmn_ref_avg %>%
       variable,
       levels = c(
         "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>",
-        "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
-        "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>"
+        "<sup>S</sup>&frasl;<sub>G</sub>",
+        "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>"
       )
     ),
     cell_type = c("IF", "MX", "IF"),
@@ -7247,6 +7270,7 @@ lig_violin_WT <- ggplot(
     family = "Helvetica"
   ) +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  scale_y_continuous(labels = clean_zero) +
   # scale_x_discrete(limits = c(0, 1)) +
   expand_limits(y = 0) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
@@ -7309,16 +7333,16 @@ violin_data <- rmn_lac_sum %>%
   select(
     # "Total lignin" = total_lignin,
     # "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>" = lig.cellu,
-    # "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S.G,
-    "<b>S</b>" = S_rel,
-    "<b>G</b>" = G_rel,
-    "<b>P</b>" = P_rel,
+    # "<sup>S</sup>&frasl;<sub>G</sub>" = S.G,
+    "S" = S_rel,
+    "G" = G_rel,
+    "P" = P_rel,
     # AUC,
     "Cellulose cryst." = cellu_cryst,
     "Benz-<br>aldehydes" = Benz_rel,
-    "<b>G</b><sub>CHOH</sub>" = GOH_rel,
-    "<b>G</b><sub>CHO</sub>" = GCHO_rel,
-    # "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO.GOH
+    "G<sub>CHOH</sub>" = GOH_rel,
+    "G<sub>CHO</sub>" = GCHO_rel,
+    # "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>" = GCHO.GOH
   ) %>%
   filter(cell_type != "LP") %>%
   pivot_longer(
@@ -7331,12 +7355,12 @@ violin_data <- rmn_lac_sum %>%
       variable,
       levels = c(
         "Cellulose cryst.",
-        "<b>S</b>",
-        "<b>G</b>",
-        "<b>G</b><sub>CHO</sub>",
-        "<b>G</b><sub>CHOH</sub>",
+        "S",
+        "G",
+        "G<sub>CHO</sub>",
+        "G<sub>CHOH</sub>",
         "Benz-<br>aldehydes",
-        "<b>P</b>"
+        "P"
       )
     ),
     cell_type = ordered(cell_type,
@@ -7350,7 +7374,7 @@ violin_data <- rmn_lac_sum %>%
     ),
     genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     ),
@@ -7366,20 +7390,20 @@ violin_data_avg <- violin_data %>%
 
 ref_labels <- tribble(
   ~genotype, ~cell_type, ~variable, ~label,
-  "fah1", "MX", "<b>S</b>", "<i>fah1</i> MX (traces of <b>S</b>)",
-  "fah1", "MX", "<b>G</b>", "<i>fah1</i> MX (overaccumulates <b>G</b>)",
-  # "cad4x5", "IF", "<b>G</b><sub>CHOH</sub>", "<i>cad4;5</i> IF (depleted of <b>G</b><sub>CHOH</sub>)",
-  "cad4x5", "IF", "<b>G</b><sub>CHO</sub>", "<i>cad4;5</i> IF (overaccumulates <b>G</b><sub>CHO</sub>)"
+  "fah1", "MX", "S", "<i>fah1</i> MX (traces of S)",
+  "fah1", "MX", "G", "<i>fah1</i> MX (overaccumulates G)",
+  # "cad4x5", "IF", "G<sub>CHOH</sub>", "<i>cad4;5</i> IF (depleted of G<sub>CHOH</sub>)",
+  "cad4x5", "IF", "G<sub>CHO</sub>", "<i>cad4;5</i> IF (overaccumulates G<sub>CHO</sub>)"
 )
 
 ref_data <- rmn_ref_avg %>%
   select(
     genotype,
     cell_type,
-    "<b>S</b>" = S_rel,
-    "<b>G</b>" = G_rel,
-    # "<b>G</b><sub>CHOH</sub>" = GOH_rel,
-    "<b>G</b><sub>CHO</sub>" = GCHO_rel
+    "S" = S_rel,
+    "G" = G_rel,
+    # "G<sub>CHOH</sub>" = GOH_rel,
+    "G<sub>CHO</sub>" = GCHO_rel
   ) %>%
   pivot_longer(
     cols = -c(genotype, cell_type),
@@ -7393,12 +7417,12 @@ ref_data <- rmn_ref_avg %>%
       variable,
       levels = c(
         "Cellulose cryst.",
-        "<b>S</b>",
-        "<b>G</b>",
-        "<b>G</b><sub>CHO</sub>",
-        "<b>G</b><sub>CHOH</sub>",
+        "S",
+        "G",
+        "G<sub>CHO</sub>",
+        "G<sub>CHOH</sub>",
         "Benz-<br>aldehydes",
-        "<b>P</b>"
+        "P"
       )
     ),
     cell_type = "IF",
@@ -7427,8 +7451,8 @@ letters <- letter_groups(violin_data,
   print_adjust = 1.5
 ) %>%
   mutate(value = case_when(
-    cell_type == "MX" & variable != "Cellulose cryst." & variable != "<b>P</b>" ~ value - 0.3 * value,
-    cell_type == "MX" & variable == "<b>P</b>" ~ value - 0.04,
+    cell_type == "MX" & variable != "Cellulose cryst." & variable != "P" ~ value - 0.3 * value,
+    cell_type == "MX" & variable == "P" ~ value - 0.04,
     cell_type == "PX" & variable == "Cellulose cryst." ~ value + 0.1,
     TRUE ~ value
   ))
@@ -7492,6 +7516,7 @@ lig_violin <- ggplot(
     family = "Helvetica"
   ) +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
+  scale_y_continuous(labels = clean_zero) +
   # scale_x_discrete(limits = c(0, 1)) +
   expand_limits(y = 0) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
@@ -7559,6 +7584,7 @@ lig_violin_WT + lig_violin +
   theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
 ```
+
 # Mäule correlations and figure
 
 ## Mäule hue and S/G ratio
@@ -7574,7 +7600,7 @@ rmn_maule <- rmn_lac_sum %>%
             "S" = mean(S_rel, na.rm = TRUE)) %>% 
   mutate(genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     )) %>% 
@@ -7647,6 +7673,7 @@ rmn_maule_plot <- ggplot(rmn_maule,
             hjust = 0,
             family = "Helvetica",
             size = ggtext_size) +
+  scale_x_continuous(labels = clean_zero) +
   scale_y_continuous(limits = c(324, 416), 
                      expand = expansion(add = 0),
                      breaks = c(340, 360, 380, 400),
@@ -7654,7 +7681,7 @@ rmn_maule_plot <- ggplot(rmn_maule,
   scale_color_manual(values = pal_dawn, guide = guide_legend()) +
   scale_fill_manual(values = hue_palette, guide = "none") +
   labs(y = "Mäule hue",
-       x = "Log<sub><i>e</i></sub> Raman <sup><b>S</b></sup>/<sub><b>G</b></sub>") +
+       x = "Log<sub><i>e</i></sub> Raman <sup>S</sup>/<sub>G</sub>") +
   theme_leo() +
   theme(axis.title.x = element_markdown(),
         axis.title.y = element_markdown(),
@@ -7682,7 +7709,7 @@ rmn_maule <- rmn_lac_sum %>%
   summarise("Total lignin" = mean(lig.cellu, na.rm = TRUE)) %>% 
   mutate(genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     )) %>% 
@@ -7791,7 +7818,7 @@ read_CC <- function(flnm) {
 CC_data <- map_dfr(CC_files, read_CC) %>%
   mutate(genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     )) %>% 
@@ -7818,7 +7845,7 @@ CC_data_avg <- CC_data %>%
 ### Plot profiles
 
 ```{r}
-CC_profiles <- ggplot(CC_data %>% filter(genotype %in% c("WT", "<i>Q</i>", "<i>Q-12</i>")),
+CC_profiles <- ggplot(CC_data %>% filter(genotype %in% c("WT", "<i>Q</i>", "<i>Q−12</i>")),
        aes(x = position,
            y = scaled_CML,
            colour = genotype)) +
@@ -7840,6 +7867,7 @@ CC_profiles <- ggplot(CC_data %>% filter(genotype %in% c("WT", "<i>Q</i>", "<i>Q
                      labels = c("CML", "CC", "SCW"),
                      limits = c(-44, 44)) +
   scale_colour_manual(values = pal_dawn[c(1, 5, 7)]) +
+  scale_y_continuous(labels = clean_zero) +
   theme_leo() +
   theme(legend.position = c(0.15, 0.85),
         legend.text = element_markdown(),
@@ -7881,6 +7909,7 @@ CC_profiles_full <- ggplot(CC_data,
   scale_x_continuous(breaks = c(-35, 0, 20),
                      labels = c("CML", "CC", "SCW"),
                      limits = c(-44, 44)) +
+  scale_y_continuous(labels = clean_zero) +
   scale_colour_manual(values = pal_dawn) +
   theme_leo() +
   theme(legend.position = "none",
@@ -7969,6 +7998,7 @@ CC_plot <- ggplot(
   ) +
   labs(y = "CC autofluorescence<br>normalised to CML") +
   scale_fill_manual(values = pal_dawn) +
+  scale_y_continuous(labels = clean_zero) +
   # scale_y_continuous(breaks = c(0.5, 0.75, 1)) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
@@ -8031,7 +8061,7 @@ stat_tab <- CC_data_avg %>%
 layers <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/CC_measurements/SCW/2022-03-02_SCW.csv") %>% 
   mutate(genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     )) %>% 
@@ -8133,6 +8163,7 @@ pdf("lac_SCW_layers.pdf", width = onecol * 0.4, height = onecol * 0.5)
 layers_plot
 dev.off()
 ```
+
 ## Absolute fluorescence
 
 ### Load data
@@ -8155,7 +8186,7 @@ read_CC <- function(flnm) {
 CC_abs <- map_dfr(CC_files, read_CC) %>%
   mutate(genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     ))
@@ -8538,7 +8569,7 @@ collapse_data <- vroom::vroom(collapse_files) %>%
     ),
     genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     ),
@@ -9120,7 +9151,7 @@ rmn_corr <- rmn_lac_sum %>%
   ) %>% 
   mutate(genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     )) %>% 
@@ -9190,7 +9221,7 @@ swelling_data <- map_dfr(swelling_files, read_csv) %>%
     state = ordered(state, levels = c("fresh", "dry", "rehydrated")),
     genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", genotype, "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
     levels = c(WT, triple_it, quad_it, Q_it)
     ),
@@ -9711,53 +9742,53 @@ pyro_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Biochemistry/py
   mutate(
     lignin_raw = H + C + G + `5H` + S + P,
     "Total lignin [% of pyrolysate]" = lignin_raw / SUM * 100,
-    "**G** [% of lignin]" = G / lignin_raw * 100,
-    "**S** [% of lignin]" = S / lignin_raw * 100,
-    "**H** [% of lignin]" = H / lignin_raw * 100,
-    "**5H** [% of lignin]" = `5H` / lignin_raw * 100,
-    "**G**<sub>CHO</sub> [% of lignin]" = GCHO / lignin_raw * 100,
-    "**G**<sub>CHOH</sub> [% of lignin]" = GCHOH / lignin_raw * 100,
-    "**S**<sub>CHO</sub> [% of lignin]" = SCHO / lignin_raw * 100,
-    "**S**<sub>CHOH</sub> [% of lignin]" = SCHOH / lignin_raw * 100,
-    # "<sup>**H**</sup>&frasl;<sub>**G**</sub>" = H / G,
-    # "<sup>**5H**</sup>&frasl;<sub>**G**</sub>" = `5H` / G,
-    "<sup>**S**</sup>&frasl;<sub>**G**</sub>" = S / G,
-    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = GCHO / GCHOH,
-    "<sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>" = SCHO / SCHOH,
+    "G [% of lignin]" = G / lignin_raw * 100,
+    "S [% of lignin]" = S / lignin_raw * 100,
+    "H [% of lignin]" = H / lignin_raw * 100,
+    "5H [% of lignin]" = `5H` / lignin_raw * 100,
+    "G<sub>CHO</sub> [% of lignin]" = GCHO / lignin_raw * 100,
+    "G<sub>CHOH</sub> [% of lignin]" = GCHOH / lignin_raw * 100,
+    "S<sub>CHO</sub> [% of lignin]" = SCHO / lignin_raw * 100,
+    "S<sub>CHOH</sub> [% of lignin]" = SCHOH / lignin_raw * 100,
+    # "<sup>H</sup>&frasl;<sub>G</sub>" = H / G,
+    # "<sup>5H</sup>&frasl;<sub>G</sub>" = `5H` / G,
+    "<sup>S</sup>&frasl;<sub>G</sub>" = S / G,
+    "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>" = GCHO / GCHOH,
+    "<sup>S<sub>CHO&thinsp;</sub></sup>&frasl;<sub>S<sub>CHOH</sub></sub>" = SCHO / SCHOH,
     sample = ordered(sample,
       levels = c(
         "WT",
         "<i>ccr1-3</i>",
         "<i>fah1</i>",
         "<i>cad4</i>;<i>5</i>",
-        "<i>Q-5</i>"
+        "<i>Q−5</i>"
       )
     )
   )  %>%
-  # rename("**H**" = H,
-  #        "**C**" = C,
-  #        "**G**" = G,
-  #        "**5H**" = `5H`,
-  #        "**S**" = S,
-  #        "**P**" = P) %>%
+  # rename("H" = H,
+  #        "C" = C,
+  #        "G" = G,
+  #        "5H" = `5H`,
+  #        "S" = S,
+  #        "P" = P) %>%
   # select(-c(SUM, lignin_raw, GCHO, SCHO, GCHOH, SCHOH)) %>%
   select(-c(5:16)) %>%
   pivot_longer(!c(type, sample, replicate, method), names_to = "variable", values_to = "value") %>%
   mutate(variable = ordered(variable, levels = c(
     "Total lignin [% of pyrolysate]",
-    "**G** [% of lignin]",
-    "**S** [% of lignin]",
-    "**H** [% of lignin]",
-    "**5H** [% of lignin]",
-    "**G**<sub>CHO</sub> [% of lignin]",
-    "**G**<sub>CHOH</sub> [% of lignin]",
-    "**S**<sub>CHO</sub> [% of lignin]",
-    "**S**<sub>CHOH</sub> [% of lignin]",
-    "<sup>**S**</sup>&frasl;<sub>**G**</sub>",
-    # "<sup>**H**</sup>&frasl;<sub>**G**</sub>",
-    # "<sup>**5H**</sup>&frasl;<sub>**G**</sub>",
-    "<sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>",
-    "<sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>"
+    "G [% of lignin]",
+    "S [% of lignin]",
+    "H [% of lignin]",
+    "5H [% of lignin]",
+    "G<sub>CHO</sub> [% of lignin]",
+    "G<sub>CHOH</sub> [% of lignin]",
+    "S<sub>CHO</sub> [% of lignin]",
+    "S<sub>CHOH</sub> [% of lignin]",
+    "<sup>S</sup>&frasl;<sub>G</sub>",
+    # "<sup>H</sup>&frasl;<sub>G</sub>",
+    # "<sup>5H</sup>&frasl;<sub>G</sub>",
+    "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>",
+    "<sup>S<sub>CHO&thinsp;</sub></sup>&frasl;<sub>S<sub>CHOH</sub></sub>"
   )))
 
 pyro_avg <- pyro_data %>%
@@ -9797,11 +9828,13 @@ pyro_plot <- ggplot(pyro_data,
     family = "Helvetica"
   ) +
   scale_fill_manual(values = c(pal_dawn[1], "grey80", "grey80", "grey80", pal_dawn[3])) +
+  scale_x_discrete(labels = c("WT", "<i>ccr1-3</i>", "<i>fah-1</i>", "<i>cad4<br>cad5</i>", "<i>Q−5</i>")) +
+  scale_y_continuous(labels = clean_zero) +
   theme_leo() +
   theme(strip.text.y.left = element_textbox_simple(halign = 0.5, 
                                                orientation = "left-rotated"),
         strip.placement = "outside",
-        axis.text.x = element_markdown(),
+        axis.text.x = element_markdown(vjust = 1),
         axis.title = element_blank()) +
   facet_wrap(~ variable,
              scales = "free_y",
@@ -9860,40 +9893,40 @@ thio_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Biochemistry/th
   group_by(type, sample, replicate, method) %>% 
   mutate(
     # across(where(is.numeric), ~ .x / 100),
-    "<i>O</i>–4-linked <sup>**S**</sup>&frasl;<sub>**G**</sub>" = sum(SCHO_term, SCHO_int, SCHOH_int, na.rm = TRUE) / sum(GCHO_term, GCHO_int, GCHOH_int, na.rm = TRUE),
-    "<i>O</i>–4-linked <sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>" = sum(SCHO_term, SCHO_int, na.rm = TRUE) / (SCHOH_int),
-    "<i>O</i>–4-linked <sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>" = sum(GCHO_term, GCHO_int, na.rm = TRUE) / (GCHOH_int),
+    "<i>O</i>–4-linked <sup>S</sup>&frasl;<sub>G</sub>" = sum(SCHO_term, SCHO_int, SCHOH_int, na.rm = TRUE) / sum(GCHO_term, GCHO_int, GCHOH_int, na.rm = TRUE),
+    "<i>O</i>–4-linked <sup>S<sub>CHO&thinsp;</sub></sup>&frasl;<sub>S<sub>CHOH</sub></sub>" = sum(SCHO_term, SCHO_int, na.rm = TRUE) / (SCHOH_int),
+    "<i>O</i>–4-linked <sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>" = sum(GCHO_term, GCHO_int, na.rm = TRUE) / (GCHOH_int),
     sample = ordered(sample,
       levels = c(
         "WT",
         "<i>ccr1-3</i>",
         "<i>fah1</i>",
         "<i>cad4</i>;<i>5</i>",
-        "<i>Q-5</i>"
+        "<i>Q−5</i>"
       )
     )
   ) %>%
   left_join(pyro_lignin) %>% 
   mutate(
-    "<i>O</i>–4-linked **G**" = sum(GCHO_term, GCHO_int, GCHOH_int, na.rm = TRUE) / total_lignin,
-    "<i>O</i>–4-linked **S**" = sum(SCHO_term, SCHO_int, SCHOH_int, na.rm = TRUE) / total_lignin,
-    "<i>O</i>–4-linked **G**<sub>CHO</sub>" = sum(GCHO_term, GCHO_int, na.rm = TRUE) / total_lignin,
-    "<i>O</i>–4-linked **G**<sub>CHOH</sub>" = sum(GCHOH_int, na.rm = TRUE) / total_lignin,
-    "<i>O</i>–4-linked **S**<sub>CHO</sub>" = sum(SCHO_term, SCHO_int, na.rm = TRUE) / total_lignin,
-    "<i>O</i>–4-linked **S**<sub>CHOH</sub>" = sum(SCHOH_int, na.rm = TRUE) / total_lignin,
+    "<i>O</i>–4-linked G" = sum(GCHO_term, GCHO_int, GCHOH_int, na.rm = TRUE) / total_lignin,
+    "<i>O</i>–4-linked S" = sum(SCHO_term, SCHO_int, SCHOH_int, na.rm = TRUE) / total_lignin,
+    "<i>O</i>–4-linked G<sub>CHO</sub>" = sum(GCHO_term, GCHO_int, na.rm = TRUE) / total_lignin,
+    "<i>O</i>–4-linked G<sub>CHOH</sub>" = sum(GCHOH_int, na.rm = TRUE) / total_lignin,
+    "<i>O</i>–4-linked S<sub>CHO</sub>" = sum(SCHO_term, SCHO_int, na.rm = TRUE) / total_lignin,
+    "<i>O</i>–4-linked S<sub>CHOH</sub>" = sum(SCHOH_int, na.rm = TRUE) / total_lignin,
     ) %>% 
   select(-c(SCHO_term, SCHO_int, SCHOH_int, GCHO_term, GCHO_int, GCHOH_int, total_lignin)) %>%
   pivot_longer(!c(type, sample, replicate, method), names_to = "variable", values_to = "value") %>% 
   mutate(variable = ordered(variable, levels = c(
-    "<i>O</i>–4-linked **G**",
-    "<i>O</i>–4-linked **S**",
-    "<i>O</i>–4-linked **G**<sub>CHO</sub>",
-    "<i>O</i>–4-linked **G**<sub>CHOH</sub>",
-    "<i>O</i>–4-linked **S**<sub>CHO</sub>",
-    "<i>O</i>–4-linked **S**<sub>CHOH</sub>",
-    "<i>O</i>–4-linked <sup>**S**</sup>&frasl;<sub>**G**</sub>",
-    "<i>O</i>–4-linked <sup>**G**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**G**<sub>CHOH</sub></sub>",
-    "<i>O</i>–4-linked <sup>**S**<sub>CHO&thinsp;</sub></sup>&frasl;<sub>**S**<sub>CHOH</sub></sub>"
+    "<i>O</i>–4-linked G",
+    "<i>O</i>–4-linked S",
+    "<i>O</i>–4-linked G<sub>CHO</sub>",
+    "<i>O</i>–4-linked G<sub>CHOH</sub>",
+    "<i>O</i>–4-linked S<sub>CHO</sub>",
+    "<i>O</i>–4-linked S<sub>CHOH</sub>",
+    "<i>O</i>–4-linked <sup>S</sup>&frasl;<sub>G</sub>",
+    "<i>O</i>–4-linked <sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>",
+    "<i>O</i>–4-linked <sup>S<sub>CHO&thinsp;</sub></sup>&frasl;<sub>S<sub>CHOH</sub></sub>"
   )))
 
 thio_avg <- thio_data %>%
@@ -10945,7 +10978,7 @@ ex_bar <- ggplot(
              vjust = 1,
             family = "Helvetica",
             size = ggtext_size) +
-  scale_y_continuous(expand = expansion(mult = c(0.15, 0.05))) +
+  scale_y_continuous(expand = expansion(mult = c(0.15, 0.05)), labels = clean_zero) +
   scale_fill_manual(values = pal_dawn[c(1:6)]) +
   labs(y = "Relative gene expression [% of WT]") +
   theme_leo() +
@@ -10953,9 +10986,9 @@ ex_bar <- ggplot(
         axis.text.x = element_markdown(),
         strip.text = element_markdown()) +
   # coord_flip() +
-  facet_wrap(~ gene, scales = "free_y", ncol = 2)
+  facet_wrap(~ gene, scales = "free_y", ncol = 4)
 
-pdf("expression_bars.pdf", height = onecol, width = onecol)
+pdf("expression_bars.pdf", height = onecol * 0.6, width = twocol)
 ex_bar
 dev.off()
 ```
