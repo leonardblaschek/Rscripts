@@ -147,8 +147,9 @@ strip_html <- function(s) {
 
 #function to print zero without decimals
 clean_zero <- function(l){
-    max.decimals = max(nchar(str_extract(l, "\\.[0-9]+")), na.rm = T)-1
-    lnew = formatC(l, replace.zero = T, zero.print = "0",
+    max.decimals <- max(c(nchar(str_extract(l, "\\.[0-9]+")), 0), na.rm = T)
+    if (max.decimals > 0) {max.decimals <- max.decimals - 1}
+    lnew <- formatC(l, replace.zero = T, zero.print = "0",
         digits = max.decimals, format = "f", preserve.width=T)
     return(lnew)
 }
@@ -171,14 +172,16 @@ onehalfcol <- 14 / 2.54
 onecol <- 9 / 2.54
 
 # path for statistics output
-stat_path <- "/home/leonard/Dropbox/2021_lac_manuscript/Submission/PlantCell_revised/supplementary/statistics/"
+stat_path <- "/home/leonard/Dropbox/2021_lac_manuscript/Submission/PlantCell_revised - published/supplementary/statistics/accepted/"
 
 #### machine dependent paths ####
-datapath <- ifelse(dir.exists("/data/"), "/data/",
-  ifelse(dir.exists("/run/media/leonard/data/grsync/data/"), "/run/media/leonard/data/grsync/data/",
-    ifelse(dir.exists("/run/media/leonard/data/"), "/run/media/leonard/data/", "/home/leonard/Documents/Uni/")
-  )
-)
+# datapath <- ifelse(dir.exists("/data/"), "/data/",
+#   ifelse(dir.exists("/run/media/leonard/data/grsync/data/"), "/run/media/leonard/data/grsync/data/",
+#     ifelse(dir.exists("/run/media/leonard/data/"), "/run/media/leonard/data/", "/home/leonard/Documents/Uni/")
+#   )
+# )
+
+datapath <- "/run/media/leonard/data/grsync/data/"
 ```
 
 # WT Expression
@@ -836,8 +839,9 @@ qPCR_profiles <- ggplot(
   name = "Type of gene",
   guide = "none") +
   scale_y_continuous(labels = clean_zero) +
+  scale_x_continuous(labels = clean_zero) +
   labs(x = "Days past induction",
-       y = "Relative expression [RT-qPCR &#8710;Ct]") +
+       y = "Relative expression<br>[RT-qPCR &#8710;Ct]") +
   theme_leo() +
   theme(
     strip.placement = "outside",
@@ -1004,10 +1008,10 @@ pheno_full <- bind_rows(pheno_2017, pheno_2020) %>%
   filter(height > 20) %>%  # remove plants damaged during growth
   group_by(instance) %>%
   mutate(
-    genotype = str_replace_all(genotype, "/", ";"),
+    genotype = str_replace_all(genotype, "/", " "),
     genotype = case_when(
       genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
+      TRUE ~ paste0("<i>", str_replace(genotype, "Q-", "Q−"), "</i>")
     ),
     mean_WT = mean(height[genotype == "WT"]),
     rel_height = height / mean_WT * 100
@@ -2151,7 +2155,7 @@ rosette_growth_plot <- ggplot(
     size = ggtext_size,
     family = "Helvetica"
   ) +
-  labs(y = "Growth [cm<sup>2</sup> day<sup>-1</sup>]") +
+  labs(y = "Growth [cm<sup>2</sup> day<sup>−1</sup>]") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
   scale_y_continuous(labels = clean_zero) +
   # scale_x_discrete(limits = c(0, 1)) +
@@ -2717,7 +2721,7 @@ stem_growth_plot <- ggplot(
     size = ggtext_size,
     family = "Helvetica"
   ) +
-  labs(y = "Growth [cm day<sup>-1</sup>]") +
+  labs(y = "Growth [cm day<sup>−1</sup>]") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
   # scale_x_discrete(limits = c(0, 1)) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
@@ -3190,19 +3194,19 @@ stat_tab <- nested_root_data %>%
 ## Pheno figure
 
 ```{r}
-pdf("Blaschek2022_figure1.pdf", height = onecol * 0.8, width = twocol)
+pdf("Blaschek2022_figure2.pdf", height = onecol * 0.8, width = twocol)
 area_plot +
   inset_element(rosette_growth_plot,
-    left = 0.15, bottom = 0.55, right = 0.65, top = 0.85,
+    left = 0.10, bottom = 0.55, right = 0.65, top = 0.85,
     align_to = "full"
   ) +
   height_plot + 
   inset_element(stem_growth_plot,
-    left = 0.025, bottom = 0.675, right = 0.525, top = 0.975,
+    left = 0.02, bottom = 0.675, right = 0.53, top = 0.975,
     align_to = "full"
   ) +
   inset_element(final_height,
-    left = 0.425, bottom = 0.075, right = 0.925, top = 0.375,
+    left = 0.42, bottom = 0.08, right = 0.93, top = 0.38,
     align_to = "full"
   ) 
 dev.off()
@@ -3225,7 +3229,7 @@ full_mutant_plot +
   base_delta + 
   plot_layout(design = layout) &
   plot_annotation(
-    tag_levels = list(c("A", "B", "C", "D", "E", "F", "G", "L", "M"))
+    tag_levels = list(c("A", "B", "C", "D", "E", "F", "G", "K"))
   ) &
   theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
@@ -4546,23 +4550,30 @@ data_dab <- data_dab %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
   mutate(
     zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == lm_start]
-  ) %>% 
-  mutate(genotype = ordered(case_when(
+  ) %>%
+  mutate(
+    genotype = ordered(case_when(
       genotype == "WT" ~ genotype,
       TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
     ),
-    levels = c(WT, quad_it, Q_it)),
-    cell_type = recode(cell_type, 
-                       "CML" = "IF-CML",
-                       "CC" = "IF-CC"),
+    levels = c(WT, quad_it, Q_it)
+    ),
+    cell_type = recode(cell_type,
+      "CML" = "IF-CML",
+      "CC" = "IF-CC"
+    ),
     cell_type = ordered(cell_type, levels = c(
       "IF",
       "IF-CML",
       "IF-CC",
       "XF",
       "PX",
-      "MX"
-    )))
+      "MX",
+      "LP",
+      "PH",
+      "BG"
+    ))
+  )
 
 nested_data_dab <- data_dab %>%
   filter(time >= lm_start & time <= lm_stop) %>%
@@ -4892,7 +4903,8 @@ daf_CC_files <-
 
 reps <- read_csv(paste0(datapath, "PhD/Laccase_activity/2020-09_activity/DAF_pH5_IF/to_measure_IF.csv")) %>%
   select(1:3) %>%
-  mutate(replicate = as.character(replicate))
+  mutate(replicate = as.character(replicate),
+         genotype = str_replace(genotype, "-", "−"))
 
 daf_IF_data <- map_dfr(c(daf_IF_files, daf_CC_files), read_csv) %>%
   mutate(
@@ -4903,6 +4915,7 @@ daf_IF_data <- map_dfr(c(daf_IF_files, daf_CC_files), read_csv) %>%
     date = as.Date(ymd(
       str_extract(image, "[:digit:]{4}-[:digit:]{2}-[:digit:]{2}")
     )),
+    image = str_replace_all(image, "-", "−"),
     genotype = str_remove(str_extract(image, "WT|Q−4|Q−5|Q−10|Q−12|Q−17|Q$|Q_"), "_"),
     treatment = "none",
     pH = "5",
@@ -4916,38 +4929,48 @@ daf_IF_data <- map_dfr(c(daf_IF_files, daf_CC_files), read_csv) %>%
 #### subtract water column and background ####
 data_daf <- data_daf %>%
   filter(substrate == "DAF" & cell_type != "IF") %>%
-  anti_join(read_csv(paste0(
-    datapath,
-    "PhD/Laccase_activity/2020-09_activity/excluded_sections.csv"
-  ),
-  col_type = "ccDccc"
+  anti_join(read_csv(
+    paste0(
+      datapath,
+      "PhD/Laccase_activity/2020-09_activity/excluded_sections.csv"
+    ),
+    col_type = "ccDccc"
   )) %>%
   bind_rows(daf_IF_data) %>%
-  group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
+  mutate(
+    genotype = ordered(
+      case_when(
+        genotype == "WT" ~ genotype,
+        TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
+      ),
+      levels = c(WT, quad_it, Q_it)
+    )
+  ) %>% 
+group_by(time, genotype, replicate, substrate, treatment, pH, date) %>%
   mutate(
     corrected_absorbance = mean_absorbance - mean(mean_absorbance[cell_type == "PH"])
   ) %>%
   group_by(genotype, replicate, substrate, treatment, pH, date, cell_type, point) %>%
   mutate(
     zeroed_absorbance = corrected_absorbance - corrected_absorbance[time == lm_start]
-  ) %>% 
-  mutate(genotype = ordered(case_when(
-      genotype == "WT" ~ genotype,
-      TRUE ~ paste0("<i>", str_replace(genotype, "-", "−"), "</i>")
+  ) %>%
+  mutate(
+    cell_type = recode(cell_type,
+      "CML" = "IF-CML",
+      "CC" = "IF-CC"
     ),
-    levels = c(WT, quad_it, Q_it)),
-    cell_type = recode(cell_type, 
-                       "CML" = "IF-CML",
-                       "CC" = "IF-CC"),
     cell_type = ordered(cell_type, levels = c(
       "IF",
       "IF-CML",
       "IF-CC",
       "XF",
       "PX",
-      "MX"
+      "MX",
+      "LP",
+      "PH",
+      "BG"
     ))
-    )
+  )
 
 nested_data_daf <- data_daf %>%
   filter(time >= lm_start & time <= lm_stop) %>%
@@ -4968,7 +4991,8 @@ nested_data_daf <- data_daf %>%
 #   mutate(mean_estimate = mean(estimate)) %>%
 #   group_by(date, substrate, treatment, pH, cell_type) %>%
 #   mutate(rel_estimate = estimate / mean_estimate[genotype == "WT"])
-
+ test<- nested_data_daf %>% 
+   filter(genotype == "<i>Q−4</i>", replicate == "1", substrate == "DAF", treatment == "none", pH == "5", date == "2020-08-27", cell_type == "IF")
 
 data_daf <- data_daf %>%
   left_join(select(nested_data_daf, c(genotype:point, adj.r.squared)))
@@ -6924,7 +6948,7 @@ ref_labels <- tribble(
   ~genotype, ~cell_type, ~variable, ~label,
   "fah1", "MX", "<sup>S</sup>&frasl;<sub>G</sub>", "<i>fah1</i> MX (traces of S)",
   "ccr1_3", "IF", "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>", "<i>ccr1-3</i> IF (traces of lignin)",
-  "cad4x5", "IF", "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>", "<i>cad4;5</i> IF (overaccumulates G<sub>CHO</sub>)"
+  "cad4x5", "IF", "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>", "<i>cad4 cad5</i> IF (overaccumulates G<sub>CHO</sub>)"
 )
 
 ref_data <- rmn_ref_avg %>%
@@ -7165,7 +7189,7 @@ ref_labels <- tribble(
   ~genotype, ~cell_type, ~variable, ~label,
   "fah1", "MX", "<sup>S</sup>&frasl;<sub>G</sub>", "<i>fah1</i> MX (traces of S)",
   "ccr1_3", "IF", "<sup>Lignin&thinsp;</sup>&frasl;<sub>cellulose</sub>", "<i>ccr1-3</i> IF (traces of lignin)",
-  "cad4x5", "IF", "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>", "<i>cad4;5</i> IF (overaccumulates G<sub>CHO</sub>)"
+  "cad4x5", "IF", "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>", "<i>cad4 cad5</i> IF (overaccumulates G<sub>CHO</sub>)"
 )
 
 ref_data <- rmn_ref_avg %>%
@@ -7392,8 +7416,8 @@ ref_labels <- tribble(
   ~genotype, ~cell_type, ~variable, ~label,
   "fah1", "MX", "S", "<i>fah1</i> MX (traces of S)",
   "fah1", "MX", "G", "<i>fah1</i> MX (overaccumulates G)",
-  # "cad4x5", "IF", "G<sub>CHOH</sub>", "<i>cad4;5</i> IF (depleted of G<sub>CHOH</sub>)",
-  "cad4x5", "IF", "G<sub>CHO</sub>", "<i>cad4;5</i> IF (overaccumulates G<sub>CHO</sub>)"
+  # "cad4x5", "IF", "G<sub>CHOH</sub>", "<i>cad4 cad5</i> IF (depleted of G<sub>CHOH</sub>)",
+  "cad4x5", "IF", "G<sub>CHO</sub>", "<i>cad4 cad5</i> IF (overaccumulates G<sub>CHO</sub>)"
 )
 
 ref_data <- rmn_ref_avg %>%
@@ -7488,7 +7512,7 @@ lig_violin <- ggplot(
             x = 4,
             hjust = 0.5,
             label.padding = unit(0.2, "lines"),
-            vjust = c(1, 1, 0.5),
+            vjust = c(1.2, 1.2, 0.5),
             family = "Helvetica",
             size = ggtext_size,
             colour = "grey") +
@@ -7576,7 +7600,9 @@ stat_tab <- violin_data_avg %>%
 
 ```{r}
 pdf("Raman_supp_fig.pdf", width = twocol, height = twocol)
-lig_violin_WT + lig_violin +
+lig_violin_WT + 
+  wrap_elements(full = lig_violin + theme(plot.margin = unit(c(5, 2, 0, 2.4), "mm")), clip = TRUE) +
+  # lig_violin +
   plot_layout(ncol = 1, heights = c(1, 4)) &
   plot_annotation(
     tag_levels = "A"
@@ -8814,7 +8840,7 @@ letters <- letter_groups(collapse_avg_sx,
   print_position = "below"
 ) %>% 
   select(-Solidity) %>% 
-  left_join(letters_tech)
+  left_join(letters_tech, by = c("genotype", "cell_type"))
 
 collapse_plot <- ggplot(
   collapse_stats,
@@ -8854,7 +8880,7 @@ collapse_plot <- ggplot(
   ) +
   labs(y = "TE convexity") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
-  scale_y_continuous(breaks = c(0.5, 0.75, 1)) +
+  scale_y_continuous(limits = c(0.7, 1), breaks = c(0.5, 0.75, 1)) +
   # scale_x_discrete(limits = c(0, 1)) +
   # scale_shape_manual(values = c(21, 22, 23, 24, 25)) +
   theme_leo() +
@@ -8952,7 +8978,7 @@ letters <- letter_groups(perim_length_avg,
   select(-Perimeter) %>% 
   left_join(letters_tech)
 
-perimeter_plot <- ggplot(
+perimeter_length <- ggplot(
   perim_length,
   aes(
     x = genotype,
@@ -9015,7 +9041,7 @@ perimeter_plot <- ggplot(
     )
 
 pdf("lac_perimeter.pdf", width = onecol, height = onecol * 0.5)
-perimeter_plot
+perimeter_length
 dev.off()
 
 ```
@@ -9409,9 +9435,13 @@ letters <- swelling_data_avg %>%
   mutate(state = ordered(state, levels = c("fresh", "dry", "rehydrated")),
          genotype = ordered(genotype, levels = c(WT, triple_it, quad_it, Q_it)))
 
-absolute_thick <- ggplot(swelling_data_fresh,
-       aes(x = genotype,
-           y = thickness)) +
+absolute_thick <- ggplot(
+  swelling_data_fresh,
+  aes(
+    x = genotype,
+    y = thickness
+  )
+) +
   geom_quasirandom(
     aes(group = interaction(state, genotype)),
     dodge.width = 0.6,
@@ -9421,8 +9451,10 @@ absolute_thick <- ggplot(swelling_data_fresh,
     width = 0.05
   ) +
   geom_violin(
-    aes(fill = genotype,
-        group = interaction(state, genotype)),
+    aes(
+      fill = genotype,
+      group = interaction(state, genotype)
+    ),
     draw_quantiles = 0.5,
     position = position_dodge(width = 0.6),
     # fill = "white",
@@ -9435,8 +9467,10 @@ absolute_thick <- ggplot(swelling_data_fresh,
   ) +
   geom_text(
     data = letters,
-    aes(label = Letters,
-        group = interaction(state, genotype)),
+    aes(
+      label = Letters,
+      group = interaction(state, genotype)
+    ),
     position = position_dodge(width = 0.6),
     vjust = 0.4,
     hjust = 0.5,
@@ -9444,27 +9478,43 @@ absolute_thick <- ggplot(swelling_data_fresh,
     family = "Helvetica"
   ) +
   annotate("text",
-           label = c("fresh", "dried", "rehydrated"),
-           y = c(0.5, 0, 0.5),
-           x = c(0.85, 1, 1.15),
-           hjust = c(1, 0.5, 0),
-           size = ggtext_size,
-           family = "Helvetica") +
+    label = c("fresh", "dried", "rehydrated"),
+    y = c(0.5, 0, 0.5),
+    x = c(0.85, 1, 1.15),
+    hjust = c(1, 0.5, 0),
+    size = ggtext_size,
+    family = "Helvetica"
+  ) +
   annotate("segment",
-           x = c(0.8, 1, 1.2),
-           xend = c(0.75, 1, 1.25),
-           y = c(1.1, 1.15, 1.2),
-           yend = c(0.8, 0.3, 0.8),
-           size = 0.2) +
-  labs(y = "MX cell wall thick. [µm]") +
+    x = c(0.8, 1, 1.2),
+    xend = c(0.75, 1, 1.25),
+    y = c(1.1, 1.15, 1.2),
+    yend = c(0.8, 0.3, 0.8),
+    size = 0.2
+  ) +
+  labs(y = "Wall thickness [µm]") +
   scale_color_manual(values = pal_dawn, aesthetics = c("colour", "fill")) +
   scale_y_continuous(limits = c(0, 5)) +
   theme_leo() +
-  theme(axis.text.x = element_markdown(),
-        axis.title.x = element_blank())
+  theme(
+    axis.text.x = element_markdown(),
+    axis.title.x = element_blank(),
+    strip.placement = "outside",
+    strip.text = element_textbox_simple(
+      hjust = 0.5,
+      orientation = "left-rotated",
+      width = unit(2, "mm")
+    )
+  ) +
+  facet_wrap(~cell_type, strip.position = "left")
 
-pdf("fresh_MX.pdf", width = onecol, height = onecol * 0.3)
-absolute_thick
+pdf("swelling_supp.pdf", width = onecol, height = onecol * 0.9)
+perimeter_length + absolute_thick +
+  plot_layout(ncol = 1, heights = c(2, 1)) &
+  plot_annotation(
+    tag_levels = "A"
+  ) &
+  theme(plot.tag = element_text(size = 10, face = "bold", family = "Helvetica"))
 dev.off()
 ```
 
@@ -9755,6 +9805,7 @@ pyro_data <- read_csv("/home/leonard/Dropbox/2021_lac_manuscript/Biochemistry/py
     "<sup>S</sup>&frasl;<sub>G</sub>" = S / G,
     "<sup>G<sub>CHO&thinsp;</sub></sup>&frasl;<sub>G<sub>CHOH</sub></sub>" = GCHO / GCHOH,
     "<sup>S<sub>CHO&thinsp;</sub></sup>&frasl;<sub>S<sub>CHOH</sub></sub>" = SCHO / SCHOH,
+    sample = str_replace(sample, "Q-", "Q−"),
     sample = ordered(sample,
       levels = c(
         "WT",
